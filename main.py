@@ -13,6 +13,7 @@ from linebot.v3.messaging import (
     Configuration,
     ApiClient,
     MessagingApi,
+    MessagingApiBlob,
     ReplyMessageRequest,
     TextMessage
 )
@@ -36,7 +37,7 @@ from src.utils import get_response_data, get_content_and_reference, replace_file
 
 app = Flask(__name__)
 config = load_config()
-line_bot_api = Configuration(access_token=config['line']['channel_access_token'])
+configuration = Configuration(access_token=config['line']['channel_access_token'])
 handler = WebhookHandler(config['line']['channel_secret'])
 openai_api_key = config['openai']['api_key']
 openai_assistant_id = config['openai']['assistant_id']
@@ -137,26 +138,26 @@ def handle_text_message(event):
 @handler.add(MessageEvent, message=AudioMessageContent)
 def handle_audio_message(event):
     user_id = event.source.user_id
-    audio_content = line_bot_api.get_message_content(event.message.id)
-    input_audio_path = f'{str(uuid.uuid4())}.m4a'
-    with open(input_audio_path, 'wb') as fd:
-        for chunk in audio_content.iter_content():
-            fd.write(chunk)
-    try:
-        is_successful, response, error_message = model.audio_transcriptions(input_audio_path, 'whisper-1')
-        if not is_successful:
-            raise Exception(error_message)
-        text = response['text']
-        msg = handle_assistant_message(user_id, text)
-    except Exception as e:
-        if str(e).startswith('Incorrect API key provided'):
-            msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
-        elif str(e).startswith('That model is currently overloaded with other requests.'):
-            msg = TextMessage(text='已超過負荷，請稍後再試')
-        else:
-            msg = TextMessage(text='發生錯誤：' + str(e))
-    os.remove(input_audio_path)
     with ApiClient(configuration) as api_client:
+        line_bot_blob_api = MessagingApiBlob(api_client)
+        audio_content = line_bot_blob_api.get_message_content(message_id=event.message.id)
+        input_audio_path = f'{str(uuid.uuid4())}.m4a'
+        with open(input_audio_path, 'wb') as fd:
+            fd.write(audio_content)
+        try:
+            is_successful, response, error_message = model.audio_transcriptions(input_audio_path, 'whisper-1')
+            if not is_successful:
+                raise Exception(error_message)
+            text = response['text']
+            msg = handle_assistant_message(user_id, text)
+        except Exception as e:
+            if str(e).startswith('Incorrect API key provided'):
+                msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
+            elif str(e).startswith('That model is currently overloaded with other requests.'):
+                msg = TextMessage(text='已超過負荷，請稍後再試')
+            else:
+                msg = TextMessage(text='發生錯誤：' + str(e))
+        os.remove(input_audio_path)
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
