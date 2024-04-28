@@ -1,0 +1,22 @@
+---
+line:
+  channel_access_token: 
+  channel_secret: 
+
+openai:
+  api_key: 
+  assistant_id: 
+
+db:
+  host: 
+  port: 5432
+  db_name: 
+  user: 
+  password: 
+  sslmode: 
+  sslrootcert: 
+  sslcert: 
+  sslkey: 
+
+logfile: ./logs/linebot.log
+...
