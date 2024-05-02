@@ -33,7 +33,7 @@ from src.models import OpenAIModel
 from src.config import load_config
 from src.logger import logger
 from src.db import Database
-from src.utils import get_response_data, get_content_and_reference, replace_file_name, check_token_valid, get_file_dict
+from src.utils import get_response_data, get_content_and_reference, replace_file_name, check_token_valid, get_file_dict, detect_none_references
 
 app = Flask(__name__)
 config = load_config()
@@ -61,6 +61,7 @@ def handle_assistant_message(user_id, text):
     logger.info(f'{user_id}: {text}')
     database.check_connect()
     logger.debug('database check done')
+    global file_dict
     try:
         if text.startswith('/reset'):
             thread_id = database.query_thread(user_id)
@@ -109,6 +110,9 @@ def handle_assistant_message(user_id, text):
                 raise Exception(error_message)
             logger.debug(response)
             response_message = get_content_and_reference(response, file_dict)
+            if detect_none_references(response_message):
+                file_dict = get_file_dict()
+                response_message = get_content_and_reference(response, file_dict)
             logger.debug(response_message)
             msg = TextMessage(text=response_message)
     except Exception as e:
