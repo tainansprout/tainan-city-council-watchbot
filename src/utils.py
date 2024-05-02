@@ -52,7 +52,7 @@ def get_file_dict(model) -> dict:
     is_successful, response, error_message = model.list_files()
     if not is_successful:
         raise Exception(error_message)
-    file_dict = { file['id']: file['filename'].replace('.txt', '') for file in response['data'] }
+    file_dict = { file['id']: file['filename'].replace('.txt', '').replace('.json', '') for file in response['data'] }
     return file_dict
 
 def detect_none_references(text):
