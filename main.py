@@ -71,8 +71,12 @@ def handle_assistant_message(user_id, text):
                 msg = TextMessage(text='Reset The Chatbot.')
             else:
                 msg = TextMessage(text='Nothing to reset.')
-        elif text.startswith('/help'):
-            msg = TextMessage(text="這裡是台南市議會聊天機器人，目前已經輸入了台南市議會第四屆公開議事錄中的會議逐字稿，請輸入您的問題，以便我檢索逐字稿內容來回應您。若您希望重設聊天內容，請輸入「/reset」以重置聊天。\n\n")
+        elif text.startswith('/'):
+            command = input_string[1:].split()[0]
+            if command in message_dict:
+                msg = TextMessage(text=message_dict[command] + "\n\n")
+            else:
+                msg = TextMessage(text="Command not found.")
         else:
             thread_id = database.query_thread(user_id)
             if thread_id:
