@@ -73,8 +73,8 @@ def handle_assistant_message(user_id, text):
                 msg = TextMessage(text='Nothing to reset.')
         elif text.startswith('/'):
             command = input_string[1:].split()[0]
-            if command in message_dict:
-                msg = TextMessage(text=message_dict[command] + "\n\n")
+            if command in config['commands']:
+                msg = TextMessage(text=config['commands'][command] + "\n\n")
             else:
                 msg = TextMessage(text="Command not found.")
         else:
