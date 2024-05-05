@@ -28,7 +28,7 @@ def get_content_and_reference(response, file_dict) -> str:
 
     # 添加文件識別碼引用
     reference_text = '\n'.join(ref_mapping.values())
-    final_text = f"{text}\n\n{reference_text}"
+    final_text = f"{text}\n\n{reference_text}".strip()
 
     return final_text
 
