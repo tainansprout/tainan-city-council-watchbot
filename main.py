@@ -102,6 +102,8 @@ def handle_assistant_message(user_id, text):
                 run_id = response['id']
                 if response['status'] == 'queued':
                     time.sleep(10)
+                if response['status'] == 'failed':
+                    break
                 else:
                     time.sleep(3)
                 is_successful, response, error_message = model.retrieve_thread_run(thread_id, run_id)
@@ -109,16 +111,20 @@ def handle_assistant_message(user_id, text):
                 if not is_successful:
                     raise Exception(error_message)
             logger.debug(response)
-            is_successful, response, error_message = model.list_thread_messages(thread_id)
-            if not is_successful:
-                raise Exception(error_message)
-            logger.debug(response)
-            response_message = get_content_and_reference(response, file_dict)
-            if detect_none_references(response_message):
-                file_dict = get_file_dict()
+            if response['status'] == 'completed':
+                is_successful, response, error_message = model.list_thread_messages(thread_id)
+                if not is_successful:
+                    raise Exception(error_message)
+                logger.debug(response)
                 response_message = get_content_and_reference(response, file_dict)
-            logger.debug(response_message)
-            msg = TextMessage(text=response_message)
+                if detect_none_references(response_message):
+                    file_dict = get_file_dict()
+                    response_message = get_content_and_reference(response, file_dict)
+                logger.debug(response_message)
+                msg = TextMessage(text=response_message)
+            else:
+                msg = TextMessage(text='很抱歉，我在尋找答案時遇到了錯誤，或許您可以換個方式再問一次。')
+       
     except Exception as e:
         if str(e).startswith('Incorrect API key provided'):
             msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
