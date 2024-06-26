@@ -62,6 +62,7 @@ def handle_assistant_message(user_id, text):
     database.check_connect()
     logger.debug('database check done')
     global file_dict
+    global model
     try:
         if text.startswith('/reset'):
             thread_id = database.query_thread(user_id)
@@ -102,7 +103,7 @@ def handle_assistant_message(user_id, text):
                 run_id = response['id']
                 if response['status'] == 'queued':
                     time.sleep(10)
-                if response['status'] == 'failed':
+                elif response['status'] in ['failed', 'expired', 'cancelled']:
                     break
                 else:
                     time.sleep(3)
@@ -118,7 +119,7 @@ def handle_assistant_message(user_id, text):
                 logger.debug(response)
                 response_message = get_content_and_reference(response, file_dict)
                 if detect_none_references(response_message):
-                    file_dict = get_file_dict()
+                    file_dict = get_file_dict(model)
                     response_message = get_content_and_reference(response, file_dict)
                 logger.debug(response_message)
                 msg = TextMessage(text=response_message)
