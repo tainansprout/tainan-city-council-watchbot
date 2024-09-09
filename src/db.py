@@ -1,6 +1,13 @@
 import os
 import psycopg2
 import datetime
+from src.logger import logger
+
+# CREATE TABLE user_thread_table (
+#     user_id VARCHAR(255) PRIMARY KEY,
+#     thread_id VARCHAR(255),
+#     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+# );
 
 class Database:
 
@@ -45,22 +52,34 @@ class Database:
             )
         self.conn.autocommit = True
         self.cursor = self.conn.cursor()
-        self.cursor.execute("SELECT 1")  # 用來測試連接是否成功
-        assert self.cursor.fetchone()[0] == 1
+        
         self.last_connected_time = datetime.datetime.now()
 
     def check_connect(self):
-        if self.conn:
-            if (datetime.datetime.now() - self.last_connected_time).total_seconds() > self.timeout:
-                self.close_connection()
+        try:
+            if self.conn and self.cursor:
+                # if (datetime.datetime.now() - self.last_connected_time).total_seconds() > self.timeout:
+                #     assert False
+                # else:
+                self.cursor.execute("SELECT 1")  # 用來測試連接是否成功
+                result = self.cursor.fetchone()[0]
+                logger.info("db fetchone: " + str(result))
+                assert result == 1
+                logger.debug('database check done')
+            else:
                 self.connect_to_database()
-        else:
+                logger.debug('database reconnect done')
+        except Exception as e:
+            logger.error("db error: " + str(e))
+            self.close_connection()
             self.connect_to_database()
 
     def close_connection(self):
         if self.conn:
             self.cursor.close()
             self.conn.close()
+            self.conn = False
+            self.cursor = False
 
     def query_thread(self, user_id):
         self.cursor.execute(

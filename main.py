@@ -60,7 +60,6 @@ def callback():
 def handle_assistant_message(user_id, text):
     logger.info(f'{user_id}: {text}')
     database.check_connect()
-    logger.debug('database check done')
     global file_dict
     global model
     try:
@@ -127,13 +126,13 @@ def handle_assistant_message(user_id, text):
                 msg = TextMessage(text='很抱歉，我在尋找答案時遇到了錯誤，或許您可以換個方式再問一次。')
        
     except Exception as e:
+        logger.error("error: " + str(e))
         if str(e).startswith('Incorrect API key provided'):
             msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
         elif str(e).startswith('That model is currently overloaded with other requests.'):
             msg = TextMessage(text='已超過負荷，請稍後再試')
         else:
             msg = TextMessage(text='發生錯誤：' + str(e))
-    database.close_connection()
     return msg
 
 
