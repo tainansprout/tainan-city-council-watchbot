@@ -133,6 +133,7 @@ def handle_assistant_message(user_id, text):
             msg = TextMessage(text='已超過負荷，請稍後再試')
         else:
             msg = TextMessage(text='發生錯誤：' + str(e))
+    database.close_connection()
     return msg
 
 
