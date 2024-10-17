@@ -28,6 +28,7 @@ from linebot.v3.webhooks import (
 import os
 import uuid
 import time
+import atexit
 
 from src.models import OpenAIModel
 from src.config import load_config
@@ -44,6 +45,7 @@ openai_assistant_id = config['openai']['assistant_id']
 database = Database(config['db'])
 model = OpenAIModel(api_key=openai_api_key, assistant_id=openai_assistant_id)
 file_dict = get_file_dict(model)
+atexit.register(database.close_all_connections)
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -59,7 +61,6 @@ def callback():
 
 def handle_assistant_message(user_id, text):
     logger.info(f'{user_id}: {text}')
-    database.check_connect()
     global file_dict
     global model
     try:
