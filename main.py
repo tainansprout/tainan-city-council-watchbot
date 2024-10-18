@@ -29,6 +29,7 @@ import os
 import uuid
 import time
 import atexit
+import traceback
 
 from src.models import OpenAIModel
 from src.config import load_config
@@ -55,6 +56,7 @@ def callback():
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
+        logger.error(traceback.format_exception(e))
         print("Invalid signature. Please check your channel access token/channel secret.")
         abort(400)
     return 'OK'
@@ -128,6 +130,7 @@ def handle_assistant_message(user_id, text):
        
     except Exception as e:
         logger.error("error: " + str(e))
+        logger.error(traceback.format_exception(e))
         if str(e).startswith('Incorrect API key provided'):
             msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
         elif str(e).startswith('That model is currently overloaded with other requests.'):
@@ -167,11 +170,13 @@ def handle_audio_message(event):
             text = response['text']
             msg = handle_assistant_message(user_id, text)
         except Exception as e:
+            logger.error(traceback.format_exception(e))
             if str(e).startswith('Incorrect API key provided'):
                 msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
             elif str(e).startswith('That model is currently overloaded with other requests.'):
                 msg = TextMessage(text='已超過負荷，請稍後再試')
             else:
+
                 msg = TextMessage(text='發生錯誤：' + str(e))
         os.remove(input_audio_path)
         line_bot_api = MessagingApi(api_client)
