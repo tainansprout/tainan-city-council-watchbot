@@ -31,7 +31,7 @@ class Database:
         # 建立連線池
         if sslmode in ['verify-full', 'verify-ca']:
             self.pool = psycopg2.pool.SimpleConnectionPool(
-                1, 5,  # minconn, maxconn
+                8, 8,  # minconn, maxconn
                 dbname=db_name,
                 user=user,
                 password=password,
@@ -44,7 +44,7 @@ class Database:
             )
         else:
             self.pool = psycopg2.pool.SimpleConnectionPool(
-                1, 10,  # minconn, maxconn
+                8, 8,  # minconn, maxconn
                 dbname=db_name,
                 user=user,
                 password=password,
