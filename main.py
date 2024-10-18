@@ -46,7 +46,7 @@ openai_assistant_id = config['openai']['assistant_id']
 database = Database(config['db'])
 model = OpenAIModel(api_key=openai_api_key, assistant_id=openai_assistant_id)
 file_dict = get_file_dict(model)
-atexit.register(database.close_all_connections)
+atexit.register(database.close_engine)
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -134,7 +134,9 @@ def handle_assistant_message(user_id, text):
         if str(e).startswith('Incorrect API key provided'):
             msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
         elif str(e).startswith('That model is currently overloaded with other requests.'):
-            msg = TextMessage(text='已超過負荷，請稍後再試')
+            msg = TextMessage(text='已超過負荷，請稍後再試。')
+        elif str(e).startswith('Can\'t add messages to thread'):
+            msg = TextMessage(text='機器人正在思考您的問題，請稍等。')
         else:
             msg = TextMessage(text='發生錯誤：' + str(e))
     return msg
@@ -175,6 +177,8 @@ def handle_audio_message(event):
                 msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
             elif str(e).startswith('That model is currently overloaded with other requests.'):
                 msg = TextMessage(text='已超過負荷，請稍後再試')
+            elif str(e).startswith('Can\'t add messages to thread'):
+                msg = TextMessage(text='機器人正在思考您的問題，請稍等。')
             else:
 
                 msg = TextMessage(text='發生錯誤：' + str(e))

@@ -1,7 +1,6 @@
-import os
-import psycopg2
 import datetime
-from psycopg2 import pool
+from sqlalchemy import create_engine, Column, String, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base
 from src.logger import logger
 
 # CREATE TABLE user_thread_table (
@@ -10,14 +9,23 @@ from src.logger import logger
 #     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 # );
 
-class Database:
+Base = declarative_base()
 
+class UserThread(Base):
+    __tablename__ = 'user_thread_table'
+
+    user_id = Column(String(255), primary_key=True)
+    thread_id = Column(String(255))
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class Database:
     def __init__(self, config):
         self.config = config
-        self.pool = None
-        self.connect_to_database()
+        self.engine = self.create_sqlalchemy_engine()
+        self.SessionLocal = sessionmaker(bind=self.engine)
+        logger.debug('create SQLAlchemy ORM engine')
 
-    def connect_to_database(self):
+    def create_sqlalchemy_engine(self):
         host = self.config['host']
         port = self.config['port']
         db_name = self.config['db_name']
@@ -28,83 +36,65 @@ class Database:
         sslcert = self.config['sslcert']
         sslkey = self.config['sslkey']
 
-        # 建立連線池
-        if sslmode in ['verify-full', 'verify-ca']:
-            self.pool = psycopg2.pool.SimpleConnectionPool(
-                8, 8,  # minconn, maxconn
-                dbname=db_name,
-                user=user,
-                password=password,
-                host=host,
-                port=port,
-                sslmode=sslmode,
-                sslrootcert=sslrootcert,
-                sslcert=sslcert,
-                sslkey=sslkey
-            )
-        else:
-            self.pool = psycopg2.pool.SimpleConnectionPool(
-                8, 8,  # minconn, maxconn
-                dbname=db_name,
-                user=user,
-                password=password,
-                host=host,
-                port=port
-            )
-        logger.debug('Database connection pool created')
+        # 建立連線字串
+        connection_string = f"postgresql://{user}:{password}@{host}:{port}/{db_name}"
+
+        # 設定 SSL 參數
+        ssl_args = {
+            'sslmode': sslmode,
+            'sslrootcert': sslrootcert,
+            'sslcert': sslcert,
+            'sslkey': sslkey
+        }
+
+        # 建立引擎
+        engine = create_engine(
+            connection_string,
+            connect_args=ssl_args,
+            pool_size=8,
+            max_overflow=0,
+            pool_pre_ping=True  # 啟用連線健康檢查
+        )
+        return engine
+
+    def get_session(self):
+        # 獲取一個新的 Session 實例
+        return self.SessionLocal()
 
     def query_thread(self, user_id):
-        conn = self.pool.getconn()
+        session = self.get_session()
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT thread_id
-                    FROM user_thread_table
-                    WHERE user_id = %s;
-                    """,
-                    (user_id,)
-                )
-                result = cursor.fetchone()
-                return result[0] if result else None
+            user_thread = session.query(UserThread).filter(UserThread.user_id == user_id).first()
+            return user_thread.thread_id if user_thread else None
         finally:
-            self.pool.putconn(conn)
+            session.close()
 
     def save_thread(self, user_id, thread_id):
-        conn = self.pool.getconn()
+        session = self.get_session()
         try:
-            with conn.cursor() as cursor:
-                now = datetime.datetime.utcnow()
-                cursor.execute(
-                    """
-                    INSERT INTO user_thread_table (user_id, thread_id, created_at)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                    thread_id = EXCLUDED.thread_id,
-                    created_at = EXCLUDED.created_at;
-                    """,
-                    (user_id, thread_id, now)
+            user_thread = session.query(UserThread).filter(UserThread.user_id == user_id).first()
+            if user_thread:
+                user_thread.thread_id = thread_id
+                user_thread.created_at = datetime.datetime.utcnow()
+            else:
+                user_thread = UserThread(
+                    user_id=user_id,
+                    thread_id=thread_id,
+                    created_at=datetime.datetime.utcnow()
                 )
-                conn.commit()
+                session.add(user_thread)
+            session.commit()
         finally:
-            self.pool.putconn(conn)
+            session.close()
 
     def delete_thread(self, user_id):
-        conn = self.pool.getconn()
+        session = self.get_session()
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    DELETE FROM user_thread_table
-                    WHERE user_id = %s;
-                    """,
-                    (user_id,)
-                )
-                conn.commit()
+            session.query(UserThread).filter(UserThread.user_id == user_id).delete()
+            session.commit()
         finally:
-            self.pool.putconn(conn)
+            session.close()
 
-    def close_all_connections(self):
-        if self.pool:
-            self.pool.closeall()
-            logger.debug('All database connections closed')
+    def close_engine(self):
+        self.engine.dispose()
+        logger.debug('close SQLAlchemy engine.')
