@@ -1,102 +1,209 @@
-# ChatGPT Line Bot
+# Tainan City Council WatchBot
 
-[中文](README.md) | English
+中文 | [English](README.en.md)
 
-[![license](https://img.shields.io/pypi/l/ansicolortags.svg)](LICENSE) [![Release](https://img.shields.io/github/v/release/TheExplainthis/ChatGPT-Line-Bot)](https://github.com/TheExplainthis/ChatGPT-Line-Bot/releases/)
+This project is a chatbot using Line as the front-end, connected to the OpenAI Assistant API. The bot will be deployed on Google Cloud Run and will use Google Cloud SQL to manage chat thread IDs.
 
+## Table of Contents
 
-## Update
-- 2023/03/23 Update summary of Youtube videos and news articles (supports: United Daily News, SET, Yahoo News, Central News Agency, Storm Media, TVBS, Liberty Times, ETtoday, China Times, Line News, TTV News)
-- 2023/03/18 Added Whisper service, users can now add their own tokens, and added command (refer to the documentation below)
-- 2023/03/03 Model change to chat completion: `gpt-3.5-turbo`
+- [Prerequisites](#prerequisites)
+- [Setting Up OpenAI Assistant API](#setting-up-openai-assistant-api)
+- [Configuring the Line Bot](#configuring-the-line-bot)
+- [Setting Environment Variables](#setting-environment-variables)
+- [Configuring Google Cloud SQL](#configuring-google-cloud-sql)
+- [Finalizing Configuration Files](#finalizing-configuration-files)
+- [Deploying to Google Cloud Run](#deploying-to-google-cloud-run)
+- [Testing the Application](#testing-the-application)
 
+## Prerequisites
 
-## Introduction
-Import the ChatGPT bot to Line and start interacting with it by simply typing text in the input box. In addition to ChatGPT, the model for DALL·E 2 is also integrated. Enter `/imagine + text` to return the corresponding image, as shown in the figure below:
+- A Google Cloud Platform account with billing enabled
+- Access to OpenAI API
+- A Line Developers account
 
-![Demo](https://github.com/TheExplainthis/ChatGPT-Line-Bot/blob/main/demo/chatgpt-line-bot.gif)
+## Obtaining OpenAI API Token:
 
-## Installation Steps
-### Token Retrieval
-1. Retrieve the OpenAI API Token:
-    1. Register/login to your [OpenAI](https://beta.openai.com/) account.
-    2. Click on the avatar on the top right corner and select `View API keys`.
-    3. Click on `Create new secret key` in the middle, and the generated token will be `OPENAI_API` (to be used later).
-    - Note: Each API has a free quota and restrictions. For details, please refer to [OpenAI Pricing](https://openai.com/api/pricing/).
-2. Retrieve the Line Token:
-    1. Login to [Line Developer](https://developers.line.biz/zh-hant/).
-    2. Create a bot:
-        1. Create a `Provider` -> click `Create`.
-        2. Create a `Channel` -> select `Create a Messaging API channel`.
-        3. Enter the required basic information.
-        4. After completion, there is a `Channel Secret` under `Basic Settings` -> click `Issue`, and the generated token will be `LINE_CHANNEL_SECRET` (to be used later).
-        5. Under `Messaging API`, there is a `Channel access token` -> click `Issue`, and the generated token will be `LINE_CHANNEL_ACCESS_TOKEN` (to be used later).
+1. Register/Login at [OpenAI Platform](https://platform.openai.com/)
+2. Create a new Project from the avatar menu in the upper left corner.
+3. Once inside the Project, navigate to Project →  API Key.
+4. Click `+ Create` in the upper right corner to generate an OpenAI API Token.
 
-### Project Setup
-1. Fork the Github project:
-    1. Register/login to [GitHub](https://github.com/).
-    2. Go to [ChatGPT-Line-Bot](https://github.com/TheExplainthis/ChatGPT-Line-Bot).
-    3. Click `Star` to support the developer.
-    4. Click `Fork` to copy all the code to your own repository.
-2. Deploy (free space):
-    1. Go to [replit](https://replit.com/).
-    2. Click `Sign Up` and log in with your `Github` account and authorize it -> click `Skip` to skip the initialization settings.
-    3. On the main page in the middle, click `Create` -> a pop-up window will appear, click `Import from Github` on the upper right corner.
-    4. If you have not added the Github repository, click the link `Connect GitHub to import your private repos.` -> check `Only select repositories` -> select `ChatGPT-Line-Bot`.
-    5. Go back to step 4. At this point, the `Github URL` can select the `ChatGPT-Line-Bot` project -> click `Import from Github`.
+## Setting Up OpenAI Assistant API
 
-### Project Execution
-1. Environment variables setting:
-    1. After completing the previous step of `Import`, click on `Tools` at the bottom left of the project management page in `Replit`, then click on `Secrets`.
-    2. Click on `Got it` on the right side to add environment variables, which includes:
-        1. Desired model:
-            - key: `OPENAI_MODEL_ENGINE`
-            - value: `gpt-3.5-turbo`
-        2. ChatGPT wants the assistant to play the role of a keyword (currently, no further usage instructions have been officially released, and players can test it themselves).
-            - key: `SYSTEM_MESSAGE`
-            - value: `You are a helpful assistant.`
-        3. Line Channel Secret:
-            - key: `LINE_CHANNEL_SECRET`
-            - value: `[obtained from step one]`
-        4. Line Channel Access Token:
-            - key: `LINE_CHANNEL_ACCESS_TOKEN`
-            - value: `[obtained from step one]`
-2. Start running:
-    1. Click on `Run` on the top.
-    2. After successful, the right-side screen will display `Hello World`, and the **URL** on the top of the screen should be copied down.
-    3. Go back to Line Developer, paste the **URL** above `Webhook URL` under `Messaging API`, and add `/callback` to the end, for example: `https://ChatGPT-Line-Bot.explainthis.repl.co/callback`
-    4. Turn on `Use webhook` below.
-    5. Turn off `Auto-reply messages` below.
-    - Note: if there is no request within an hour, the program will be interrupted, so the following steps are needed.
-3. CronJob scheduled request sending:
-    1. Register/Login to [cron-job.org](https://cron-job.org/en/)
-    2. In the upper right corner of the panel, select `CREATE CRONJOB`
-    3. Enter `ChatGPT-Line-Bot` in the Title field, and enter the URL from the previous step, for example: `https://ChatGPT-Line-Bot.explainthis.repl.co/`
-    4. Send a request every `5 minutes` below
-    5. Click on `CREATE`
+1. **Create an Assistant**
+   - Within the project, go to "Playground" at the top, then select "Assistants" on the left to enter the OpenAI Assistant API interface. Create a new Assistant.
 
-## Commands
-To start a conversation with ChatGPT, simply type your message in the text input box. Other available commands include:
+2. **Upload Required Files for Database**
+   - In the Assistant interface, configure the name and System instructions as the bot's default system prompt. It's recommended to select `gpt-4o` as the model and set Temperature to `0.01`.
+   - Go to Tools →  File Search, click `+ Files` to upload files you want as the database.
 
+3. **Testing in Playground**
+   - Go to [OpenAI Playground](https://platform.openai.com/playground) and test the Assistant’s functionality.
 
-| Command | Description |
-| ------- | ----------- |
-| `/註冊` | Enter `/註冊` + OpenAI API Token in the input box to register your token|
-| `/系統訊息` | Enter `/系統訊息` + the role you want ChatGPT to play in the input box|
-| `/清除` | Enter `/清除` in the input box to clear the chat history|
-| `/圖像` | Enter `/圖像` + command in the input box to call the DALL·E 2 model and generate an image|
-| Voice input | Use voice input, the system will automatically translate the voice into text, and ChatGPT will respond in text| 
-| Text input | Directly input text to enter the normal ChatGPT conversation mode|
+4. **Record assistant_id**
+   - Under the Assistant name, there’s a text string representing the `assistant_id`. Note it down for later use.
 
+## Configuring the Line Bot
+
+1. **Create a Line Bot**
+   - Log into the [Line Developers Console](https://developers.line.biz/console/)
+   - Create a new Provider and Channel (Messaging API).
+
+2. **Get Channel Information**
+   - In the Channel settings, obtain the `Channel Access Token` and `Channel Secret`.
+   - Under `Basic Settings`, there’s a `Channel Secret`. Click `Issue` to generate your `channel_secret`.
+   - Under `Messaging API`, there’s a `Channel Access Token`. Click `Issue` to generate your `channel_access_token`.
+
+3. **Set Webhook URL**
+   - Set the Webhook URL to the address of the Google Cloud Run deployment (this can be updated post-deployment).
+   - Enable the Webhook by toggling the "Use Webhook" switch to on.
+
+## Configuring Google Cloud SQL
+
+1. **Create Cloud SQL Instance**
+   - Go to [Cloud SQL Instances](https://console.cloud.google.com/sql/instances).
+   - Click **Create Instance** and choose the required database (e.g., PostgreSQL).
+
+2. **Instance Configuration**
+   - Set up the instance name and password.
+   - Create an account for connection operations, noting down the username and password.
+   - Create the database and use Cloud SQL Studio to run the following SQL command to create the table:
+
+    ```sql
+    CREATE TABLE user_thread_table (
+        user_id VARCHAR(255) PRIMARY KEY,
+        thread_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ```
+
+3. **Get Connection Information**
+   - After creating the instance, record the following details:
+     - Instance Connection Name
+     - Host
+     - Port
+     - Database Name
+     - Username
+     - Password
+
+4. **Obtain SSL Certificates**
+   - Go to the instance details page.
+   - Under the **Connections** tab, enable SSL connections.
+   - Download the following certificates:
+     - Server CA Certificate
+     - Client Certificate
+     - Client Key
+   - Convert these certificates and keys using the following commands:
+
+    ```bash
+    openssl x509 -in client-cert.pem -out ssl-cert.crt # Server CA Certificate
+    openssl x509 -in server-ca.pem -out ca-cert.crt # Client Certificate
+    openssl rsa -in client-key.pem -out ssl-key.key # Client Key
+    ```
+
+   - Copy `ssl-cert.crt`, `ca-cert.crt`, and `ssl-key.key` to `config/ssl/`.
+
+## Finalizing Configuration Files
+
+Prepare the following information:
+
+- `channel_access_token`
+- `channel_secret`
+- `openai_api_key`
+- `assistant_id`
+
+Copy `config/config.yml.example` to `config/config.yml`, then modify its content as follows:
+
+```yaml
+line:
+  channel_access_token: YOUR_CHANNEL_ACCESS_TOKEN
+  channel_secret: YOUR_CHANNEL_SECRET
+
+openai:
+  api_key: YOUR_OPENAI_API_KEY
+  assistant_id: YOUR_ASSISTANT_ID
+
+db:
+  host: YOUR_DB_HOST
+  port: 5432
+  db_name: YOUR_DB_NAME
+  user: YOUR_DB_USER
+  password: YOUR_DB_PASSWORD
+  sslmode: verify-ca
+  sslrootcert: config/ssl/ca-cert.crt
+  sslcert: config/ssl/client.crt
+  sslkey: config/ssl/client.key
+```
+
+## Deploying to Google Cloud Run
+
+1. **Configure Google Cloud Console**
+
+   - Use the following commands to set up Google Cloud authentication and select your project:
+
+     ```bash
+     gcloud auth login
+     gcloud config set project {your-project-id}
+     ```
+
+2. **Build Container Image**
+
+   - Build and push the image to Google Container Registry using:
+
+     ```bash
+     gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name}
+     ```
+
+3. **Deploy to Cloud Run**
+
+   - Deploy using the following command:
+
+     ```bash
+     gcloud run deploy {your-service-name} \
+       --image gcr.io/{your-project-id}/{your-image-name} \
+       --platform managed \
+       --port 8080
+       --memory 2G
+       --timeout=2m
+       --region {your-region}
+     ```
+
+   - Replace placeholders with your actual information.
+
+4. **Test Deployment Results**
+
+   - After deployment, a Service URL will be returned, e.g., `https://chatgpt-line-bot-****.run.app`. Note this down.
+
+5. **Set Webhook URL**
+
+   - In the Line Bot settings, set the Webhook URL to the Service URL.
+   - Enable Webhook by toggling the "Use Webhook" switch on.
+   - Click Verify to check the connection.
+
+## Testing the Application
+
+1. **Access Chat Endpoint**
+   - Go to the Service URL, e.g., `https://{your-cloud-run-url}/chat`, to ensure the app is running smoothly.
+
+2. **Test with Line**
+   - Send a message to your Line Bot to test its full functionality.
+
+3. **Check Logs**
+   - If issues arise, use `gcloud` or Google Cloud Console to inspect logs.
+
+## Notes
+
+- Ensure all sensitive information is stored only in `config/ssl/` and `config/config.yml`.
+- Use Google Secret Manager to manage secrets if necessary.
+- Follow best practices for security and compliance.
 
 ## Support Us
-Like this free project? Please consider [supporting us](https://www.buymeacoffee.com/explainthis) to keep it running.
 
-[<a href="https://www.buymeacoffee.com/explainthis" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="45px" width="162px" alt="Buy Me A Coffee"></a>](https://www.buymeacoffee.com/explainthis)
+This project is by Tainan Sprout. To support the project, please [donate to Tainan Sprout](https://bit.ly/3RBvPyZ).
 
-## Related Projects
-- [gpt-ai-assistant](https://github.com/memochou1993/gpt-ai-assistant)
-- [ChatGPT-Discord-Bot](https://github.com/TheExplainthis/ChatGPT-Discord-Bot)
+## Acknowledgments
+
+This project is forked from [ExplainThis's ChatGPT-Line-Bot](https://github.com/TheExplainthis/ChatGPT-Line-Bot). Special thanks to them.
 
 ## License
 [MIT](LICENSE)
