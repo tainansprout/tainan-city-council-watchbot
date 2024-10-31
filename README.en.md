@@ -25,7 +25,7 @@ This project is a chatbot using Line as the front-end, connected to the OpenAI A
 
 1. Register/Login at [OpenAI Platform](https://platform.openai.com/)
 2. Create a new Project from the avatar menu in the upper left corner.
-3. Once inside the Project, navigate to Project →  API Key.
+3. Once inside the Project, navigate to Project → API Key.
 4. Click `+ Create` in the upper right corner to generate an OpenAI API Token.
 
 ## Setting Up OpenAI Assistant API
