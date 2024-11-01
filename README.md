@@ -7,6 +7,7 @@
 ## 目錄
 
 - [前置準備](#前置準備)
+- [取得 OpenAI 的 API Token](#取得-openai-的-api-token)
 - [設定 OpenAI Assistant API](#設定-openai-assistant-api)
 - [設定 Line Bot](#設定-line-bot)
 - [設定環境變數](#設定環境變數)
@@ -17,11 +18,11 @@
 
 ## 前置準備
 
-- 一個已啟用計費的 Google Cloud Platform 帳戶
-- OpenAI API 訪問權限
-- Line Developers 帳戶
+- 一個已啟用計費的 Google Cloud Platform 帳號
+- OpenAI API 使用權限
+- Line Developers 帳號
 
-## 取得 OpenAI 給的 API Token：
+## 取得 OpenAI 的 API Token
 
 1. [OpenAI Platform](https://platform.openai.com/) 平台中註冊/登入帳號
 
@@ -40,7 +41,7 @@
 2. **上傳您需要作為資料庫之檔案**
 
    - 請在 Assistant 介面上設定名稱與System instructions，作為機器人預設的system prompt。Model建議選取`gpt-4o`，Temperature建議設定為`0.01`。
-   - 接著，在 Tools →  File Search中，點選 `+ FIles` 上傳你要作為資料庫的檔案。
+   - 接著，在 Tools → File Search中，點選 `+ FIles` 上傳你要作為資料庫的檔案。
 
 3. **在 Playground 測試可用性**
 
@@ -224,4 +225,5 @@ db:
 本專案 Fork 自 [ExplainThis 的 ChatGPT-Line-Bot](https://github.com/TheExplainthis/ChatGPT-Line-Bot) 。特此致謝。
 
 ## 授權
+
 [MIT](LICENSE)

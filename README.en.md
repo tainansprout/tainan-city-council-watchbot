@@ -1,15 +1,15 @@
 # Tainan City Council WatchBot
 
-中文 | [English](README.en.md)
+[中文](README.md) | English
 
 This project is a chatbot using Line as the front-end, connected to the OpenAI Assistant API. The bot will be deployed on Google Cloud Run and will use Google Cloud SQL to manage chat thread IDs.
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Obtaining OpenAI API Token](#obtaining-openai-api-token)
 - [Setting Up OpenAI Assistant API](#setting-up-openai-assistant-api)
 - [Configuring the Line Bot](#configuring-the-line-bot)
-- [Setting Environment Variables](#setting-environment-variables)
 - [Configuring Google Cloud SQL](#configuring-google-cloud-sql)
 - [Finalizing Configuration Files](#finalizing-configuration-files)
 - [Deploying to Google Cloud Run](#deploying-to-google-cloud-run)
@@ -21,7 +21,7 @@ This project is a chatbot using Line as the front-end, connected to the OpenAI A
 - Access to OpenAI API
 - A Line Developers account
 
-## Obtaining OpenAI API Token:
+## Obtaining OpenAI API Token
 
 1. Register/Login at [OpenAI Platform](https://platform.openai.com/)
 2. Create a new Project from the avatar menu in the upper left corner.
@@ -35,7 +35,7 @@ This project is a chatbot using Line as the front-end, connected to the OpenAI A
 
 2. **Upload Required Files for Database**
    - In the Assistant interface, configure the name and System instructions as the bot's default system prompt. It's recommended to select `gpt-4o` as the model and set Temperature to `0.01`.
-   - Go to Tools →  File Search, click `+ Files` to upload files you want as the database.
+   - Go to Tools → File Search, click `+ Files` to upload files you want as the database.
 
 3. **Testing in Playground**
    - Go to [OpenAI Playground](https://platform.openai.com/playground) and test the Assistant’s functionality.
@@ -206,4 +206,5 @@ This project is by Tainan Sprout. To support the project, please [donate to Tain
 This project is forked from [ExplainThis's ChatGPT-Line-Bot](https://github.com/TheExplainthis/ChatGPT-Line-Bot). Special thanks to them.
 
 ## License
+
 [MIT](LICENSE)
