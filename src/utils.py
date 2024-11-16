@@ -90,7 +90,6 @@ def preprocess_text(text, config):
             text = re.sub(r'(今天|today)', get_date_string('today'), text, flags=re.IGNORECASE)
             text = re.sub(r'(明天|tomorrow)', get_date_string('tomorrow'), text, flags=re.IGNORECASE)
             text = re.sub(r'(昨天|yesterday)', get_date_string('yesterday'), text, flags=re.IGNORECASE)
-    print(text)
     return text
 
 def replace_text(text, replacements):
@@ -99,8 +98,6 @@ def replace_text(text, replacements):
     return text
 
 def postprocess_text(text, config):
-    print(text)
     text_processing_config = load_text_processing_config(config)
     text = replace_text(text, text_processing_config.get('post-replacements', []))
-    print(text)
     return text
