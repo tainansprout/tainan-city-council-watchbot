@@ -35,7 +35,7 @@ from src.models import OpenAIModel
 from src.config import load_config
 from src.logger import logger
 from src.db import Database
-from src.utils import get_response_data, get_content_and_reference, replace_file_name, check_token_valid, get_file_dict, detect_none_references
+from src.utils import get_response_data, get_content_and_reference, replace_file_name, check_token_valid, get_file_dict, detect_none_references, preprocess_text, postprocess_text
 
 app = Flask(__name__)
 config = load_config()
@@ -55,7 +55,7 @@ def callback():
     app.logger.info("Request body: " + body)
     try:
         handler.handle(body, signature)
-    except InvalidSignatureError:
+    except InvalidSignatureError as e:
         logger.error(traceback.format_exception(e))
         print("Invalid signature. Please check your channel access token/channel secret.")
         abort(400)
@@ -81,6 +81,7 @@ def handle_assistant_message(user_id, text):
             else:
                 msg = TextMessage(text="Command not found.")
         else:
+            text = preprocess_text(text, config)
             thread_id = database.query_thread(user_id)
             if thread_id:
                 is_successful, response, error_message = model.retrieve_thread(thread_id)
@@ -123,6 +124,7 @@ def handle_assistant_message(user_id, text):
                 if detect_none_references(response_message):
                     file_dict = get_file_dict(model)
                     response_message = get_content_and_reference(response, file_dict)
+                response_message = postprocess_text(response_message, config)
                 logger.debug(response_message)
                 msg = TextMessage(text=response_message)
             else:
@@ -213,5 +215,5 @@ def ask_api(message):
 
 
 if __name__ == "__main__":
-    model.check_token_valid()
+    check_token_valid(model)
     app.run(host='0.0.0.0', port=8080, debug=True)

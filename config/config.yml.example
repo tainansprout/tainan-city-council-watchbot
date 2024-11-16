@@ -18,6 +18,15 @@ db:
   sslcert: 
   sslkey: 
 
+text_processing:
+  post-replacements:
+    - pattern: ""
+      replacement: ""
+    - pattern: ""
+      replacement: ""
+  preprocessors:
+    - type: "replace_date_string"
+
 logfile: ./logs/linebot.log
 
 commands:

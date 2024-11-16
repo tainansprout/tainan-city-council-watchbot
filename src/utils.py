@@ -1,5 +1,6 @@
 import opencc
 import re
+from datetime import datetime, timedelta
 
 s2t_converter = opencc.OpenCC('s2t')
 t2s_converter = opencc.OpenCC('t2s')
@@ -42,7 +43,6 @@ def replace_file_name(content, file_dict) -> str:
     return text
 
 def check_token_valid(model) -> bool:
-    model = OpenAIModel(api_key=openai_api_key, assistant_id=openai_assistant_id)
     is_successful, _, _ = model.check_token_valid()
     if not is_successful:
         raise ValueError('Invalid API token')
@@ -60,3 +60,47 @@ def detect_none_references(text):
         return True
     else:
         return False
+
+def get_date_string(day="today"):
+    """
+    返回指定天數的日期字串：'今天', '明天', '昨天'
+    預設為'今天'。
+    """
+    today = datetime.now()
+    
+    if day == "today":
+        target_date = today
+    elif day == "tomorrow":
+        target_date = today + timedelta(days=1)
+    elif day == "yesterday":
+        target_date = today - timedelta(days=1)
+    else:
+        raise ValueError("day 參數必須是 'today', 'tomorrow' 或 'yesterday'")
+    
+    # 格式化日期為 YYYY/MM/DD
+    return target_date.strftime("%Y/%m/%d")
+
+def load_text_processing_config(config):
+    return config.get('text_processing', {})
+
+def preprocess_text(text, config):
+    text_processing_config = load_text_processing_config(config)
+    for preprocessor in text_processing_config.get('preprocessors', []):
+        if preprocessor['type'] == 'replace_date_string':
+            text = re.sub(r'(今天|today)', get_date_string('today'), text, flags=re.IGNORECASE)
+            text = re.sub(r'(明天|tomorrow)', get_date_string('tomorrow'), text, flags=re.IGNORECASE)
+            text = re.sub(r'(昨天|yesterday)', get_date_string('yesterday'), text, flags=re.IGNORECASE)
+    print(text)
+    return text
+
+def replace_text(text, replacements):
+    for replacement in replacements:
+        text = re.sub(replacement['pattern'], replacement['replacement'], text)
+    return text
+
+def postprocess_text(text, config):
+    print(text)
+    text_processing_config = load_text_processing_config(config)
+    text = replace_text(text, text_processing_config.get('post-replacements', []))
+    print(text)
+    return text
