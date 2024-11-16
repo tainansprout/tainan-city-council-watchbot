@@ -6,6 +6,7 @@ COPY ./ /ChatGPT-Line-Bot
 WORKDIR /ChatGPT-Line-Bot
 RUN find . -name "*.ipynb" -exec rm {} +
 RUN apt-get install libpq-dev
+RUN pip3 install --upgrade pip
 RUN pip3 install -r requirements.txt
 
 # CMD ["python3", "main.py"]
