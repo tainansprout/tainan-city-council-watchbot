@@ -93,8 +93,9 @@ def preprocess_text(text, config):
     return text
 
 def replace_text(text, replacements):
-    for replacement in replacements:
-        text = re.sub(replacement['pattern'], replacement['replacement'], text)
+    if replacements:
+        for replacement in replacements:
+            text = re.sub(replacement['pattern'], replacement['replacement'], text)
     return text
 
 def postprocess_text(text, config):

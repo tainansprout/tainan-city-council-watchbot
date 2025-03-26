@@ -213,7 +213,7 @@ db:
 ## 注意事項
 
 - 確保所有敏感資訊只放在 `config/ssl/` 當中及 `config/config.yml`。
-- 如有需要，使用 Google Secret Manager 來管理秘密。
+- 如有需要，使用 Google Secret Manager 來管理密碼。
 - 遵循安全和合規的最佳實踐。
 
 ## 捐款支持
