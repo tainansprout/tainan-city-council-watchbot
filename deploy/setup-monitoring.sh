@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cd "$(dirname "$0")"
+pushd ..
+
 # Google Cloud 監控和日誌設定腳本
 # 為 ChatGPT Line Bot 設定完整的監控體系
 

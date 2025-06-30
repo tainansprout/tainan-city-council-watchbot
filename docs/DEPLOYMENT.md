@@ -26,23 +26,23 @@ git clone <repository-url>
 cd ChatGPT-Line-Bot
 
 # 2. 設定環境變數
-cp .env.example .env
-# 編輯 .env 檔案，填入實際的 API 金鑰和配置
+cp deploy/.env.example deploy/.env
+# 編輯 deploy/.env 檔案，填入實際的 API 金鑰和配置
 
 # 3. 執行部署腳本
-chmod +x deploy-to-cloudrun.sh
-./deploy-to-cloudrun.sh
+chmod +x deploy/deploy-to-cloudrun.sh
+./deploy/deploy-to-cloudrun.sh
 ```
 
 ### 2. 高可用性部署（包含 Load Balancer）
 ```bash
 # 1. 基本部署完成後
-chmod +x setup-loadbalancer.sh
-./setup-loadbalancer.sh
+chmod +x deploy/setup-loadbalancer.sh
+./deploy/setup-loadbalancer.sh
 
 # 2. 設定監控
-chmod +x setup-monitoring.sh
-./setup-monitoring.sh
+chmod +x deploy/setup-monitoring.sh
+./deploy/setup-monitoring.sh
 ```
 
 ## 🏗️ 詳細部署步驟
@@ -109,17 +109,17 @@ echo -n "your_db_name" | gcloud secrets create db-name --data-file=-
 
 ```bash
 # 建立 Docker 映像
-gcloud builds submit --tag gcr.io/$PROJECT_ID/chatgpt-line-bot -f Dockerfile.cloudrun .
+gcloud builds submit --tag gcr.io/$PROJECT_ID/chatgpt-line-bot -f deploy/Dockerfile.cloudrun .
 
 # 部署到 Cloud Run
-gcloud run services replace cloudrun-service.yaml --region=asia-east1
+gcloud run services replace deploy/cloudrun-service.yaml --region=asia-east1
 ```
 
 ### 步驟 5: 設定 Load Balancer（可選但推薦）
 
 ```bash
 # 執行 Load Balancer 設定腳本
-./setup-loadbalancer.sh
+./deploy/setup-loadbalancer.sh
 ```
 
 這會建立：
@@ -136,7 +136,7 @@ gcloud run services replace cloudrun-service.yaml --region=asia-east1
 
 ```bash
 # 執行監控設定腳本
-./setup-monitoring.sh
+./deploy/setup-monitoring.sh
 ```
 
 這會建立：

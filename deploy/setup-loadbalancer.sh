@@ -1,13 +1,30 @@
 #!/bin/bash
 
-# Google Cloud Load Balancer 設定腳本
-# 為 ChatGPT Line Bot 建立全球負載平衡器
+# 取得腳本所在目錄
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 設定變數
-PROJECT_ID="your-project-id"  # 請替換為你的專案 ID
-REGION="asia-east1"
-SERVICE_NAME="chatgpt-line-bot"
-DOMAIN_NAME="your-domain.com"  # 請替換為你的網域名稱
+# 載入環境變數配置
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    echo "載入環境變數配置..."
+    set -o allexport
+    source "$SCRIPT_DIR/.env"
+    set +o allexport
+else
+    echo "警告: 找不到 $SCRIPT_DIR/.env 檔案"
+    echo "請複製 $SCRIPT_DIR/.env.example 為 $SCRIPT_DIR/.env 並填入實際的值"
+    exit 1
+fi
+
+# 驗證必要的環境變數
+required_vars=("PROJECT_ID" "REGION" "SERVICE_NAME" "DOMAIN_NAME" "LOAD_BALANCER_NAME")
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        echo "錯誤: 環境變數 $var 未設定"
+        exit 1
+    fi
+done
+
+cd "$SCRIPT_DIR/.." # 回到專案根目錄
 
 # 顏色代碼
 RED='\033[0;31m'

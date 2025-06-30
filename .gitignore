@@ -173,6 +173,9 @@ web_modules/
 .env.local
 .env.production
 
+# 部署配置
+deploy/.env
+
 # config yml file
 config/config.yml
 

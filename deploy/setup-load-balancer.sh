@@ -1,5 +1,8 @@
 #!/bin/bash
 
+cd "$(dirname "$0")"
+pushd ..
+
 # 設定變數
 PROJECT_ID="your-project-id"  # 請替換為你的專案 ID
 REGION="asia-east1"

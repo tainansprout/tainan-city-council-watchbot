@@ -1,9 +1,28 @@
 #!/bin/bash
 
-# 設定變數
-PROJECT_ID="your-project-id"
-REGION="asia-east1"
-SERVICE_NAME="chatgpt-line-bot"
+# 取得腳本所在目錄
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 載入環境變數配置
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    echo "載入環境變數配置..."
+    set -o allexport
+    source "$SCRIPT_DIR/.env"
+    set +o allexport
+else
+    echo "警告: 找不到 $SCRIPT_DIR/.env 檔案"
+    echo "請複製 $SCRIPT_DIR/.env.example 為 $SCRIPT_DIR/.env 並填入實際的值"
+    exit 1
+fi
+
+# 驗證必要的環境變數
+required_vars=("PROJECT_ID" "REGION" "SERVICE_NAME")
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        echo "錯誤: 環境變數 $var 未設定"
+        exit 1
+    fi
+done
 
 # 顏色代碼
 GREEN='\033[0;32m'

@@ -153,34 +153,46 @@ db:
 
 ## 部署到 Google Cloud Run
 
+### 🚀 快速部署（推薦）
+
+使用我們提供的自動化部署腳本：
+
+```bash
+# 1. 設定部署配置
+cp deploy/.env.example deploy/.env
+# 編輯 deploy/.env 檔案，填入你的專案設定
+
+# 2. 執行自動部署腳本
+./deploy/deploy-to-cloudrun.sh
+```
+
+### 📖 詳細部署指南
+
+如需完整的部署流程、監控設定、負載平衡器配置等，請參考：
+- [完整部署指南](docs/DEPLOYMENT.md)
+- [部署腳本說明](deploy/README.md)
+
+### 🔧 手動部署（進階用戶）
+
+如果你想要手動控制每個步驟：
+
 1. **設定Google Cloud Console**
 
-   - 使用以下指令設定Google Cloud認證與專案
-     ```bash
-     gcloud auth login
-     gcloud config set project {your-project-id}
-     ```
+   ```bash
+   gcloud auth login
+   gcloud config set project {your-project-id}
+   ```
 
 2. **建立容器映像**
 
-   - 使用以下指令建置並推送映像到 Google Container Registry：
-
-     ```bash
-     gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name}
-     ```
+   ```bash
+   gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name} -f deploy/Dockerfile.cloudrun .
+   ```
 
 3. **部署到 Cloud Run**
 
-   - 使用以下指令部署：
-
-     ```bash
-     gcloud run deploy {your-service-name} \
-       --image gcr.io/{your-project-id}/{your-image-name} \
-       --platform managed \
-       --port 8080
-       --memory 2G
-       --timeout=2m
-       --region {your-region}
+   ```bash
+   gcloud run services replace deploy/cloudrun-service.yaml --region {your-region}
      ```
 
    - 請將以上指令中的佔位符替換為您的實際資訊。
