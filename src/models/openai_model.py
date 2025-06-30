@@ -198,7 +198,8 @@ class OpenAIModel(FullLLMInterface):
                 sources=sources,
                 metadata={
                     'thread_id': thread_id,
-                    'model': 'openai-assistant'
+                    'model': 'openai-assistant',
+                    'thread_messages': chat_response.metadata.get('thread_messages')
                 }
             )
             

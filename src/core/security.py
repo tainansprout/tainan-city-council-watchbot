@@ -215,7 +215,7 @@ class SecurityMiddleware:
             abort(413)  # Payload Too Large
         
         # 檢查 Content-Type（對於 POST 請求）
-        if request.method == 'POST' and request.endpoint != 'callback':
+        if request.method == 'POST' and request.endpoint not in ['callback', 'index']:
             if not request.is_json:
                 logger.warning("Non-JSON POST request rejected")
                 abort(400)

@@ -9,112 +9,55 @@ import secrets
 import time
 from functools import wraps
 from typing import Optional, Dict, Any
-from flask import request, abort, session, jsonify, render_template_string
+from flask import request, abort, session, jsonify, render_template
 
 
 class TestAuth:
     """測試端點認證類"""
     
-    def __init__(self):
-        # 從環境變數讀取認證配置
-        self.auth_method = os.getenv('TEST_AUTH_METHOD', 'simple_password')  # simple_password, basic_auth, session, token
-        self.password = os.getenv('TEST_PASSWORD', 'test123')  # 簡單密碼
-        self.username = os.getenv('TEST_USERNAME', 'admin')   # 基本認證用戶名
-        self.secret_key = os.getenv('TEST_SECRET_KEY', secrets.token_urlsafe(32))  # session 密鑰
-        self.api_token = os.getenv('TEST_API_TOKEN', secrets.token_urlsafe(16))  # API token
+    def __init__(self, config=None):
+        # 優先從 config.yml 讀取設定，其次從環境變數，最後使用預設值
+        self.config = config
+        auth_config = config.get('auth', {}) if config else {}
+        
+        self.auth_method = (
+            auth_config.get('method') or 
+            os.getenv('TEST_AUTH_METHOD', 'simple_password')
+        )
+        
+        self.password = (
+            auth_config.get('password') or 
+            os.getenv('TEST_PASSWORD', 'test123')
+        )
+        
+        self.username = (
+            auth_config.get('username') or 
+            os.getenv('TEST_USERNAME', 'admin')
+        )
+        
+        self.secret_key = (
+            auth_config.get('secret_key') or 
+            os.getenv('TEST_SECRET_KEY', secrets.token_urlsafe(32))
+        )
+        
+        self.api_token = (
+            auth_config.get('api_token') or 
+            os.getenv('TEST_API_TOKEN', secrets.token_urlsafe(16))
+        )
         
         # Token 有效期（秒）
-        self.token_expiry = int(os.getenv('TEST_TOKEN_EXPIRY', '3600'))  # 1小時
+        self.token_expiry = int(
+            auth_config.get('token_expiry', 3600) or 
+            os.getenv('TEST_TOKEN_EXPIRY', '3600')
+        )
         
         # 儲存活躍的 tokens {token: expiry_time}
         self._active_tokens = {}
     
     def generate_login_form(self, error_message: str = "") -> str:
         """生成登入表單"""
-        form_html = """
-        <!DOCTYPE html>
-        <html lang="zh-TW">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>測試介面登入</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    max-width: 400px;
-                    margin: 100px auto;
-                    padding: 20px;
-                    background-color: #f5f5f5;
-                }
-                .login-container {
-                    background: white;
-                    padding: 30px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                }
-                .form-group {
-                    margin-bottom: 15px;
-                }
-                label {
-                    display: block;
-                    margin-bottom: 5px;
-                    font-weight: bold;
-                }
-                input[type="password"] {
-                    width: 100%;
-                    padding: 10px;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                    box-sizing: border-box;
-                }
-                button {
-                    width: 100%;
-                    padding: 10px;
-                    background-color: #007bff;
-                    color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 16px;
-                }
-                button:hover {
-                    background-color: #0056b3;
-                }
-                .error {
-                    color: red;
-                    margin-bottom: 15px;
-                    text-align: center;
-                }
-                .info {
-                    color: #666;
-                    font-size: 14px;
-                    text-align: center;
-                    margin-top: 15px;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="login-container">
-                <h2>測試介面登入</h2>
-                {% if error_message %}
-                <div class="error">{{ error_message }}</div>
-                {% endif %}
-                <form method="POST">
-                    <div class="form-group">
-                        <label for="password">密碼:</label>
-                        <input type="password" id="password" name="password" required>
-                    </div>
-                    <button type="submit">登入</button>
-                </form>
-                <div class="info">
-                    此介面僅供測試使用<br>
-                    登入後可測試聊天機器人功能
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        return render_template_string(form_html, error_message=error_message)
+        app_name = self.config.get('app', {}).get('name', '聊天機器人') if self.config else '聊天機器人'
+        return render_template('login.html', error_message=error_message, app_name=app_name)
     
     def verify_password(self, password: str) -> bool:
         """驗證密碼"""
@@ -182,8 +125,14 @@ class TestAuth:
         return info
 
 
-# 全域認證實例
-test_auth = TestAuth()
+# 全域認證實例 - 延遲初始化
+test_auth = None
+
+def init_test_auth_with_config(config):
+    """使用配置初始化全域認證實例"""
+    global test_auth
+    test_auth = TestAuth(config)
+    return test_auth
 
 
 def require_test_auth(f):
@@ -273,7 +222,7 @@ def init_test_auth(app):
     # 設定 session 配置
     app.config.update(
         PERMANENT_SESSION_LIFETIME=test_auth.token_expiry,
-        SESSION_COOKIE_SECURE=True,  # HTTPS only
+        SESSION_COOKIE_SECURE=False,  # 允許 HTTP 連接（開發環境）
         SESSION_COOKIE_HTTPONLY=True,  # 防止 XSS
         SESSION_COOKIE_SAMESITE='Lax'  # CSRF 保護
     )

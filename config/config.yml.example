@@ -1,11 +1,71 @@
 ---
+# 應用程式基本設定
+app:
+  name: "台南議會觀測機器人"
+  description: "台南市議會會議記錄檢索系統"
+
 line:
   channel_access_token: 
   channel_secret: 
 
+# AI 模型配置
+llm:
+  # 主要提供商: openai, anthropic, gemini, ollama
+  provider: openai
+  # 備用提供商 (自動故障轉移)
+  fallback_providers: [anthropic, gemini]
+  # 模型選擇策略: primary_with_fallback, load_balance, cost_optimize
+  strategy: primary_with_fallback
+  # 健康檢查間隔 (秒)
+  health_check_interval: 300
+  # 重試次數
+  retry_attempts: 3
+
+# OpenAI 設定
 openai:
-  api_key: 
-  assistant_id: 
+  api_key: sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  assistant_id: asst_xxxxxxxxxxxxxxxxxxxxxxxx
+  # 可選設定
+  base_url: https://api.openai.com/v1
+  model: gpt-4
+  temperature: 0.1
+  max_tokens: 4000
+
+# Anthropic Claude 設定
+anthropic:
+  api_key: sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  model: claude-3-sonnet-20240229
+  max_tokens: 4000
+  temperature: 0.1
+
+# Google Gemini 設定
+gemini:
+  api_key: AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  model: gemini-pro
+  temperature: 0.1
+  corpus_name: default-corpus
+  base_url: https://generativelanguage.googleapis.com
+
+# Ollama 本地模型設定
+ollama:
+  base_url: http://localhost:11434
+  model: llama2
+  temperature: 0.1
+
+# RAG 檢索增強生成設定
+rag:
+  enabled: true
+  chunk_size: 1000
+  chunk_overlap: 100
+  top_k: 3
+  similarity_threshold: 0.1
+
+# 功能開關
+features:
+  audio_transcription: true
+  image_generation: false
+  rag_search: true
+  multi_provider: false 
 
 db:
   host: 
@@ -28,6 +88,20 @@ text_processing:
     - type: "replace_date_string"
 
 logfile: ./logs/linebot.log
+
+# 測試介面認證設定
+auth:
+  # 認證方式: simple_password, basic_auth, token
+  method: simple_password
+  # 簡單密碼認證
+  password: test123
+  # HTTP Basic Auth 設定
+  username: admin
+  # API Token 認證
+  api_token: your_secure_api_token_here
+  # Session 設定
+  secret_key: your_secret_key_for_sessions_here
+  token_expiry: 3600  # Token 有效期（秒）
 
 commands:
   help: "這裡是台南市議會聊天機器人，目前已經輸入了台南市議會第四屆公開議事錄中的會議逐字稿，請輸入您的問題，以便我檢索逐字稿內容來回應您。若您希望重設聊天內容，請輸入「/reset」以重置聊天。"

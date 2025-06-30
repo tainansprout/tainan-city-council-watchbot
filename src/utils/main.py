@@ -72,8 +72,8 @@ def replace_file_name(content, file_dict) -> str:
     # 對每個鍵進行替換
     for key, value in sorted_file_dict:
         # 使用 re.escape 避免鍵中可能包含的任何正則表達式特殊字符影響匹配
-        text = re.sub(re.escape(key), value, text) 
-    return text
+        content = re.sub(re.escape(key), value, content) 
+    return content
 
 def check_token_valid(model) -> bool:
     is_successful, _, _ = model.check_token_valid()

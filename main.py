@@ -35,7 +35,7 @@ from src.core.config import load_config
 from src.core.logger import logger
 from src.core.security import InputValidator, require_json_input, verify_line_signature, init_security
 from src.core.security_config import security_config
-from src.core.auth import require_test_auth, init_test_auth, get_auth_status_info
+from src.core.auth import require_test_auth, init_test_auth, get_auth_status_info, init_test_auth_with_config
 from src.database import Database
 from src.utils import check_token_valid
 from src.services import ChatService, AudioService
@@ -46,7 +46,8 @@ config = load_config()
 # 初始化安全性配置
 init_security(app)
 
-# 初始化測試認證
+# 初始化測試認證 - 使用配置文件
+init_test_auth_with_config(config)
 init_test_auth(app)
 
 configuration = Configuration(access_token=config['line']['channel_access_token'])
@@ -250,7 +251,8 @@ def metrics():
 @require_test_auth
 def index():
     """測試聊天介面 - 用於確認部署狀態"""
-    return render_template('chat.html')
+    app_name = config.get('app', {}).get('name', '聊天機器人')
+    return render_template('chat.html', app_name=app_name)
 
 @app.route('/ask', methods=['POST'])
 @require_test_auth

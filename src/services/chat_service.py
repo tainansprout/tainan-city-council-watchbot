@@ -100,7 +100,7 @@ class ChatService:
                 if not is_successful:
                     raise OpenAIError(f"Failed to create thread: {error_message}")
                 
-                thread_id = response['id']
+                thread_id = response.thread_id
                 self.database.save_thread(user_id, thread_id)
                 logger.debug(f'Created new thread: {thread_id}')
             
@@ -123,7 +123,22 @@ class ChatService:
             if not is_successful:
                 raise OpenAIError(f"RAG query failed: {error_message}")
             
-            # 處理來源引用
+            # 如果是 OpenAI Assistant API，使用舊版的引用處理
+            if hasattr(self.model, 'assistant_id') and self.model.assistant_id:
+                thread_messages = rag_response.metadata.get('thread_messages')
+                if thread_messages:
+                    # 使用舊版的 get_content_and_reference 處理引用格式
+                    formatted_response = get_content_and_reference(thread_messages, self.file_dict)
+                    
+                    # 檢查是否有無效的檔案引用
+                    if detect_none_references(formatted_response):
+                        logger.info("Refreshing file dictionary due to invalid references")
+                        self._refresh_file_dict()
+                        formatted_response = get_content_and_reference(thread_messages, self.file_dict)
+                    
+                    return formatted_response
+            
+            # 其他模型的處理方式
             if rag_response.sources:
                 source_text = self._format_sources(rag_response.sources)
                 return f"{rag_response.answer}\n\n{source_text}"

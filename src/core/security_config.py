@@ -92,11 +92,11 @@ class SecurityConfig:
         # CSP 政策
         csp_policy = "default-src 'self'; "
         if self.is_development():
-            # 開發環境較寬鬆的 CSP
-            csp_policy += "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+            # 開發環境較寬鬆的 CSP，允許CDN和內聯樣式
+            csp_policy += "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:;"
         else:
-            # 生產環境嚴格的 CSP
-            csp_policy += "script-src 'self'; style-src 'self'"
+            # 生產環境稍微寬鬆的 CSP，允許必要的CDN
+            csp_policy += "script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:;"
         
         headers['Content-Security-Policy'] = csp_policy
         

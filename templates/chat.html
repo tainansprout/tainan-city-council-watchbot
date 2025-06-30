@@ -1,100 +1,470 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台南議會觀測機器人</title>
+    <title>{{ app_name }}</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif; /* 設置預設字體 */
+        * {
             margin: 0;
             padding: 0;
-            background-color: #f4f4f9; /* 設置背景顏色 */
-            color: #333; /* 設置文字顏色 */
-        }
-
-        h1 {
-            background-color: #0056b3; /* 藍色背景 */
-            color: white; /* 白色文字 */
-            padding: 20px; /* 增加內邊距 */
-            text-align: center; /* 標題置中 */
-        }
-
-        #chatbox {
-            margin: 10px;
-            padding: 10px;
-            background-color: white;
-            border-radius: 8px;
-            border: 2px solid #ddd; /* 邊框顏色 */
-            min-height: 300px; /* 設置最小高度 */
-            overflow: auto; /* 自動添加滾動條 */
-        }
-
-        #chatlog p {
-            margin: 10px 10px; /* 每條訊息的間距調整為更寬鬆 */
-            line-height: 1.5; /* 行間距也稍微增加 */
-        }
-
-        textarea {
-            width: calc(100% - 22px); /* 寬度調整，考慮到邊框和內邊距 */
-            margin: 10px; /* 外邊距 */
-            height: 100px;
-            font-size: 16px;
             box-sizing: border-box;
-            border-radius: 4px; /* 邊框圓角 */
-            border: 1px solid #ccc;
         }
 
-        button {
-            background-color: #007bff; /* 藍色背景 */
-            color: white; /* 白色文字 */
-            padding: 10px 20px; /* 按鈕內邊距 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header .logo {
+            color: #667eea;
+            font-size: 1.8rem;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #27ae60;
+            font-size: 0.9rem;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            max-width: 1400px;
+            margin: 2rem auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            max-height: 60vh;
+            min-height: 400px;
+        }
+
+        .message {
+            margin-bottom: 1.5rem;
+            animation: fadeInUp 0.3s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .message.error {
+            display: flex;
+            justify-content: center;
+        }
+
+        .message-content {
+            max-width: 85%;
+            padding: 1rem 1.5rem;
+            border-radius: 20px;
+            position: relative;
+            word-wrap: break-word;
+            word-break: break-word;
+            line-height: 1.6;
+        }
+
+        .message-content p {
+            margin: 0 0 0.8rem 0;
+        }
+
+        .message-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.bot .message-content {
+            background: #f8f9fa;
+            color: #2c3e50;
+            border: 1px solid #e9ecef;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message.error .message-content {
+            background: #ffe6e6;
+            color: #d63384;
+            border: 1px solid #f5c2c7;
+            border-radius: 10px;
+            max-width: 90%;
+        }
+
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 0.5rem;
+            font-size: 1.2rem;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            order: 2;
+        }
+
+        .message.bot .message-avatar {
+            background: #e9ecef;
+            color: #6c757d;
+        }
+
+        .input-container {
+            padding: 2rem;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1;
+            min-height: 60px;
+            max-height: 120px;
+            padding: 1rem;
+            border: 2px solid #e9ecef;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: none;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .input-field:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .send-button {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
             border: none;
-            border-radius: 4px;
-            cursor: pointer; /* 鼠標懸停顯示手型 */
-            font-size: 16px;
-            margin-left: 10px; /* 左邊距 */
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
 
-        button:hover {
-            background-color: #0056b3; /* 鼠標懸停顏色變化 */
+        .send-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-button:active {
+            transform: translateY(0);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            color: #6c757d;
+        }
+
+        .loading.show {
+            display: flex;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e9ecef;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .welcome-message {
+            text-align: center;
+            color: #6c757d;
+            padding: 2rem;
+            font-style: italic;
+        }
+
+        /* RWD 響應式設計 */
+        @media (max-width: 1200px) {
+            .chat-container {
+                max-width: 95%;
+                margin: 1.5rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .header h1 {
+                font-size: 1.2rem;
+            }
+
+            .chat-container {
+                margin: 1rem;
+                border-radius: 15px;
+                max-width: calc(100% - 2rem);
+            }
+
+            .chat-messages {
+                padding: 1rem;
+                max-height: 50vh;
+            }
+
+            .message-content {
+                max-width: 90%;
+                padding: 0.8rem 1rem;
+            }
+
+            .input-container {
+                padding: 1rem;
+            }
+
+            .send-button {
+                width: 50px;
+                height: 50px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1rem;
+            }
+
+            .status {
+                font-size: 0.8rem;
+            }
+
+            .chat-messages {
+                padding: 0.5rem;
+            }
+
+            .message-content {
+                max-width: 95%;
+                padding: 0.6rem 0.8rem;
+            }
+
+            .message-avatar {
+                width: 35px;
+                height: 35px;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>台南議會觀測機器人測試聊天介面</h1>
-    <div id="chatbox">
-        <p id="chatlog"></p>
+    <div class="header">
+        <h1>
+            <i class="fas fa-robot logo"></i>
+            {{ app_name }}
+        </h1>
+        <div class="status">
+            <i class="fas fa-circle"></i>
+            線上服務中
+        </div>
     </div>
-    <textarea id="userInput" placeholder="Enter multiple lines of text here..."></textarea>
-    <button onclick="sendMessage()">Send</button>
+
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <i class="fas fa-comments" style="font-size: 2rem; color: #667eea; margin-bottom: 1rem; display: block;"></i>
+                歡迎使用{{ app_name }}！<br>
+                請輸入您的問題，我會幫您檢索台南市議會相關資訊。
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span>機器人正在思考中...</span>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea 
+                    id="messageInput" 
+                    class="input-field" 
+                    placeholder="請輸入您的問題..."
+                    rows="1"
+                ></textarea>
+                <button id="sendButton" class="send-button" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        function sendMessage() {
-            var input = document.getElementById('userInput');
-            var message = input.value.trim();
+        let isLoading = false;
+
+        function addMessage(content, type = 'bot', isHtml = false) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            let avatarIcon = '';
+            if (type === 'user') {
+                avatarIcon = '<i class="fas fa-user"></i>';
+            } else if (type === 'bot') {
+                avatarIcon = '<i class="fas fa-robot"></i>';
+            } else if (type === 'error') {
+                avatarIcon = '<i class="fas fa-exclamation-triangle"></i>';
+            }
+
+            const messageHtml = `
+                ${type !== 'error' ? `<div class="message-avatar">${avatarIcon}</div>` : ''}
+                <div class="message-content">
+                    ${isHtml ? content : escapeHtml(content)}
+                </div>
+            `;
+
+            messageDiv.innerHTML = messageHtml;
+            messagesContainer.appendChild(messageDiv);
+
+            // 移除歡迎訊息
+            const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+            if (welcomeMessage) {
+                welcomeMessage.remove();
+            }
+
+            // 滾動到底部
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            let escapedText = div.innerHTML;
             
+            // 處理換行：雙換行變段落，單換行變<br>
+            const paragraphs = escapedText.split(/\n\s*\n/);
+            const formattedParagraphs = paragraphs.map(paragraph => {
+                if (paragraph.trim()) {
+                    const lines = paragraph.replace(/\n/g, '<br>');
+                    return `<p>${lines}</p>`;
+                }
+                return '';
+            }).filter(p => p);
+            
+            return formattedParagraphs.join('');
+        }
+
+        function setLoading(loading) {
+            isLoading = loading;
+            const loadingDiv = document.getElementById('loading');
+            const sendButton = document.getElementById('sendButton');
+
+            if (loading) {
+                loadingDiv.classList.add('show');
+                sendButton.disabled = true;
+            } else {
+                loadingDiv.classList.remove('show');
+                sendButton.disabled = false;
+            }
+        }
+
+        function sendMessage() {
+            if (isLoading) return;
+
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
             // 基本輸入驗證
             if (!message) {
-                alert('請輸入訊息');
+                addMessage('請輸入訊息', 'error');
                 return;
             }
-            
+
             if (message.length > 1000) {
-                alert('訊息長度不能超過 1000 字符');
+                addMessage('訊息長度不能超過 1000 字符', 'error');
                 return;
             }
-            
+
+            // 顯示用戶訊息
+            addMessage(message, 'user');
             input.value = '';
+            input.style.height = 'auto';
 
-            var chatLog = document.getElementById('chatlog');
-            // 使用 textContent 防止 XSS
-            var userMessageElement = document.createElement('p');
-            userMessageElement.innerHTML = `<b>You:</b> `;
-            var userTextNode = document.createTextNode(message);
-            userMessageElement.appendChild(userTextNode);
-            chatLog.appendChild(userMessageElement);
+            // 設置載入狀態
+            setLoading(true);
 
+            // 發送請求
             fetch('/ask', {
                 method: 'POST',
                 headers: {
@@ -109,47 +479,38 @@
                 return response.json();
             })
             .then(data => {
-                if (data.error) {
-                    var errorElement = document.createElement('p');
-                    errorElement.innerHTML = `<b>Error:</b> `;
-                    errorElement.style.color = 'red';
-                    var errorTextNode = document.createTextNode(data.error);
-                    errorElement.appendChild(errorTextNode);
-                    chatLog.appendChild(errorElement);
-                } else {
-                    var botMessageElement = document.createElement('p');
-                    botMessageElement.innerHTML = `<b>Bot:</b> `;
-                    // 保持換行但防止 XSS
-                    var botMessage = data.message.replace(/\n+/g, '\n');
-                    var botTextNode = document.createTextNode(botMessage);
-                    botMessageElement.appendChild(botTextNode);
-                    // 手動處理換行
-                    botMessageElement.innerHTML = botMessageElement.innerHTML.replace(/\n/g, '<br>');
-                    chatLog.appendChild(botMessageElement);
-                }
+                setLoading(false);
                 
-                // 滾動到底部
-                chatLog.scrollTop = chatLog.scrollHeight;
+                if (data.error) {
+                    addMessage(data.error, 'error');
+                } else {
+                    addMessage(data.message, 'bot', false);
+                }
             })
             .catch(error => {
+                setLoading(false);
                 console.error('Error:', error);
-                var errorElement = document.createElement('p');
-                errorElement.innerHTML = `<b>Error:</b> `;
-                errorElement.style.color = 'red';
-                var errorMessage = error.error || error.message || '發生未知錯誤';
-                var errorTextNode = document.createTextNode(errorMessage);
-                errorElement.appendChild(errorTextNode);
-                chatLog.appendChild(errorElement);
+                
+                const errorMessage = error.error || error.message || '發生未知錯誤，請稍後再試';
+                addMessage(errorMessage, 'error');
             });
         }
-        
-        // 支援 Enter 鍵發送訊息
-        document.getElementById('userInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
+
+        // 自動調整文字區域高度
+        function autoResize() {
+            const textarea = document.getElementById('messageInput');
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+        }
+
+        // 事件監聽器
+        document.getElementById('messageInput').addEventListener('input', autoResize);
+
+        // 移除Enter鍵送出功能，避免與注音輸入法衝突
+        // 使用者只能通過點擊按鈕送出訊息
+
+        // 初始化
+        autoResize();
     </script>
 </body>
 </html>
