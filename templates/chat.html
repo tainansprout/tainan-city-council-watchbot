@@ -72,11 +72,28 @@
     <script>
         function sendMessage() {
             var input = document.getElementById('userInput');
-            var message = input.value;
+            var message = input.value.trim();
+            
+            // 基本輸入驗證
+            if (!message) {
+                alert('請輸入訊息');
+                return;
+            }
+            
+            if (message.length > 1000) {
+                alert('訊息長度不能超過 1000 字符');
+                return;
+            }
+            
             input.value = '';
 
             var chatLog = document.getElementById('chatlog');
-            chatLog.innerHTML += `<p><b>You:</b> ${message}</p>`;
+            // 使用 textContent 防止 XSS
+            var userMessageElement = document.createElement('p');
+            userMessageElement.innerHTML = `<b>You:</b> `;
+            var userTextNode = document.createTextNode(message);
+            userMessageElement.appendChild(userTextNode);
+            chatLog.appendChild(userMessageElement);
 
             fetch('/ask', {
                 method: 'POST',
@@ -85,12 +102,54 @@
                 },
                 body: JSON.stringify({'message': message})
             })
-            .then(response => response.json())
-            .then(data => {
-                chatLog.innerHTML += `<p><b>Bot:</b> ${data.message.replace(/\n+/g, '<br>')}</p>`;
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => Promise.reject(err));
+                }
+                return response.json();
             })
-            .catch(error => console.error('Error:', error));
+            .then(data => {
+                if (data.error) {
+                    var errorElement = document.createElement('p');
+                    errorElement.innerHTML = `<b>Error:</b> `;
+                    errorElement.style.color = 'red';
+                    var errorTextNode = document.createTextNode(data.error);
+                    errorElement.appendChild(errorTextNode);
+                    chatLog.appendChild(errorElement);
+                } else {
+                    var botMessageElement = document.createElement('p');
+                    botMessageElement.innerHTML = `<b>Bot:</b> `;
+                    // 保持換行但防止 XSS
+                    var botMessage = data.message.replace(/\n+/g, '\n');
+                    var botTextNode = document.createTextNode(botMessage);
+                    botMessageElement.appendChild(botTextNode);
+                    // 手動處理換行
+                    botMessageElement.innerHTML = botMessageElement.innerHTML.replace(/\n/g, '<br>');
+                    chatLog.appendChild(botMessageElement);
+                }
+                
+                // 滾動到底部
+                chatLog.scrollTop = chatLog.scrollHeight;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                var errorElement = document.createElement('p');
+                errorElement.innerHTML = `<b>Error:</b> `;
+                errorElement.style.color = 'red';
+                var errorMessage = error.error || error.message || '發生未知錯誤';
+                var errorTextNode = document.createTextNode(errorMessage);
+                errorElement.appendChild(errorTextNode);
+                chatLog.appendChild(errorElement);
+            });
         }
+        
+        // 支援 Enter 鍵發送訊息
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
     </script>
 </body>
 </html>

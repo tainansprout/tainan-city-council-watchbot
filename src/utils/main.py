@@ -83,7 +83,12 @@ def check_token_valid(model) -> bool:
 
 def get_file_dict(model) -> dict:
     try:
-        is_successful, response, error_message = model.list_files()
+        result = model.list_files()
+        if not result or len(result) != 3:
+            logger.warning(f"Unexpected result from list_files: {result}")
+            return {}
+        
+        is_successful, response, error_message = result
         if not is_successful:
             raise Exception(error_message)
         

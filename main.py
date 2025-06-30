@@ -33,12 +33,22 @@ import traceback
 from src.models import ModelFactory
 from src.core.config import load_config
 from src.core.logger import logger
+from src.core.security import InputValidator, require_json_input, verify_line_signature, init_security
+from src.core.security_config import security_config
+from src.core.auth import require_test_auth, init_test_auth, get_auth_status_info
 from src.database import Database
 from src.utils import check_token_valid
 from src.services import ChatService, AudioService
 
 app = Flask(__name__)
 config = load_config()
+
+# 初始化安全性配置
+init_security(app)
+
+# 初始化測試認證
+init_test_auth(app)
+
 configuration = Configuration(access_token=config['line']['channel_access_token'])
 handler = WebhookHandler(config['line']['channel_secret'])
 
@@ -56,15 +66,31 @@ atexit.register(database.close_engine)
 
 @app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers['X-Line-Signature']
+    # 安全檢查
+    signature = request.headers.get('X-Line-Signature')
+    if not signature:
+        logger.warning("Missing Line signature")
+        abort(400)
+    
     body = request.get_data(as_text=True)
-    app.logger.info("Request body: " + body)
+    
+    # 驗證 Line 簽名
+    if not verify_line_signature(signature, body, config['line']['channel_secret']):
+        logger.warning("Invalid Line signature")
+        abort(400)
+    
+    # 記錄請求（已由安全中間件過濾敏感資訊）
+    logger.info("Valid Line webhook received")
+    
     try:
         handler.handle(body, signature)
     except InvalidSignatureError as e:
-        logger.error(traceback.format_exception(e))
-        print("Invalid signature. Please check your channel access token/channel secret.")
+        logger.error(f"Line signature validation failed: {e}")
         abort(400)
+    except Exception as e:
+        logger.error(f"Webhook handling failed: {e}")
+        abort(500)
+    
     return 'OK'
 
 
@@ -73,8 +99,33 @@ def callback():
 def handle_text_message(event):
     """處理文字訊息"""
     user_id = event.source.user_id
-    text = event.message.text.strip()
-    msg = chat_service.handle_message(user_id, text)
+    
+    # 驗證用戶 ID 格式
+    if not InputValidator.validate_user_id(user_id):
+        logger.warning(f"Invalid user ID format: {user_id}")
+        return
+    
+    # 驗證和清理訊息內容
+    text = event.message.text.strip() if event.message.text else ""
+    validation_result = InputValidator.validate_message_content(text)
+    
+    if not validation_result['is_valid']:
+        logger.warning(f"Invalid message from {user_id}: {validation_result['errors']}")
+        # 發送友善的錯誤訊息給用戶
+        error_msg = TextMessage(text="抱歉，您的訊息格式不正確，請重新輸入。")
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message_with_http_info(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[error_msg]
+                )
+            )
+        return
+    
+    # 使用清理後的內容
+    clean_text = validation_result['cleaned_content']
+    msg = chat_service.handle_message(user_id, clean_text)
     
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
@@ -122,37 +173,45 @@ def health_check():
     }
     
     try:
-        # 檢查資料庫連線
+        # 檢查資料庫連線 - 維持測試兼容格式
         try:
             with database.get_session() as session:
                 session.execute('SELECT 1')
+            health_status['database'] = {'status': 'connected'}
             health_status['checks']['database'] = {'status': 'healthy'}
         except Exception as e:
+            health_status['database'] = {'status': 'error', 'error': str(e)}
             health_status['checks']['database'] = {
                 'status': 'unhealthy', 
                 'error': str(e)
             }
             health_status['status'] = 'unhealthy'
         
-        # 檢查 OpenAI API
+        # 檢查模型連線 - 維持測試兼容格式
         try:
             is_valid, error = model.check_connection()
             if is_valid:
-                health_status['checks']['openai_api'] = {'status': 'healthy'}
+                health_status['model'] = {'status': 'connected'}
+                health_status['checks']['model'] = {'status': 'healthy'}
             else:
-                health_status['checks']['openai_api'] = {
+                health_status['model'] = {'status': 'error', 'error': error}
+                health_status['checks']['model'] = {
                     'status': 'unhealthy', 
                     'error': error
                 }
                 health_status['status'] = 'unhealthy'
         except Exception as e:
-            health_status['checks']['openai_api'] = {
+            health_status['model'] = {'status': 'error', 'error': str(e)}
+            health_status['checks']['model'] = {
                 'status': 'unhealthy', 
                 'error': str(e)
             }
             health_status['status'] = 'unhealthy'
         
         # 返回結果
+        # 添加認證狀態資訊（僅顯示基本資訊）
+        health_status['checks']['auth'] = get_auth_status_info()
+        
         status_code = 200 if health_status['status'] == 'healthy' else 503
         return health_status, status_code
         
@@ -187,20 +246,60 @@ def metrics():
     except Exception as e:
         return {'error': str(e)}, 500
 
-@app.route('/chat')
+@app.route('/chat', methods=['GET', 'POST'])
+@require_test_auth
 def index():
+    """測試聊天介面 - 用於確認部署狀態"""
     return render_template('chat.html')
 
 @app.route('/ask', methods=['POST'])
+@require_test_auth
+@require_json_input(['message'])
 def ask():
-    user_message = request.json['message']
-    response_message = ask_api(user_message)
-    return jsonify({'message': response_message})
+    """測試用聊天端點 - 僅用於開發測試"""
+    try:
+        # 獲取清理後的輸入
+        user_message = request.validated_json['message']
+        
+        # 長度檢查 - 在生產環境中限制更嚴格以防止濫用
+        max_length = security_config.get_max_message_length(is_test=True)
+        if len(user_message) > max_length:
+            return jsonify({'error': f'測試訊息長度不能超過 {max_length} 字符'}), 400
+        
+        # 使用固定的測試用戶 ID
+        test_user_id = "U" + "0" * 32  # 固定的測試用戶 ID
+        response_message = chat_service.handle_message(test_user_id, user_message)
+        
+        # 清理回應內容以防止 XSS
+        if hasattr(response_message, 'text'):
+            clean_response = InputValidator.sanitize_text(response_message.text)
+        else:
+            clean_response = InputValidator.sanitize_text(str(response_message))
+        
+        return jsonify({'message': clean_response})
+        
+    except Exception as e:
+        logger.error(f"Test chat endpoint error: {e}")
+        return jsonify({'error': '處理請求時發生錯誤'}), 500
 
-def ask_api(message):
-    """Web API 處理"""
-    text_content = chat_service.handle_message('test_user', message)
-    return text_content.text
+
+@app.route('/auth-info')
+def auth_info():
+    """顯示認證資訊"""
+    from src.core.auth import test_auth
+    
+    auth_info = test_auth.get_auth_info()
+    
+    return jsonify({
+        'message': '測試介面需要認證',
+        'auth_method': auth_info['method'],
+        'description': auth_info['description'],
+        'example': auth_info['example'] if os.getenv('FLASK_ENV') == 'development' else '請查看環境變數配置',
+        'test_endpoints': [
+            '/chat - 測試聊天介面',
+            '/ask - 測試 API 端點'
+        ]
+    })
 
 
 if __name__ == "__main__":

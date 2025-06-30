@@ -13,14 +13,14 @@ class TestTextProcessing:
     """文字處理工具測試"""
     
     def test_get_date_string_today(self):
-        with patch('src.utils.datetime') as mock_datetime:
+        with patch('src.utils.main.datetime') as mock_datetime:
             mock_datetime.now.return_value = datetime(2024, 1, 15, 10, 30, 0)
             
             result = get_date_string("today")
             assert result == "2024/01/15"
     
     def test_get_date_string_tomorrow(self):
-        with patch('src.utils.datetime') as mock_datetime:
+        with patch('src.utils.main.datetime') as mock_datetime:
             mock_datetime.now.return_value = datetime(2024, 1, 15, 10, 30, 0)
             mock_datetime.timedelta = timedelta  # 確保 timedelta 可用
             
@@ -28,7 +28,7 @@ class TestTextProcessing:
             assert result == "2024/01/16"
     
     def test_get_date_string_yesterday(self):
-        with patch('src.utils.datetime') as mock_datetime:
+        with patch('src.utils.main.datetime') as mock_datetime:
             mock_datetime.now.return_value = datetime(2024, 1, 15, 10, 30, 0)
             mock_datetime.timedelta = timedelta
             
@@ -48,7 +48,7 @@ class TestTextProcessing:
             }
         }
         
-        with patch('src.utils.get_date_string') as mock_get_date:
+        with patch('src.utils.main.get_date_string') as mock_get_date:
             mock_get_date.side_effect = lambda day: {
                 'today': '2024/01/15',
                 'tomorrow': '2024/01/16',
@@ -254,7 +254,7 @@ class TestUtilsIntegration:
             }
         }
         
-        with patch('src.utils.get_date_string') as mock_get_date:
+        with patch('src.utils.main.get_date_string') as mock_get_date:
             mock_get_date.return_value = '2024/01/15'
             
             # 預處理
@@ -270,7 +270,7 @@ class TestUtilsIntegration:
             assert "人工智慧" in postprocessed
             assert "AI" not in postprocessed
     
-    @patch('src.utils.s2t_converter')
+    @patch('src.utils.main.s2t_converter')
     def test_chinese_conversion_in_response(self, mock_converter):
         """測試中文轉換功能"""
         mock_converter.convert.return_value = "繁體中文回應"

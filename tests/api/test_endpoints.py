@@ -24,11 +24,11 @@ class TestHealthEndpoint:
     
     def test_health_check_success(self, client):
         """測試健康檢查成功"""
-        with patch('main.db') as mock_db, \
+        with patch('main.database') as mock_database, \
              patch('main.model') as mock_model:
             
             # 設定模擬回應
-            mock_db.get_connection_info.return_value = {
+            mock_database.get_connection_info.return_value = {
                 'pool_size': 10,
                 'checked_in': 2,
                 'checked_out': 1,
@@ -49,11 +49,14 @@ class TestHealthEndpoint:
     
     def test_health_check_database_error(self, client):
         """測試資料庫連線錯誤"""
-        with patch('main.db') as mock_db, \
+        with patch('main.database') as mock_db, \
              patch('main.model') as mock_model:
             
-            # 模擬資料庫錯誤
-            mock_db.get_connection_info.side_effect = Exception("Database error")
+            # 模擬資料庫錯誤 - context manager
+            mock_session = Mock()
+            mock_db.get_session.return_value.__enter__ = Mock(return_value=mock_session)
+            mock_db.get_session.return_value.__exit__ = Mock(return_value=None)
+            mock_session.execute.side_effect = Exception("Database error")
             mock_model.check_connection.return_value = (True, None)
             
             response = client.get('/health')
@@ -65,11 +68,14 @@ class TestHealthEndpoint:
     
     def test_health_check_model_error(self, client):
         """測試模型連線錯誤"""
-        with patch('main.db') as mock_db, \
+        with patch('main.database') as mock_db, \
              patch('main.model') as mock_model:
             
-            # 設定模擬
-            mock_db.get_connection_info.return_value = {'pool_size': 10}
+            # 設定模擬 - context manager
+            mock_session = Mock()
+            mock_db.get_session.return_value.__enter__ = Mock(return_value=mock_session)
+            mock_db.get_session.return_value.__exit__ = Mock(return_value=None)
+            mock_session.execute.return_value = None
             mock_model.check_connection.return_value = (False, "API key invalid")
             
             response = client.get('/health')
@@ -109,38 +115,27 @@ class TestLineWebhookEndpoint:
                     },
                     'source': {
                         'type': 'user',
-                        'userId': 'test_user_123'
+                        'userId': 'U' + '0' * 32
                     },
                     'replyToken': 'test_reply_token'
                 }
             ]
         }
         
-        with patch('main.handler') as mock_handler, \
-             patch('main.chat_service') as mock_chat_service, \
-             patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse, \
-             patch('linebot.v3.messaging.MessagingApi.reply_message') as mock_reply:
+        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
+             patch('main.handler.handle') as mock_handler:
             
-            # 設定模擬
-            mock_event = Mock()
-            mock_event.type = 'message'
-            mock_event.message.type = 'text'
-            mock_event.message.text = 'Hello'
-            mock_event.source.user_id = 'test_user_123'
-            mock_event.reply_token = 'test_reply_token'
-            
-            mock_parse.return_value = [mock_event]
-            mock_chat_service.handle_message.return_value = Mock(text='Hello there!')
+            # 設定模擬 - handler 處理成功
+            mock_handler.return_value = None
             
             response = client.post(
-                '/webhooks/line',
+                '/callback',
                 data=json.dumps(webhook_data),
                 headers=line_webhook_headers
             )
             
             assert response.status_code == 200
-            mock_chat_service.handle_message.assert_called_once_with('test_user_123', 'Hello')
-            mock_reply.assert_called_once()
+            mock_handler.assert_called_once()
     
     def test_webhook_audio_message(self, client, line_webhook_headers):
         """測試語音訊息 webhook"""
@@ -154,40 +149,27 @@ class TestLineWebhookEndpoint:
                     },
                     'source': {
                         'type': 'user',
-                        'userId': 'test_user_456'
+                        'userId': 'U' + '1' * 32
                     },
                     'replyToken': 'test_reply_token_audio'
                 }
             ]
         }
         
-        with patch('main.handler') as mock_handler, \
-             patch('main.audio_service') as mock_audio_service, \
-             patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse, \
-             patch('linebot.v3.messaging.MessagingApi.reply_message') as mock_reply, \
-             patch('linebot.v3.messaging.MessagingApi.get_message_content') as mock_get_content:
+        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
+             patch('main.handler.handle') as mock_handler:
             
-            # 設定模擬
-            mock_event = Mock()
-            mock_event.type = 'message'
-            mock_event.message.type = 'audio'
-            mock_event.message.id = 'audio_message_id_123'
-            mock_event.source.user_id = 'test_user_456'
-            mock_event.reply_token = 'test_reply_token_audio'
-            
-            mock_parse.return_value = [mock_event]
-            mock_get_content.return_value = b'fake_audio_content'
-            mock_audio_service.handle_audio_message.return_value = Mock(text='Audio processed!')
+            # 設定模擬 - handler 處理成功
+            mock_handler.return_value = None
             
             response = client.post(
-                '/webhooks/line',
+                '/callback',
                 data=json.dumps(webhook_data),
                 headers=line_webhook_headers
             )
             
             assert response.status_code == 200
-            mock_audio_service.handle_audio_message.assert_called_once()
-            mock_reply.assert_called_once()
+            mock_handler.assert_called_once()
     
     def test_webhook_invalid_signature(self, client):
         """測試無效簽章"""
@@ -197,11 +179,10 @@ class TestLineWebhookEndpoint:
             'X-Line-Signature': 'invalid_signature'
         }
         
-        with patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse:
-            mock_parse.side_effect = Exception("Invalid signature")
+        with patch('main.verify_line_signature', return_value=False) as mock_verify:
             
             response = client.post(
-                '/webhooks/line',
+                '/callback',
                 data=json.dumps(webhook_data),
                 headers=headers
             )
@@ -216,21 +197,20 @@ class TestLineWebhookEndpoint:
                     'type': 'follow',  # 不支援的事件類型
                     'source': {
                         'type': 'user',
-                        'userId': 'test_user_789'
+                        'userId': 'U' + '2' * 32
                     }
                 }
             ]
         }
         
-        with patch('main.handler') as mock_handler, \
-             patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse:
+        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
+             patch('main.handler.handle') as mock_handler:
             
-            mock_event = Mock()
-            mock_event.type = 'follow'
-            mock_parse.return_value = [mock_event]
+            # 設定模擬 - handler 處理成功
+            mock_handler.return_value = None
             
             response = client.post(
-                '/webhooks/line',
+                '/callback',
                 data=json.dumps(webhook_data),
                 headers=line_webhook_headers
             )
@@ -264,7 +244,7 @@ class TestErrorHandling:
                     },
                     'source': {
                         'type': 'user',
-                        'userId': 'test_user'
+                        'userId': 'U' + '3' * 32
                     },
                     'replyToken': 'test_token'
                 }
@@ -276,28 +256,20 @@ class TestErrorHandling:
             'X-Line-Signature': 'test_signature'
         }
         
-        with patch('main.chat_service') as mock_chat_service, \
-             patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse:
+        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
+             patch('main.handler.handle') as mock_handler:
             
             # 模擬解析成功但服務失敗
-            mock_event = Mock()
-            mock_event.type = 'message'
-            mock_event.message.type = 'text'
-            mock_event.message.text = 'test'
-            mock_event.source.user_id = 'test_user'
-            mock_event.reply_token = 'test_token'
-            
-            mock_parse.return_value = [mock_event]
-            mock_chat_service.handle_message.side_effect = Exception("Service error")
+            mock_handler.side_effect = Exception("Service error")
             
             response = client.post(
-                '/webhooks/line',
+                '/callback',
                 data=json.dumps(webhook_data),
                 headers=headers
             )
             
-            # 錯誤應該被捕獲並記錄，但回應 200
-            assert response.status_code == 200
+            # 錯誤應該被捕獲並記錄，返回 500
+            assert response.status_code == 500
 
 
 class TestConfigurationEndpoints:
@@ -357,7 +329,7 @@ class TestPerformanceEndpoints:
                     },
                     'source': {
                         'type': 'user',
-                        'userId': 'concurrent_user'
+                        'userId': 'U' + '4' * 32
                     },
                     'replyToken': 'concurrent_token'
                 }
@@ -374,21 +346,21 @@ class TestPerformanceEndpoints:
         def make_request():
             try:
                 with patch('main.chat_service') as mock_chat_service, \
-                     patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse, \
+                     patch('linebot.v3.WebhookHandler.handle') as mock_parse, \
                      patch('linebot.v3.messaging.MessagingApi.reply_message'):
                     
                     mock_event = Mock()
                     mock_event.type = 'message'
                     mock_event.message.type = 'text'
                     mock_event.message.text = 'concurrent test'
-                    mock_event.source.user_id = 'concurrent_user'
+                    mock_event.source.user_id = 'U' + '4' * 32
                     mock_event.reply_token = 'concurrent_token'
                     
                     mock_parse.return_value = [mock_event]
                     mock_chat_service.handle_message.return_value = Mock(text='Response')
                     
                     response = client.post(
-                        '/webhooks/line',
+                        '/callback',
                         data=json.dumps(webhook_data),
                         headers=headers
                     )

@@ -366,8 +366,8 @@ class TestDatabaseMocks:
         """測試資料庫操作模擬"""
         from src.database import Database
         
-        with patch('src.db.create_engine') as mock_engine, \
-             patch('src.db.sessionmaker') as mock_sessionmaker:
+        with patch('sqlalchemy.create_engine') as mock_engine, \
+             patch('sqlalchemy.orm.sessionmaker') as mock_sessionmaker:
             
             # 建立模擬資料庫
             mock_session = Mock()

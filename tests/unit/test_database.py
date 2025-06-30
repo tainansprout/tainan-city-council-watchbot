@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.database import Database, UserThread
+from src.database import Database, UserThread, UserThread
 from src.core.exceptions import DatabaseError
 
 
@@ -38,8 +38,8 @@ class TestDatabase:
         session.close = Mock()
         return session
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_database_init(self, mock_sessionmaker, mock_create_engine, db_config):
         mock_engine = Mock()
         mock_create_engine.return_value = mock_engine
@@ -52,8 +52,8 @@ class TestDatabase:
         mock_sessionmaker.assert_called_once_with(bind=mock_engine)
     
     def test_build_connection_string(self, db_config):
-        with patch('src.db.create_engine') as mock_create_engine, \
-             patch('src.db.sessionmaker'):
+        with patch('sqlalchemy.create_engine') as mock_create_engine, \
+             patch('sqlalchemy.orm.sessionmaker'):
             
             db = Database(db_config)
             connection_string = db._build_connection_string()
@@ -69,8 +69,8 @@ class TestDatabase:
             'sslkey': '/path/to/client.key'
         })
         
-        with patch('src.db.create_engine'), \
-             patch('src.db.sessionmaker'):
+        with patch('sqlalchemy.create_engine'), \
+             patch('sqlalchemy.orm.sessionmaker'):
             
             db = Database(db_config)
             ssl_args = db._get_ssl_args()
@@ -80,8 +80,8 @@ class TestDatabase:
             assert ssl_args['sslcert'] == '/path/to/client.crt'
             assert ssl_args['sslkey'] == '/path/to/client.key'
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_query_thread_exists(self, mock_sessionmaker, mock_create_engine, db_config):
         # 設定模擬
         mock_session = Mock()
@@ -103,8 +103,8 @@ class TestDatabase:
             assert result == 'thread_123'
             mock_session.query.assert_called_once_with(UserThread)
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_query_thread_not_exists(self, mock_sessionmaker, mock_create_engine, db_config):
         # 設定模擬
         mock_session = Mock()
@@ -121,8 +121,8 @@ class TestDatabase:
             
             assert result is None
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_save_thread_new_user(self, mock_sessionmaker, mock_create_engine, db_config):
         mock_session = Mock()
         mock_sessionmaker.return_value.return_value = mock_session
@@ -138,8 +138,8 @@ class TestDatabase:
             
             mock_session.add.assert_called_once()
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_save_thread_existing_user(self, mock_sessionmaker, mock_create_engine, db_config):
         mock_session = Mock()
         mock_sessionmaker.return_value.return_value = mock_session
@@ -159,8 +159,8 @@ class TestDatabase:
             # 不應該調用 add，因為是更新現有記錄
             mock_session.add.assert_not_called()
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_delete_thread(self, mock_sessionmaker, mock_create_engine, db_config):
         mock_session = Mock()
         mock_sessionmaker.return_value.return_value = mock_session
@@ -176,8 +176,8 @@ class TestDatabase:
             mock_session.query.assert_called_once_with(UserThread)
             mock_session.query.return_value.filter.return_value.delete.assert_called_once()
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_get_connection_info(self, mock_sessionmaker, mock_create_engine, mock_engine, db_config):
         mock_create_engine.return_value = mock_engine
         
@@ -193,8 +193,8 @@ class TestDatabase:
         }
         assert info == expected
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_get_session_context_manager(self, mock_sessionmaker, mock_create_engine, db_config):
         mock_session = Mock()
         mock_sessionmaker.return_value.return_value = mock_session
@@ -209,8 +209,8 @@ class TestDatabase:
         mock_session.commit.assert_called_once()
         mock_session.close.assert_called_once()
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_get_session_context_manager_with_exception(self, mock_sessionmaker, mock_create_engine, db_config):
         mock_session = Mock()
         mock_sessionmaker.return_value.return_value = mock_session
@@ -227,8 +227,8 @@ class TestDatabase:
         # 異常情況下不應該 commit
         mock_session.commit.assert_not_called()
     
-    @patch('src.database.db.create_engine')
-    @patch('src.database.db.sessionmaker')
+    @patch('sqlalchemy.create_engine')
+    @patch('sqlalchemy.orm.sessionmaker')
     def test_close_engine(self, mock_sessionmaker, mock_create_engine, mock_engine, db_config):
         mock_create_engine.return_value = mock_engine
         
