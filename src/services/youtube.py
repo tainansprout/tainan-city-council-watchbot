@@ -1,7 +1,7 @@
 import math
 import os
 import re
-from src.utils import get_role_and_content
+from ..utils import get_role_and_content
 
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 

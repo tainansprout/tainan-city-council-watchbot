@@ -1,0 +1,75 @@
+import os
+import uuid
+import logging
+from typing import Any
+from linebot.v3.messaging import TextMessage
+
+from ..models import OpenAIModel
+from ..core.exceptions import OpenAIError
+from ..core.error_handler import ErrorHandler
+from .chat_service import ChatService
+
+logger = logging.getLogger(__name__)
+
+
+class AudioService:
+    def __init__(self, model: OpenAIModel, chat_service: ChatService):
+        self.model = model
+        self.chat_service = chat_service
+        self.error_handler = ErrorHandler()
+    
+    def handle_audio_message(self, user_id: str, audio_content: bytes) -> TextMessage:
+        """處理音訊訊息"""
+        input_audio_path = None
+        
+        try:
+            # 儲存音訊檔案
+            input_audio_path = self._save_audio_file(audio_content)
+            
+            # 轉錄音訊
+            text = self._transcribe_audio(input_audio_path)
+            logger.info(f"Audio transcribed for user {user_id}: {text}")
+            
+            # 使用聊天服務處理轉錄文字
+            return self.chat_service.handle_message(user_id, text)
+            
+        except Exception as e:
+            logger.error(f"Error processing audio for user {user_id}: {e}")
+            return self.error_handler.handle_error(e)
+        
+        finally:
+            # 清理臨時檔案
+            if input_audio_path and os.path.exists(input_audio_path):
+                try:
+                    os.remove(input_audio_path)
+                    logger.debug(f"Cleaned up audio file: {input_audio_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up audio file {input_audio_path}: {e}")
+    
+    def _save_audio_file(self, audio_content: bytes) -> str:
+        """儲存音訊檔案到臨時位置"""
+        try:
+            input_audio_path = f'{str(uuid.uuid4())}.m4a'
+            with open(input_audio_path, 'wb') as fd:
+                fd.write(audio_content)
+            logger.debug(f"Audio file saved: {input_audio_path}")
+            return input_audio_path
+        except Exception as e:
+            raise OpenAIError(f"Failed to save audio file: {e}")
+    
+    def _transcribe_audio(self, input_audio_path: str) -> str:
+        """轉錄音訊檔案"""
+        try:
+            is_successful, response, error_message = self.model.audio_transcriptions(
+                input_audio_path, 'whisper-1'
+            )
+            
+            if not is_successful:
+                raise OpenAIError(f"Audio transcription failed: {error_message}")
+            
+            return response['text']
+            
+        except Exception as e:
+            if isinstance(e, OpenAIError):
+                raise
+            raise OpenAIError(f"Audio transcription error: {e}")

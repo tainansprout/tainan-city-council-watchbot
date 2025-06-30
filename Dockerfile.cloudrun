@@ -1,0 +1,53 @@
+# 使用較小的 Python 基礎映像
+FROM python:3.11-slim
+
+# 設定環境變數
+ENV PYTHONUNBUFFERED=True \
+    PYTHONDONTWRITEBYTECODE=True \
+    PIP_NO_CACHE_DIR=True \
+    PIP_DISABLE_PIP_VERSION_CHECK=True
+
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# 建立應用程式目錄
+WORKDIR /app
+
+# 先複製依賴檔案，利用 Docker 快取
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 複製應用程式代碼
+COPY . .
+
+# 移除不必要的檔案
+RUN find . -name "*.ipynb" -exec rm {} + && \
+    find . -name "*.pyc" -exec rm {} + && \
+    find . -name "__pycache__" -type d -exec rm -rf {} + || true
+
+# 建立非 root 使用者
+RUN useradd --create-home --shell /bin/bash app
+USER app
+
+# 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
+
+# 使用 Gunicorn 啟動，配置適合 Cloud Run
+CMD exec gunicorn \
+    --bind 0.0.0.0:$PORT \
+    --workers 2 \
+    --worker-class gevent \
+    --worker-connections 1000 \
+    --timeout 120 \
+    --keep-alive 2 \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    --preload \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info \
+    main:app

@@ -1,0 +1,142 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [ main, production ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: chatgpt-line-bot
+  REGION: asia-east1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+
+    - name: Run tests
+      run: |
+        pytest tests/ --cov=src --cov-report=term-missing
+
+    - name: Run linting
+      run: |
+        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Configure Docker for GCR
+      run: gcloud auth configure-docker
+
+    - name: Build and push Docker image
+      run: |
+        docker build -f Dockerfile.cloudrun -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        docker tag gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+
+    - name: Deploy to Cloud Run
+      run: |
+        # 更新服務配置中的映像
+        sed -i "s|gcr.io/YOUR_PROJECT_ID/chatgpt-line-bot:latest|gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA|g" cloudrun-service.yaml
+        
+        # 部署服務
+        gcloud run services replace cloudrun-service.yaml --region=$REGION
+        
+        # 確保服務可公開訪問
+        gcloud run services add-iam-policy-binding $SERVICE_NAME \
+          --region=$REGION \
+          --member="allUsers" \
+          --role="roles/run.invoker"
+
+    - name: Get service URL
+      id: deploy
+      run: |
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region=$REGION --format="value(status.url)")
+        echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+
+    - name: Test deployment
+      run: |
+        sleep 30  # 等待服務啟動
+        curl -f ${{ steps.deploy.outputs.service_url }}/health || exit 1
+
+    - name: Notify deployment success
+      if: success()
+      run: |
+        echo "🎉 Deployment successful!"
+        echo "Service URL: ${{ steps.deploy.outputs.service_url }}"
+        echo "Webhook URL: ${{ steps.deploy.outputs.service_url }}/webhooks/line"
+
+  deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Deploy to staging
+      run: |
+        # 建立 staging 版本
+        STAGING_SERVICE="${SERVICE_NAME}-staging-pr-${{ github.event.number }}"
+        
+        # 建立和推送映像
+        gcloud builds submit --tag gcr.io/$PROJECT_ID/$STAGING_SERVICE:$GITHUB_SHA -f Dockerfile.cloudrun .
+        
+        # 部署到 staging
+        gcloud run deploy $STAGING_SERVICE \
+          --image gcr.io/$PROJECT_ID/$STAGING_SERVICE:$GITHUB_SHA \
+          --region=$REGION \
+          --allow-unauthenticated \
+          --memory=1Gi \
+          --cpu=1 \
+          --max-instances=5 \
+          --set-env-vars="PORT=8080" \
+          --set-secrets="OPENAI_API_KEY=openai-api-key:latest" \
+          --set-secrets="LINE_CHANNEL_ACCESS_TOKEN=line-channel-access-token:latest" \
+          --set-secrets="LINE_CHANNEL_SECRET=line-channel-secret:latest" \
+          --set-secrets="DB_HOST=db-host:latest" \
+          --set-secrets="DB_USER=db-user:latest" \
+          --set-secrets="DB_PASSWORD=db-password:latest" \
+          --set-secrets="DB_NAME=db-name:latest"
+        
+        # 取得 staging URL
+        STAGING_URL=$(gcloud run services describe $STAGING_SERVICE --region=$REGION --format="value(status.url)")
+        
+        echo "📝 Staging deployment created: $STAGING_URL"
+        echo "🧪 Test your changes at: $STAGING_URL/health"

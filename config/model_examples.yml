@@ -1,0 +1,68 @@
+# 語言模型配置範例
+# 複製此檔案的內容到 config.yml 中的 llm 區段
+
+# ===== RAG 支援的語言模型配置範例 =====
+
+# OpenAI 配置（使用 Assistant API + File Search）
+openai:
+  api_key: YOUR_OPENAI_API_KEY
+  assistant_id: YOUR_ASSISTANT_ID  # 必須啟用 File Search 功能
+  provider: openai
+  model: gpt-4  # 可選：指定模型版本
+  rag_features:
+    - assistant_api
+    - file_search
+    - vector_store
+
+# Anthropic Claude 配置（使用自建向量搜尋）
+anthropic:
+  api_key: YOUR_ANTHROPIC_API_KEY
+  provider: anthropic
+  model: claude-3-sonnet-20240229
+  max_tokens: 4000
+  temperature: 0.1
+  rag_features:
+    - custom_vector_search
+    - keyword_matching
+    - text_chunking
+
+# Google Gemini 配置（使用 Semantic Retrieval API）
+gemini:
+  api_key: YOUR_GEMINI_API_KEY
+  provider: gemini
+  model: gemini-pro
+  temperature: 0.1
+  rag_features:
+    - semantic_retrieval
+    - corpus_management
+    - chunk_indexing
+
+# HuggingFace 配置（未來支援）
+huggingface:
+  api_key: YOUR_HF_TOKEN
+  provider: huggingface
+  model: microsoft/DialoGPT-large
+  base_url: https://api-inference.huggingface.co/models
+  rag_features:
+    - custom_embeddings
+    - vector_database
+
+# Ollama 本地模型配置（使用本地向量搜尋）
+ollama:
+  provider: ollama
+  base_url: http://localhost:11434
+  model: llama2  # 或 mistral, codellama 等
+  temperature: 0.1
+  rag_features:
+    - local_embeddings
+    - cosine_similarity
+    - memory_storage
+
+# 使用範例：
+# 1. 在 config.yml 中設定：
+#    llm:
+#      provider: openai  # 或 anthropic, gemini, huggingface, ollama
+#      api_key: YOUR_API_KEY
+#      model: gpt-4
+#
+# 2. 程式會自動根據 provider 建立對應的模型實例

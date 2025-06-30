@@ -1,5 +1,4 @@
-# 台南議會觀測機器人
-
+https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
 中文 | [English](README.en.md)
 
 本專案是使用 Line 作為前端，連接 OpenAI Assistant API 的聊天機器人。機器人將部署在 Google Cloud Run 上，並使用 Google Cloud SQL 來存取聊天線程 ID。
@@ -209,6 +208,79 @@ db:
 3. **檢查 Log**
 
    - 如果出現問題，使用 `gcloud` 或 Google Cloud Console 來檢查Log
+
+## 開發與測試
+
+### 安裝開發依賴
+
+```bash
+pip install -r requirements-test.txt
+```
+
+### 執行測試
+
+本專案使用 pytest 作為測試框架，包含單元測試、整合測試和 API 測試。
+
+**執行所有測試：**
+```bash
+pytest
+```
+
+**執行特定測試類型：**
+```bash
+# 單元測試
+pytest tests/unit/
+
+# 整合測試
+pytest tests/integration/
+
+# API 測試
+pytest tests/api/
+
+# 外部服務模擬測試
+pytest tests/mocks/
+```
+
+**測試覆蓋率報告：**
+```bash
+pytest --cov=src --cov-report=html
+```
+
+**詳細測試輸出：**
+```bash
+pytest -v
+```
+
+**指定測試檔案：**
+```bash
+pytest tests/unit/test_models.py
+pytest tests/integration/test_chat_flow.py
+```
+
+### 程式碼品質檢查
+
+```bash
+# 檢查程式碼風格
+flake8 src/ tests/
+
+# 型別檢查
+mypy src/
+```
+
+### 測試架構
+
+- **單元測試** (`tests/unit/`): 測試個別模組和函數
+- **整合測試** (`tests/integration/`): 測試服務間的整合
+- **API 測試** (`tests/api/`): 測試 Flask 端點
+- **模擬測試** (`tests/mocks/`): 測試外部服務的模擬
+
+### 配置檔案
+
+測試配置檔案位於 `pytest.ini`，包含以下設定：
+- 測試路徑
+- 覆蓋率設定
+- 測試標記
+- 輸出格式
 
 ## 注意事項
 

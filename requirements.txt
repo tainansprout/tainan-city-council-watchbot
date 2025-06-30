@@ -7,4 +7,6 @@ youtube-transcript-api
 pyyaml
 psycopg2
 gunicorn
+gevent
 SQLAlchemy
+requests

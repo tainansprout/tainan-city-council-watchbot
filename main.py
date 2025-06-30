@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from flask import Flask, request, abort,render_template, jsonify
 from linebot import (
     LineBotApi
@@ -25,27 +27,31 @@ from linebot.v3.webhooks import (
 )
 
 
-import os
-import uuid
-import time
 import atexit
 import traceback
 
-from src.models import OpenAIModel
-from src.config import load_config
-from src.logger import logger
-from src.db import Database
-from src.utils import get_response_data, get_content_and_reference, replace_file_name, check_token_valid, get_file_dict, detect_none_references, preprocess_text, postprocess_text
+from src.models import ModelFactory
+from src.core.config import load_config
+from src.core.logger import logger
+from src.database import Database
+from src.utils import check_token_valid
+from src.services import ChatService, AudioService
 
 app = Flask(__name__)
 config = load_config()
 configuration = Configuration(access_token=config['line']['channel_access_token'])
 handler = WebhookHandler(config['line']['channel_secret'])
-openai_api_key = config['openai']['api_key']
-openai_assistant_id = config['openai']['assistant_id']
+
+# 初始化服務
 database = Database(config['db'])
-model = OpenAIModel(api_key=openai_api_key, assistant_id=openai_assistant_id)
-file_dict = get_file_dict(model)
+model = ModelFactory.create_from_config({
+    'provider': 'openai',
+    'api_key': config['openai']['api_key'],
+    'assistant_id': config['openai']['assistant_id']
+})
+chat_service = ChatService(model, database, config)
+audio_service = AudioService(model, chat_service)
+
 atexit.register(database.close_engine)
 
 @app.route("/callback", methods=['POST'])
@@ -61,94 +67,15 @@ def callback():
         abort(400)
     return 'OK'
 
-def handle_assistant_message(user_id, text):
-    logger.info(f'{user_id}: {text}')
-    global file_dict
-    global model
-    try:
-        if text.startswith('/reset'):
-            thread_id = database.query_thread(user_id)
-            if thread_id:
-                model.delete_thread(thread_id)
-                database.delete_thread(user_id)
-                msg = TextMessage(text='Reset The Chatbot.')
-            else:
-                msg = TextMessage(text='Nothing to reset.')
-        elif text.startswith('/'):
-            command = text[1:].split()[0]
-            if command in config['commands']:
-                msg = TextMessage(text=config['commands'][command] + "\n\n")
-            else:
-                msg = TextMessage(text="Command not found.")
-        else:
-            text = preprocess_text(text, config)
-            thread_id = database.query_thread(user_id)
-            if thread_id:
-                is_successful, response, error_message = model.retrieve_thread(thread_id)
-                if not is_successful:
-                    database.delete_thread(user_id)
-                    thread_id = None
-            if not thread_id:
-                is_successful, response, error_message = model.create_thread()
-                if not is_successful:
-                    raise Exception(error_message)
-                else:
-                    thread_id = response['id']
-            logger.debug('thread_id: ' + thread_id)
-            database.save_thread(user_id, thread_id)
-            is_successful, response, error_message = model.create_thread_message(thread_id, text)
-            if not is_successful:
-                raise Exception(error_message)
-            is_successful, response, error_message = model.create_thread_run(thread_id)
-            if not is_successful:
-                raise Exception(error_message)
-            while response['status'] != 'completed':
-                run_id = response['id']
-                if response['status'] == 'queued':
-                    time.sleep(10)
-                elif response['status'] in ['failed', 'expired', 'cancelled']:
-                    break
-                else:
-                    time.sleep(3)
-                is_successful, response, error_message = model.retrieve_thread_run(thread_id, run_id)
-                logger.debug(run_id + ': ' + response['status'])
-                if not is_successful:
-                    raise Exception(error_message)
-            logger.debug(response)
-            if response['status'] == 'completed':
-                is_successful, response, error_message = model.list_thread_messages(thread_id)
-                if not is_successful:
-                    raise Exception(error_message)
-                logger.debug(response)
-                response_message = get_content_and_reference(response, file_dict)
-                if detect_none_references(response_message):
-                    file_dict = get_file_dict(model)
-                    response_message = get_content_and_reference(response, file_dict)
-                response_message = postprocess_text(response_message, config)
-                logger.debug(response_message)
-                msg = TextMessage(text=response_message)
-            else:
-                msg = TextMessage(text='很抱歉，我在尋找答案時遇到了錯誤，或許您可以換個方式再問一次。')
-       
-    except Exception as e:
-        logger.error("error: " + str(e))
-        logger.error(traceback.format_exception(e))
-        if str(e).startswith('Incorrect API key provided'):
-            msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
-        elif str(e).startswith('That model is currently overloaded with other requests.'):
-            msg = TextMessage(text='已超過負荷，請稍後再試。')
-        elif str(e).startswith('Can\'t add messages to thread'):
-            msg = TextMessage(text='機器人正在思考您的問題，請稍等。')
-        else:
-            msg = TextMessage(text='發生錯誤：' + str(e))
-    return msg
 
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text_message(event):
+    """處理文字訊息"""
     user_id = event.source.user_id
     text = event.message.text.strip()
-    msg = handle_assistant_message(user_id, text)
+    msg = chat_service.handle_message(user_id, text)
+    
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
@@ -160,31 +87,15 @@ def handle_text_message(event):
 
 @handler.add(MessageEvent, message=AudioMessageContent)
 def handle_audio_message(event):
+    """處理音訊訊息"""
     user_id = event.source.user_id
+    
     with ApiClient(configuration) as api_client:
         line_bot_blob_api = MessagingApiBlob(api_client)
         audio_content = line_bot_blob_api.get_message_content(message_id=event.message.id)
-        input_audio_path = f'{str(uuid.uuid4())}.m4a'
-        with open(input_audio_path, 'wb') as fd:
-            fd.write(audio_content)
-        try:
-            is_successful, response, error_message = model.audio_transcriptions(input_audio_path, 'whisper-1')
-            if not is_successful:
-                raise Exception(error_message)
-            text = response['text']
-            msg = handle_assistant_message(user_id, text)
-        except Exception as e:
-            logger.error(traceback.format_exception(e))
-            if str(e).startswith('Incorrect API key provided'):
-                msg = TextMessage(text='OpenAI API Token 有誤，請重新註冊。')
-            elif str(e).startswith('That model is currently overloaded with other requests.'):
-                msg = TextMessage(text='已超過負荷，請稍後再試')
-            elif str(e).startswith('Can\'t add messages to thread'):
-                msg = TextMessage(text='機器人正在思考您的問題，請稍等。')
-            else:
-
-                msg = TextMessage(text='發生錯誤：' + str(e))
-        os.remove(input_audio_path)
+        
+        msg = audio_service.handle_audio_message(user_id, audio_content)
+        
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
@@ -192,12 +103,89 @@ def handle_audio_message(event):
                 messages=[msg]
             )
         )
-    line_bot_api.reply_message(event.reply_token, msg)
 
 
 @app.route("/", methods=['GET'])
 def home():
     return 'Hello World'
+
+@app.route('/health')
+def health_check():
+    """健康檢查端點"""
+    from datetime import datetime
+    
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '1.0.0',
+        'checks': {}
+    }
+    
+    try:
+        # 檢查資料庫連線
+        try:
+            with database.get_session() as session:
+                session.execute('SELECT 1')
+            health_status['checks']['database'] = {'status': 'healthy'}
+        except Exception as e:
+            health_status['checks']['database'] = {
+                'status': 'unhealthy', 
+                'error': str(e)
+            }
+            health_status['status'] = 'unhealthy'
+        
+        # 檢查 OpenAI API
+        try:
+            is_valid, error = model.check_connection()
+            if is_valid:
+                health_status['checks']['openai_api'] = {'status': 'healthy'}
+            else:
+                health_status['checks']['openai_api'] = {
+                    'status': 'unhealthy', 
+                    'error': error
+                }
+                health_status['status'] = 'unhealthy'
+        except Exception as e:
+            health_status['checks']['openai_api'] = {
+                'status': 'unhealthy', 
+                'error': str(e)
+            }
+            health_status['status'] = 'unhealthy'
+        
+        # 返回結果
+        status_code = 200 if health_status['status'] == 'healthy' else 503
+        return health_status, status_code
+        
+    except Exception as e:
+        return {
+            'status': 'unhealthy', 
+            'timestamp': datetime.utcnow().isoformat(),
+            'error': str(e)
+        }, 503
+
+@app.route('/metrics')
+def metrics():
+    """基本指標端點"""
+    try:
+        db_info = database.get_connection_info()
+        
+        metrics_data = {
+            'database': {
+                'pool_size': db_info['pool_size'],
+                'checked_in': db_info['checked_in'],
+                'checked_out': db_info['checked_out'],
+                'overflow': db_info['overflow'],
+                'invalid': db_info['invalid']
+            },
+            'model': {
+                'provider': model.get_provider().value
+            }
+        }
+        
+        return metrics_data
+        
+    except Exception as e:
+        return {'error': str(e)}, 500
 
 @app.route('/chat')
 def index():
@@ -210,7 +198,8 @@ def ask():
     return jsonify({'message': response_message})
 
 def ask_api(message):
-    text_content = handle_assistant_message('test_user', message)
+    """Web API 處理"""
+    text_content = chat_service.handle_message('test_user', message)
     return text_content.text
 
 

@@ -1,0 +1,96 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: chatgpt-line-bot
+  annotations:
+    # 自動縮放配置
+    run.googleapis.com/execution-environment: gen2
+    autoscaling.knative.dev/minScale: "1"
+    autoscaling.knative.dev/maxScale: "100"
+    # CPU 一直分配，提升回應速度
+    run.googleapis.com/cpu-throttling: "false"
+spec:
+  template:
+    metadata:
+      annotations:
+        # 記憶體和 CPU 配置
+        run.googleapis.com/memory: "2Gi"
+        run.googleapis.com/cpu: "2"
+        # 並發設定
+        autoscaling.knative.dev/maxScale: "100"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      # 並發請求數量
+      containerConcurrency: 80
+      # 請求超時
+      timeoutSeconds: 300
+      containers:
+      - image: gcr.io/YOUR_PROJECT_ID/chatgpt-line-bot:latest
+        ports:
+        - name: http1
+          containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        # 從 Secret Manager 取得環境變數
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: openai-api-key
+              key: latest
+        - name: LINE_CHANNEL_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: line-channel-access-token
+              key: latest
+        - name: LINE_CHANNEL_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: line-channel-secret
+              key: latest
+        # 資料庫連線配置
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: db-host
+              key: latest
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-user
+              key: latest
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-password
+              key: latest
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: db-name
+              key: latest
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+          requests:
+            memory: "1Gi" 
+            cpu: "1000m"
+        # 健康檢查
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+  traffic:
+  - percent: 100
+    latestRevision: true

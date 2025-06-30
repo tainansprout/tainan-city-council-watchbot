@@ -74,12 +74,41 @@ web_modules/
 # dotenv environment variables file
 .env
 .env.test
+.env.local
+.env.production
 
 # config yml file
 config/config.yml
 
 # ssl setting files
 config/ssl/*
+
+# 所有包含敏感資訊的檔案
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+service-account-key.json
+gcp-key.json
+*-credentials.json
+
+# Google Cloud 相關
+.gcloud/
+gcloud_key.json
+
+# 本地開發配置
+local_config.py
+dev_config.py
+local_settings.py
+
+# 測試用配置（可能包含測試 token）
+test_config.yml
+test_secrets.yml
+
+# 部署相關暫存檔案
+deploy_temp/
+*.bak
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

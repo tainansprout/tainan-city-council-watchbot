@@ -1,6 +1,9 @@
 import opencc
 import re
+import logging
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 s2t_converter = opencc.OpenCC('s2t')
 t2s_converter = opencc.OpenCC('t2s')
@@ -10,6 +13,36 @@ def get_response_data(response) -> dict:
         if item['role'] == 'assistant' and item['content'] and item['content'][0]['type'] == 'text':
             return item
     return None
+
+def get_role_and_content(response):
+    """
+    從聊天回應中提取角色和內容
+    支援不同格式的回應結構
+    """
+    if isinstance(response, dict):
+        # 處理 OpenAI Assistant API 格式
+        if 'data' in response:
+            data = get_response_data(response)
+            if data:
+                return data['role'], data['content'][0]['text']['value']
+        
+        # 處理標準聊天格式
+        if 'choices' in response:
+            choice = response['choices'][0]
+            if 'message' in choice:
+                message = choice['message']
+                return message.get('role', 'assistant'), message.get('content', '')
+        
+        # 處理簡單的訊息格式
+        if 'role' in response and 'content' in response:
+            return response['role'], response['content']
+    
+    # 如果是 ChatResponse 物件
+    if hasattr(response, 'content'):
+        return 'assistant', response.content
+    
+    # 預設回傳
+    return 'assistant', str(response)
 
 def get_content_and_reference(response, file_dict) -> str:
     data = get_response_data(response)
@@ -49,11 +82,50 @@ def check_token_valid(model) -> bool:
     return is_successful
 
 def get_file_dict(model) -> dict:
-    is_successful, response, error_message = model.list_files()
-    if not is_successful:
-        raise Exception(error_message)
-    file_dict = { file['id']: file['filename'].replace('.txt', '').replace('.json', '') for file in response['data'] }
-    return file_dict
+    try:
+        is_successful, response, error_message = model.list_files()
+        if not is_successful:
+            raise Exception(error_message)
+        
+        file_dict = {}
+        
+        # 處理不同的回應格式
+        if isinstance(response, dict) and 'data' in response:
+            # 舊格式：字典包含 'data' 鍵
+            data = response['data']
+            if not isinstance(data, list):
+                logger.warning(f"Expected list in response data, got: {type(data)}")
+                return {}
+            
+            for item in data:
+                if isinstance(item, dict) and 'id' in item and 'filename' in item:
+                    file_id = item['id']
+                    filename = item['filename'].replace('.txt', '').replace('.json', '')
+                    file_dict[file_id] = filename
+                    
+        elif isinstance(response, list):
+            # 新格式：直接是 FileInfo 物件列表
+            for item in response:
+                if hasattr(item, 'file_id') and hasattr(item, 'filename'):
+                    file_id = item.file_id
+                    filename = item.filename.replace('.txt', '').replace('.json', '')
+                    file_dict[file_id] = filename
+                elif isinstance(item, dict) and 'id' in item and 'filename' in item:
+                    file_id = item['id']
+                    filename = item['filename'].replace('.txt', '').replace('.json', '')
+                    file_dict[file_id] = filename
+                else:
+                    logger.warning(f"Unexpected file item format: {item}")
+        else:
+            logger.warning(f"Unexpected response format from list_files: {type(response)}")
+            return {}
+        
+        logger.debug(f"Successfully loaded {len(file_dict)} files")
+        return file_dict
+        
+    except Exception as e:
+        logger.error(f"Error in get_file_dict: {e}")
+        return {}
 
 def detect_none_references(text):
     if re.search(r'\[\d+\]: None', text):
