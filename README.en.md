@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-This project is a chatbot using Line as the front-end, connected to the OpenAI Assistant API. The bot will be deployed on Google Cloud Run and will use Google Cloud SQL to manage chat thread IDs.
+This project is a chatbot using Line as the front-end, connected to multiple LLM providers including OpenAI Assistant API, Anthropic Claude, Google Gemini, and Ollama. The bot supports RAG (Retrieval-Augmented Generation) functionality and will be deployed on Google Cloud Run with Google Cloud SQL for thread management.
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@ This project is a chatbot using Line as the front-end, connected to the OpenAI A
 - [Finalizing Configuration Files](#finalizing-configuration-files)
 - [Deploying to Google Cloud Run](#deploying-to-google-cloud-run)
 - [Testing the Application](#testing-the-application)
+- [Development & Testing](#development--testing)
 
 ## Prerequisites
 
@@ -137,36 +138,47 @@ db:
 
 ## Deploying to Google Cloud Run
 
+### 🚀 Quick Deployment (Recommended)
+
+Use our automated deployment scripts:
+
+```bash
+# 1. Set up deployment configuration
+cp deploy/.env.example deploy/.env
+# Edit deploy/.env file with your project settings
+
+# 2. Run automated deployment script
+./deploy/deploy-to-cloudrun.sh
+```
+
+### 📖 Comprehensive Deployment Guide
+
+For complete deployment process, monitoring setup, load balancer configuration, etc., please refer to:
+- [Complete Deployment Guide](docs/DEPLOYMENT.md)
+- [Deployment Scripts Documentation](deploy/README.md)
+
+### 🔧 Manual Deployment (Advanced Users)
+
+If you want to manually control each step:
+
 1. **Configure Google Cloud Console**
 
-   - Use the following commands to set up Google Cloud authentication and select your project:
-
-     ```bash
-     gcloud auth login
-     gcloud config set project {your-project-id}
-     ```
+   ```bash
+   gcloud auth login
+   gcloud config set project {your-project-id}
+   ```
 
 2. **Build Container Image**
 
-   - Build and push the image to Google Container Registry using:
-
-     ```bash
-     gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name}
-     ```
+   ```bash
+   gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name} -f deploy/Dockerfile.cloudrun .
+   ```
 
 3. **Deploy to Cloud Run**
 
-   - Deploy using the following command:
-
-     ```bash
-     gcloud run deploy {your-service-name} \
-       --image gcr.io/{your-project-id}/{your-image-name} \
-       --platform managed \
-       --port 8080
-       --memory 2G
-       --timeout=2m
-       --region {your-region}
-     ```
+   ```bash
+   gcloud run services replace deploy/cloudrun-service.yaml --region {your-region}
+   ```
 
    - Replace placeholders with your actual information.
 
@@ -190,6 +202,64 @@ db:
 
 3. **Check Logs**
    - If issues arise, use `gcloud` or Google Cloud Console to inspect logs.
+
+## Development & Testing
+
+### Install Development Dependencies
+
+```bash
+pip install -r requirements-test.txt
+```
+
+### Running Tests
+
+This project uses pytest as the testing framework, including unit tests, integration tests, and API tests.
+
+**Run all tests:**
+```bash
+pytest
+```
+
+**Run specific test types:**
+```bash
+# Unit tests
+pytest tests/unit/
+
+# Integration tests
+pytest tests/integration/
+
+# API tests
+pytest tests/api/
+
+# External service mock tests
+pytest tests/mocks/
+```
+
+**Test coverage report:**
+```bash
+pytest --cov=src --cov-report=html
+```
+
+**Type checking:**
+```bash
+mypy src/
+```
+
+**Code linting:**
+```bash
+flake8 src/
+```
+
+### Development Features
+
+- **Multi-LLM Support**: OpenAI, Anthropic Claude, Google Gemini, Ollama
+- **RAG Implementation**: File search and retrieval across all model providers
+- **Modular Architecture**: Clean separation of concerns with factory patterns
+- **Comprehensive Testing**: Unit, integration, and API test suites
+- **Type Safety**: Full type annotations with mypy validation
+- **Error Handling**: Robust error handling with structured logging
+- **Security**: Secret management with Google Secret Manager
+- **Monitoring**: Cloud monitoring and alerting integration
 
 ## Notes
 
