@@ -210,7 +210,6 @@ deploy_temp/
 *.bak
 
 # AI 和機器學習相關
-models/
 *.model
 *.pkl
 *.pickle
