@@ -65,9 +65,30 @@ audio_service = AudioService(model, chat_service)
 
 atexit.register(database.close_engine)
 
-@app.route("/callback", methods=['POST'])
+@app.route("/webhooks/line", methods=['POST', 'GET'])
+def webhooks_line():
+    if request.method == 'GET':
+        return jsonify({
+            'error': 'GET method not supported',
+            'message': 'This endpoint only accepts POST requests from LINE webhook',
+            'endpoint': '/webhooks/line'
+        }), 405
+    return _handle_line_webhook()
+
+@app.route("/callback", methods=['POST', 'GET'])
 def callback():
-    # 安全檢查
+    """向後兼容的端點"""
+    if request.method == 'GET':
+        return jsonify({
+            'error': 'GET method not supported', 
+            'message': 'This endpoint only accepts POST requests from LINE webhook',
+            'endpoint': '/callback',
+            'note': 'This endpoint is deprecated, please use /webhooks/line'
+        }), 405
+    return _handle_line_webhook()
+
+def _handle_line_webhook():
+    # 獲取請求簽名和內容
     signature = request.headers.get('X-Line-Signature')
     if not signature:
         logger.warning("Missing Line signature")
@@ -75,18 +96,14 @@ def callback():
     
     body = request.get_data(as_text=True)
     
-    # 驗證 Line 簽名
-    if not verify_line_signature(signature, body, config['line']['channel_secret']):
-        logger.warning("Invalid Line signature")
-        abort(400)
-    
-    # 記錄請求（已由安全中間件過濾敏感資訊）
-    logger.info("Valid Line webhook received")
+    # 記錄請求
+    logger.info("LINE webhook received")
     
     try:
+        # 使用官方 handler 處理，它會自動驗證簽名
         handler.handle(body, signature)
     except InvalidSignatureError as e:
-        logger.error(f"Line signature validation failed: {e}")
+        logger.warning(f"Invalid Line signature: {e}")
         abort(400)
     except Exception as e:
         logger.error(f"Webhook handling failed: {e}")
@@ -304,6 +321,28 @@ def auth_info():
     })
 
 
+def create_app():
+    """應用工廠函數 - 用於測試和生產環境"""
+    return app
+
 if __name__ == "__main__":
+    import os
+    
+    # 檢查 API token 有效性
     check_token_valid(model)
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    
+    # 根據環境變量決定運行模式
+    env = os.getenv('FLASK_ENV', 'development')
+    
+    if env == 'production':
+        print("⚠️  生產環境應使用 WSGI 服務器 (如 Gunicorn)")
+        print("建議使用: gunicorn -c gunicorn.conf.py main:app")
+        print("或使用: python wsgi.py")
+    else:
+        print("🔧 開發模式 - 使用 Flask 開發服務器")
+        print("⚠️  注意：此服務器僅適用於開發環境")
+        app.run(
+            host=os.getenv('HOST', '0.0.0.0'),
+            port=int(os.getenv('PORT', '8080')),
+            debug=os.getenv('DEBUG', 'True').lower() == 'true'
+        )

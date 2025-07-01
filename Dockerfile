@@ -9,5 +9,5 @@ RUN apt-get install libpq-dev
 RUN pip3 install --upgrade pip
 RUN pip3 install -r requirements.txt
 
-# CMD ["python3", "main.py"]
-CMD nohup gunicorn -w 4 main:app --access-logfile /var/log/gunicorn_access.txt --error-logfile /var/log/gunicorn_error.txt -b :8080 --timeout 120
+# 使用 WSGI 入口點和配置文件
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "wsgi:application"]

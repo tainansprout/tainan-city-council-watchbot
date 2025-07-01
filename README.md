@@ -119,16 +119,52 @@ https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
     ```
    - 把 `ssl-cert.crt`、`ca-cert.crt`、`ssl-key.key` 這三個檔案複製到 `config/ssl/`下面
 
-## 完成設定檔
+## 配置管理
+
+本專案支援靈活的配置管理，適應不同的部署環境需求。
+
+### 🎯 配置優先級
+
+**應用程式配置優先級**（高優先級覆蓋低優先級）：
+1. `config/config.yml` - 基本配置文件
+2. **環境變數** - 最高優先級（適合生產環境）
+
+**部署腳本配置優先級**：
+1. `config/deploy/.env` - 部署配置文件  
+2. **環境變數** - 最高優先級
+3. 互動式輸入 - 當缺少配置時提示
+
+### 📁 配置文件位置
+
+```
+config/
+├── config.yml.example          # 應用程式配置範例
+├── config.yml                  # 應用程式配置 (需自行建立)
+└── deploy/
+    ├── .env.example            # 部署配置範例  
+    ├── .env                    # 部署配置 (需自行建立)
+    ├── Dockerfile.cloudrun     # Cloud Run Dockerfile
+    └── cloudrun-service.yaml   # Cloud Run 服務配置
+```
+
+### 💻 本地開發配置
 
 請準備以下資訊：
+- `channel_access_token` - Line Channel Access Token
+- `channel_secret` - Line Channel Secret  
+- `openai_api_key` - OpenAI API Key
+- `assistant_id` - OpenAI Assistant ID
+- 資料庫連線資訊
 
-- `channel_access_token`
-- `channel_secret`
-- `openai_api_key`
-- `assistant_id`
+**方法 1: 使用配置文件（推薦）**
 
-將 `config/config.yml.example` 複製成 `config/config.yml`，內容修改如下：
+```bash
+# 複製配置範例
+cp config/config.yml.example config/config.yml
+
+# 編輯配置文件
+vim config/config.yml
+```
 
 ```yaml
 line:
@@ -151,6 +187,54 @@ db:
   sslkey: config/ssl/client.key
 ```
 
+**方法 2: 使用環境變數**
+
+```bash
+# 設定環境變數
+export LINE_CHANNEL_ACCESS_TOKEN="your_token"
+export LINE_CHANNEL_SECRET="your_secret"
+export OPENAI_API_KEY="sk-proj-xxxxxxxx"
+export OPENAI_ASSISTANT_ID="asst_xxxxxxxx"
+export DB_HOST="your_db_host"
+export DB_USER="your_db_user"
+export DB_PASSWORD="your_db_password"
+export DB_NAME="your_db_name"
+
+# 運行應用
+python main.py
+```
+
+### ☁️ 生產環境配置
+
+生產環境使用 Google Secret Manager 管理敏感資訊，通過環境變數注入到容器中。
+
+**支援的環境變數對照**：
+
+| 配置項目 | config.yml 路徑 | 環境變數 |
+|----------|----------------|----------|
+| Line Access Token | `line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` |
+| Line Secret | `line.channel_secret` | `LINE_CHANNEL_SECRET` |
+| OpenAI API Key | `openai.api_key` | `OPENAI_API_KEY` |
+| OpenAI Assistant ID | `openai.assistant_id` | `OPENAI_ASSISTANT_ID` |
+| 資料庫主機 | `db.host` | `DB_HOST` |
+| 資料庫用戶 | `db.user` | `DB_USER` |
+| 資料庫密碼 | `db.password` | `DB_PASSWORD` |
+| 資料庫名稱 | `db.db_name` | `DB_NAME` |
+| 認證方式 | `auth.method` | `TEST_AUTH_METHOD` |
+| 日誌級別 | `log_level` | `LOG_LEVEL` |
+
+### 🔍 配置驗證
+
+```bash
+# 檢查應用程式配置
+python src/core/config.py
+
+# 檢查部署配置  
+./scripts/deploy/deploy-to-cloudrun.sh --dry-run
+```
+
+詳細的配置說明請參考：[配置管理指南](docs/CONFIGURATION.md)
+
 ## 部署到 Google Cloud Run
 
 ### 🚀 快速部署（推薦）
@@ -159,18 +243,22 @@ db:
 
 ```bash
 # 1. 設定部署配置
-cp deploy/.env.example deploy/.env
-# 編輯 deploy/.env 檔案，填入你的專案設定
+cp config/deploy/.env.example config/deploy/.env
+# 編輯 config/deploy/.env 檔案，填入你的專案設定
 
 # 2. 執行自動部署腳本
-./deploy/deploy-to-cloudrun.sh
+./scripts/deploy/deploy-to-cloudrun.sh
+
+# 3. 檢查配置（可選）
+./scripts/deploy/deploy-to-cloudrun.sh --dry-run
 ```
 
 ### 📖 詳細部署指南
 
 如需完整的部署流程、監控設定、負載平衡器配置等，請參考：
-- [完整部署指南](docs/DEPLOYMENT.md)
-- [部署腳本說明](deploy/README.md)
+- [完整部署指南](docs/DEPLOYMENT.md)  
+- [配置管理指南](docs/CONFIGURATION.md)
+- [運行指南](docs/RUNNING.md)
 
 ### 🔧 手動部署（進階用戶）
 
@@ -186,14 +274,14 @@ cp deploy/.env.example deploy/.env
 2. **建立容器映像**
 
    ```bash
-   gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name} -f deploy/Dockerfile.cloudrun .
+   gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name} -f config/deploy/Dockerfile.cloudrun .
    ```
 
 3. **部署到 Cloud Run**
 
    ```bash
-   gcloud run services replace deploy/cloudrun-service.yaml --region {your-region}
-     ```
+   gcloud run services replace config/deploy/cloudrun-service.yaml --region {your-region}
+   ```
 
    - 請將以上指令中的佔位符替換為您的實際資訊。
 
@@ -223,7 +311,46 @@ cp deploy/.env.example deploy/.env
 
 ## 開發與測試
 
-### 安裝開發依賴
+### 本地開發設定
+
+1. **安裝依賴套件**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **設定本地環境變數**
+   ```bash
+   # 複製環境變數模板
+   cp .env.local.example .env.local
+   
+   # 編輯 .env.local 填入您的配置
+   vim .env.local
+   ```
+
+3. **運行開發服務器**
+   
+   **🔧 開發環境（推薦）：**
+   ```bash
+   # 使用開發腳本啟動
+   ./scripts/dev.sh
+   ```
+   
+   **🧪 本地生產測試：**
+   ```bash
+   # 測試生產配置
+   ./scripts/test-prod.sh
+   ```
+   
+   **⚡ 直接運行：**
+   ```bash
+   # 開發模式（會顯示警告，這是正常現象）
+   python main.py
+   
+   # 生產模式（使用 Gunicorn）
+   python wsgi.py
+   ```
+
+### 安裝測試依賴
 
 ```bash
 pip install -r requirements-test.txt

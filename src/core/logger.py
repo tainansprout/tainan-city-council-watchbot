@@ -124,17 +124,17 @@ class LoggerManager:
             from .config import load_config
             config = load_config()
             return {
-                'level': config.get('log_level', 'INFO'),
+                'level': config.get('log_level', 'DEBUG'),  # 改為DEBUG以顯示完整API回應
                 'file_path': config.get('logfile', './logs/chatbot.log'),
                 'max_bytes': 10 * 1024 * 1024,  # 10MB
                 'backup_count': 5,
-                'format': config.get('log_format', 'structured'),  # 'structured' or 'simple'
+                'format': config.get('log_format', 'simple'),  # 改為simple以便閱讀
                 'enable_console': True,
                 'enable_file': True,
             }
         except:
             return {
-                'level': 'INFO',
+                'level': 'DEBUG',  # 備用配置也改為DEBUG
                 'file_path': './logs/chatbot.log',
                 'max_bytes': 10 * 1024 * 1024,
                 'backup_count': 5,

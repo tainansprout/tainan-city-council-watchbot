@@ -69,6 +69,17 @@ spec:
             secretKeyRef:
               name: db-name
               key: latest
+        # 生產環境配置
+        - name: FLASK_ENV
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        # OpenAI Assistant ID (如果需要從 Secret Manager 取得)
+        - name: OPENAI_ASSISTANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: openai-assistant-id
+              key: latest
         resources:
           limits:
             memory: "2Gi"

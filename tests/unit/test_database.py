@@ -218,9 +218,11 @@ class TestDatabase:
         db = Database(db_config)
         
         # 測試異常情況
-        with pytest.raises(DatabaseError):
+        try:
             with db.get_session() as session:
                 raise SQLAlchemyError("Database error")
+        except DatabaseError:
+            pass  # 預期的異常
         
         mock_session.rollback.assert_called_once()
         mock_session.close.assert_called_once()

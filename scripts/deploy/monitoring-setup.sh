@@ -1,17 +1,20 @@
 #!/bin/bash
 
-# 取得腳本所在目錄
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 移動到腳本所在目錄，然後移動到項目根目錄
+cd "$(dirname "${BASH_SOURCE[0]}")"
+pushd ../.. > /dev/null
+PROJECT_ROOT="$(pwd)"
+popd > /dev/null
 
 # 載入環境變數配置
-if [ -f "$SCRIPT_DIR/.env" ]; then
+if [ -f "$PROJECT_ROOT/config/deploy/.env" ]; then
     echo "載入環境變數配置..."
     set -o allexport
-    source "$SCRIPT_DIR/.env"
+    source "$PROJECT_ROOT/config/deploy/.env"
     set +o allexport
 else
-    echo "警告: 找不到 $SCRIPT_DIR/.env 檔案"
-    echo "請複製 $SCRIPT_DIR/.env.example 為 $SCRIPT_DIR/.env 並填入實際的值"
+    echo "警告: 找不到 $PROJECT_ROOT/config/deploy/.env 檔案"
+    echo "請複製 $PROJECT_ROOT/config/deploy/.env.example 為 $PROJECT_ROOT/config/deploy/.env 並填入實際的值"
     exit 1
 fi
 

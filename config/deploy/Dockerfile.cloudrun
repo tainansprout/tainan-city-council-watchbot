@@ -11,6 +11,7 @@ ENV PYTHONUNBUFFERED=True \
 RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 建立應用程式目錄
@@ -50,4 +51,4 @@ CMD exec gunicorn \
     --access-logfile - \
     --error-logfile - \
     --log-level info \
-    main:app
+    wsgi:application

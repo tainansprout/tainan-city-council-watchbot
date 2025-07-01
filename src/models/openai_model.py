@@ -448,10 +448,26 @@ class OpenAIModel(FullLLMInterface):
             if not is_successful:
                 return False, None, error_message
             
+            # 記錄完整的API回應用於除錯
+            logger.debug(f"OpenAI Assistant API 完整回應: {response}")
+            
             # 取得最新的助理回應
             for message in response['data']:
                 if message['role'] == 'assistant' and message['content']:
                     content = message['content'][0]['text']['value']
+                    
+                    # 詳細記錄助理訊息結構
+                    logger.debug(f"助理訊息內容長度: {len(content)}")
+                    logger.debug(f"助理訊息註解數量: {len(message['content'][0]['text'].get('annotations', []))}")
+                    
+                    # 記錄每個註解的詳細信息
+                    annotations = message['content'][0]['text'].get('annotations', [])
+                    for i, annotation in enumerate(annotations):
+                        logger.debug(f"註解 {i+1}: 類型={annotation.get('type')}, 文本={annotation.get('text')}")
+                        if 'file_citation' in annotation:
+                            file_id = annotation['file_citation'].get('file_id')
+                            logger.debug(f"  檔案ID: {file_id}")
+                    
                     chat_response = ChatResponse(
                         content=content,
                         metadata={'thread_messages': response}

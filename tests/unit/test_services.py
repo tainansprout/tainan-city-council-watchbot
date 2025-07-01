@@ -48,10 +48,12 @@ class TestChatService:
     
     @patch('src.services.chat_service.preprocess_text')
     @patch('src.services.chat_service.postprocess_text')
-    def test_handle_chat_message_success(self, mock_postprocess, mock_preprocess, chat_service, mock_openai_model):
+    def test_handle_chat_message_success(self, mock_postprocess, mock_preprocess, chat_service, mock_openai_model, mock_database):
         # 設定模擬
         mock_preprocess.return_value = 'processed text'
         mock_postprocess.return_value = 'final response'
+        mock_database.query_thread.return_value = 'test_thread_123'
+        mock_openai_model.retrieve_thread.return_value = (True, Mock(), None)
         
         mock_rag_response = Mock()
         mock_rag_response.answer = 'Test response'
@@ -75,7 +77,7 @@ class TestChatService:
         response = chat_service.handle_message('test_user', 'Hello')
         
         assert isinstance(response, TextMessage)
-        assert 'database' in response.text.lower() or 'error' in response.text.lower()
+        assert '資料庫' in response.text or '異常' in response.text
     
     def test_format_sources(self, chat_service):
         sources = [
@@ -108,6 +110,117 @@ class TestChatService:
         
         # 應該設定為空字典
         assert chat_service.file_dict == {}
+    
+    @patch('src.services.chat_service.get_file_dict')
+    @patch('src.services.chat_service.get_content_and_reference')
+    @patch('src.services.chat_service.preprocess_text')
+    @patch('src.services.chat_service.postprocess_text')
+    def test_file_refresh_mechanism_on_none_detection(self, mock_postprocess, mock_preprocess, mock_get_content, mock_get_file_dict, chat_service, mock_database, mock_openai_model):
+        """測試檔案字典刷新機制：檢測到 None 引用時觸發刷新"""
+        # 設定模擬
+        mock_preprocess.return_value = 'processed text'
+        mock_postprocess.side_effect = lambda x, config: x  # 直接返回輸入
+        mock_database.query_thread.return_value = 'existing_thread_123'
+        mock_openai_model.retrieve_thread.return_value = (True, Mock(), None)
+        
+        # 設定初始檔案字典
+        chat_service.file_dict = {'file-123': '舊檔案'}
+        
+        # 第一次調用：返回含有 None 引用的結果
+        mock_get_content.side_effect = [
+            '回應內容 [1]\n\n[1]: None',  # 第一次返回 None 引用
+            '回應內容 [1]\n\n[1]: 新檔案'   # 第二次返回正確檔案名
+        ]
+        
+        # 模擬刷新後的檔案字典
+        mock_get_file_dict.return_value = {
+            'file-123': '舊檔案',
+            'file-456': '新檔案'
+        }
+        
+        # 模擬 OpenAI 回應
+        mock_response = Mock()
+        mock_response.answer = '回應內容'
+        mock_response.sources = []
+        mock_openai_model.query_with_rag.return_value = (True, mock_response, None)
+        
+        # 執行測試
+        response = chat_service.handle_message('test_user', 'test message')
+        
+        # 驗證結果
+        assert mock_get_content.call_count == 2  # 應該被調用兩次
+        assert mock_get_file_dict.call_count == 1  # 檔案字典應該被刷新一次
+        assert chat_service.file_dict == {'file-123': '舊檔案', 'file-456': '新檔案'}
+        assert 'None' not in response.text  # 最終回應不應包含 None
+    
+    @patch('src.services.chat_service.get_file_dict')
+    @patch('src.services.chat_service.get_content_and_reference')
+    @patch('src.services.chat_service.preprocess_text')
+    @patch('src.services.chat_service.postprocess_text')
+    def test_file_refresh_mechanism_no_refresh_needed(self, mock_postprocess, mock_preprocess, mock_get_content, mock_get_file_dict, chat_service, mock_database, mock_openai_model):
+        """測試檔案字典刷新機制：無 None 引用時不觸發刷新"""
+        # 設定模擬
+        mock_preprocess.return_value = 'processed text'
+        mock_postprocess.side_effect = lambda x, config: x
+        mock_database.query_thread.return_value = 'existing_thread_123'
+        mock_openai_model.retrieve_thread.return_value = (True, Mock(), None)
+        
+        # 設定初始檔案字典
+        chat_service.file_dict = {'file-123': '正常檔案'}
+        
+        # 模擬正常的回應（無 None 引用）
+        mock_get_content.return_value = '回應內容 [1]\n\n[1]: 正常檔案'
+        
+        # 模擬 OpenAI 回應
+        mock_response = Mock()
+        mock_response.answer = '回應內容'
+        mock_response.sources = []
+        mock_openai_model.query_with_rag.return_value = (True, mock_response, None)
+        
+        # 執行測試
+        response = chat_service.handle_message('test_user', 'test message')
+        
+        # 驗證結果
+        assert mock_get_content.call_count == 1  # 只應該被調用一次
+        assert mock_get_file_dict.call_count == 0  # 檔案字典不應該被刷新
+        assert chat_service.file_dict == {'file-123': '正常檔案'}  # 檔案字典保持不變
+    
+    @patch('src.services.chat_service.get_file_dict')
+    @patch('src.services.chat_service.get_content_and_reference')
+    @patch('src.services.chat_service.preprocess_text')
+    @patch('src.services.chat_service.postprocess_text')
+    def test_file_refresh_mechanism_refresh_failure(self, mock_postprocess, mock_preprocess, mock_get_content, mock_get_file_dict, chat_service, mock_database, mock_openai_model):
+        """測試檔案字典刷新機制：刷新失敗時的處理"""
+        # 設定模擬
+        mock_preprocess.return_value = 'processed text'
+        mock_postprocess.side_effect = lambda x, config: x
+        mock_database.query_thread.return_value = 'existing_thread_123'
+        mock_openai_model.retrieve_thread.return_value = (True, Mock(), None)
+        
+        # 設定初始檔案字典
+        chat_service.file_dict = {'file-123': '舊檔案'}
+        
+        # 模擬含有 None 引用的回應
+        mock_get_content.return_value = '回應內容 [1]\n\n[1]: None'
+        
+        # 模擬檔案字典刷新失敗
+        mock_get_file_dict.side_effect = Exception("刷新失敗")
+        
+        # 模擬 OpenAI 回應
+        mock_response = Mock()
+        mock_response.answer = '回應內容'
+        mock_response.sources = []
+        mock_openai_model.query_with_rag.return_value = (True, mock_response, None)
+        
+        # 執行測試
+        response = chat_service.handle_message('test_user', 'test message')
+        
+        # 驗證結果
+        assert mock_get_content.call_count == 2  # 應該嘗試兩次
+        assert mock_get_file_dict.call_count == 1  # 應該嘗試刷新一次
+        assert chat_service.file_dict == {}  # 刷新失敗後檔案字典應為空
+        # 最終回應仍然包含 None（因為刷新失敗）
+        assert 'None' in response.text
 
 
 class TestAudioService:
@@ -150,8 +263,8 @@ class TestAudioService:
         response = audio_service.handle_audio_message('test_user', audio_content)
         
         assert isinstance(response, TextMessage)
-        # 應該返回錯誤訊息
-        assert 'error' in response.text.lower() or 'failed' in response.text.lower()
+        # 應該返回錯誤訊息（中文）
+        assert 'OpenAI' in response.text or 'API' in response.text or '錯誤' in response.text
         mock_remove.assert_called_once()  # 即使失敗也要清理檔案
     
     @patch('uuid.uuid4')
@@ -194,10 +307,12 @@ class TestAudioService:
         with pytest.raises(OpenAIError, match="Audio transcription failed"):
             audio_service._transcribe_audio('test_file.m4a')
     
+    @patch('os.path.exists')
     @patch('os.remove')
-    def test_cleanup_on_exception(self, mock_remove, audio_service, mock_openai_model):
+    def test_cleanup_on_exception(self, mock_remove, mock_exists, audio_service, mock_openai_model):
         # 模擬轉錄過程中發生異常
         mock_openai_model.audio_transcriptions.side_effect = Exception("Unexpected error")
+        mock_exists.return_value = True
         
         with patch.object(audio_service, '_save_audio_file', return_value='test_file.m4a'):
             response = audio_service.handle_audio_message('test_user', b'audio_data')

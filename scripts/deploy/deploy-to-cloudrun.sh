@@ -1,7 +1,10 @@
 #!/bin/bash
 
-# 取得腳本所在目錄
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 移動到腳本所在目錄，然後移動到項目根目錄
+cd "$(dirname "${BASH_SOURCE[0]}")"
+pushd ../.. > /dev/null
+PROJECT_ROOT="$(pwd)"
+popd > /dev/null
 
 # 處理命令列參數
 DRY_RUN=false
@@ -68,14 +71,14 @@ EOF
 fi
 
 # 載入環境變數配置
-if [ -f "$SCRIPT_DIR/.env" ]; then
+if [ -f "$PROJECT_ROOT/config/deploy/.env" ]; then
     echo "載入環境變數配置..."
     set -o allexport
-    source "$SCRIPT_DIR/.env"
+    source "$PROJECT_ROOT/config/deploy/.env"
     set +o allexport
 else
-    echo "警告: 找不到 $SCRIPT_DIR/.env 檔案"
-    echo "請複製 $SCRIPT_DIR/.env.example 為 $SCRIPT_DIR/.env 並填入實際的值"
+    echo "警告: 找不到 $PROJECT_ROOT/config/deploy/.env 檔案"
+    echo "請複製 $PROJECT_ROOT/config/deploy/.env.example 為 $PROJECT_ROOT/config/deploy/.env 並填入實際的值"
     exit 1
 fi
 
@@ -232,6 +235,7 @@ setup_secrets_step() {
     # 在 dry-run 或自動模式下，顯示需要的變數
     if [ "$DRY_RUN" = true ] || [ "$INTERACTIVE" = false ]; then
         OPENAI_KEY='${OPENAI_API_KEY}'
+        OPENAI_ASSISTANT_ID='${OPENAI_ASSISTANT_ID}'
         LINE_TOKEN='${LINE_CHANNEL_ACCESS_TOKEN}'
         LINE_SECRET='${LINE_CHANNEL_SECRET}'
         DB_HOST='${DB_HOST}'
@@ -240,6 +244,7 @@ setup_secrets_step() {
         DB_NAME='${DB_NAME}'
     else
         OPENAI_KEY=${OPENAI_API_KEY:-$(read -p "請輸入 OpenAI API Key: " && echo $REPLY)}
+        OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID:-$(read -p "請輸入 OpenAI Assistant ID: " && echo $REPLY)}
         LINE_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:-$(read -p "請輸入 Line Channel Access Token: " && echo $REPLY)}
         LINE_SECRET=${LINE_CHANNEL_SECRET:-$(read -p "請輸入 Line Channel Secret: " && echo $REPLY)}
         DB_HOST=${DB_HOST:-$(read -p "請輸入資料庫主機地址: " && echo $REPLY)}
@@ -249,6 +254,7 @@ setup_secrets_step() {
     fi
 
     local secrets_cmd="gcloud secrets describe $OPENAI_API_KEY_SECRET --quiet || echo '$OPENAI_KEY' | gcloud secrets create $OPENAI_API_KEY_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $OPENAI_ASSISTANT_ID_SECRET --quiet || echo '$OPENAI_ASSISTANT_ID' | gcloud secrets create $OPENAI_ASSISTANT_ID_SECRET --data-file=-; "
     secrets_cmd+="gcloud secrets describe $LINE_CHANNEL_ACCESS_TOKEN_SECRET --quiet || echo '$LINE_TOKEN' | gcloud secrets create $LINE_CHANNEL_ACCESS_TOKEN_SECRET --data-file=-; "
     secrets_cmd+="gcloud secrets describe $LINE_CHANNEL_SECRET_SECRET --quiet || echo '$LINE_SECRET' | gcloud secrets create $LINE_CHANNEL_SECRET_SECRET --data-file=-; "
     secrets_cmd+="gcloud secrets describe $DB_HOST_SECRET --quiet || echo '$DB_HOST' | gcloud secrets create $DB_HOST_SECRET --data-file=-; "
@@ -266,10 +272,10 @@ if [ $? -eq 0 ]; then
 fi
 
 # 建立和推送 Docker 映像
-execute_step "build-image" "cd '$SCRIPT_DIR/..' && gcloud builds submit --tag gcr.io/$PROJECT_ID/$IMAGE_NAME -f '$DOCKERFILE_PATH' ." "🐳 建立 Docker 映像"
+execute_step "build-image" "cd '$PROJECT_ROOT' && gcloud builds submit --tag gcr.io/$PROJECT_ID/$IMAGE_NAME -f '$DOCKERFILE_PATH' ." "🐳 建立 Docker 映像"
 
 # 部署到 Cloud Run
-execute_step "deploy-service" "sed -i.bak 's/YOUR_PROJECT_ID/$PROJECT_ID/g' '$SERVICE_CONFIG_PATH' && gcloud run services replace '$SERVICE_CONFIG_PATH' --region=$REGION && mv '$SERVICE_CONFIG_PATH.bak' '$SERVICE_CONFIG_PATH'" "☁️ 部署到 Cloud Run"
+execute_step "deploy-service" "cd '$PROJECT_ROOT' && sed -i.bak 's/YOUR_PROJECT_ID/$PROJECT_ID/g' 'config/deploy/$SERVICE_CONFIG_PATH' && gcloud run services replace 'config/deploy/$SERVICE_CONFIG_PATH' --region=$REGION && mv 'config/deploy/$SERVICE_CONFIG_PATH.bak' 'config/deploy/$SERVICE_CONFIG_PATH'" "☁️ 部署到 Cloud Run"
 
 # 設定 IAM 權限和取得服務 URL
 execute_step "setup-permissions" "gcloud run services add-iam-policy-binding $SERVICE_NAME --region=$REGION --member='allUsers' --role='roles/run.invoker'" "🔒 設定 IAM 權限（允許公開存取）"

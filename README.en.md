@@ -104,16 +104,52 @@ This project is a chatbot using Line as the front-end, connected to multiple LLM
 
    - Copy `ssl-cert.crt`, `ca-cert.crt`, and `ssl-key.key` to `config/ssl/`.
 
-## Finalizing Configuration Files
+## Configuration Management
+
+This project supports flexible configuration management to adapt to different deployment environment needs.
+
+### 🎯 Configuration Priority
+
+**Application Configuration Priority** (higher priority overrides lower priority):
+1. `config/config.yml` - Basic configuration file
+2. **Environment Variables** - Highest priority (suitable for production)
+
+**Deployment Script Configuration Priority**:
+1. `config/deploy/.env` - Deployment configuration file
+2. **Environment Variables** - Highest priority
+3. Interactive Input - Prompts when configuration is missing
+
+### 📁 Configuration File Locations
+
+```
+config/
+├── config.yml.example          # Application configuration template
+├── config.yml                  # Application configuration (create manually)
+└── deploy/
+    ├── .env.example            # Deployment configuration template
+    ├── .env                    # Deployment configuration (create manually)
+    ├── Dockerfile.cloudrun     # Cloud Run Dockerfile
+    └── cloudrun-service.yaml   # Cloud Run service configuration
+```
+
+### 💻 Local Development Configuration
 
 Prepare the following information:
+- `channel_access_token` - Line Channel Access Token
+- `channel_secret` - Line Channel Secret
+- `openai_api_key` - OpenAI API Key
+- `assistant_id` - OpenAI Assistant ID
+- Database connection information
 
-- `channel_access_token`
-- `channel_secret`
-- `openai_api_key`
-- `assistant_id`
+**Method 1: Using Configuration File (Recommended)**
 
-Copy `config/config.yml.example` to `config/config.yml`, then modify its content as follows:
+```bash
+# Copy configuration template
+cp config/config.yml.example config/config.yml
+
+# Edit configuration file
+vim config/config.yml
+```
 
 ```yaml
 line:
@@ -136,6 +172,54 @@ db:
   sslkey: config/ssl/client.key
 ```
 
+**Method 2: Using Environment Variables**
+
+```bash
+# Set environment variables
+export LINE_CHANNEL_ACCESS_TOKEN="your_token"
+export LINE_CHANNEL_SECRET="your_secret"
+export OPENAI_API_KEY="sk-proj-xxxxxxxx"
+export OPENAI_ASSISTANT_ID="asst_xxxxxxxx"
+export DB_HOST="your_db_host"
+export DB_USER="your_db_user"
+export DB_PASSWORD="your_db_password"
+export DB_NAME="your_db_name"
+
+# Run application
+python main.py
+```
+
+### ☁️ Production Environment Configuration
+
+Production environment uses Google Secret Manager to manage sensitive information, injected into containers through environment variables.
+
+**Supported Environment Variable Mapping**:
+
+| Configuration Item | config.yml Path | Environment Variable |
+|--------------------|-----------------|---------------------|
+| Line Access Token | `line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` |
+| Line Secret | `line.channel_secret` | `LINE_CHANNEL_SECRET` |
+| OpenAI API Key | `openai.api_key` | `OPENAI_API_KEY` |
+| OpenAI Assistant ID | `openai.assistant_id` | `OPENAI_ASSISTANT_ID` |
+| Database Host | `db.host` | `DB_HOST` |
+| Database User | `db.user` | `DB_USER` |
+| Database Password | `db.password` | `DB_PASSWORD` |
+| Database Name | `db.db_name` | `DB_NAME` |
+| Auth Method | `auth.method` | `TEST_AUTH_METHOD` |
+| Log Level | `log_level` | `LOG_LEVEL` |
+
+### 🔍 Configuration Validation
+
+```bash
+# Check application configuration
+python src/core/config.py
+
+# Check deployment configuration
+./scripts/deploy/deploy-to-cloudrun.sh --dry-run
+```
+
+For detailed configuration instructions, please refer to: [Configuration Management Guide](docs/CONFIGURATION.md)
+
 ## Deploying to Google Cloud Run
 
 ### 🚀 Quick Deployment (Recommended)
@@ -144,18 +228,22 @@ Use our automated deployment scripts:
 
 ```bash
 # 1. Set up deployment configuration
-cp deploy/.env.example deploy/.env
-# Edit deploy/.env file with your project settings
+cp config/deploy/.env.example config/deploy/.env
+# Edit config/deploy/.env file with your project settings
 
 # 2. Run automated deployment script
-./deploy/deploy-to-cloudrun.sh
+./scripts/deploy/deploy-to-cloudrun.sh
+
+# 3. Check configuration (optional)
+./scripts/deploy/deploy-to-cloudrun.sh --dry-run
 ```
 
 ### 📖 Comprehensive Deployment Guide
 
 For complete deployment process, monitoring setup, load balancer configuration, etc., please refer to:
 - [Complete Deployment Guide](docs/DEPLOYMENT.md)
-- [Deployment Scripts Documentation](deploy/README.md)
+- [Configuration Management Guide](docs/CONFIGURATION.md)
+- [Running Guide](docs/RUNNING.md)
 
 ### 🔧 Manual Deployment (Advanced Users)
 
@@ -205,7 +293,46 @@ If you want to manually control each step:
 
 ## Development & Testing
 
-### Install Development Dependencies
+### Local Development Setup
+
+1. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Configure Local Environment Variables**
+   ```bash
+   # Copy environment template
+   cp .env.local.example .env.local
+   
+   # Edit .env.local with your configurations
+   vim .env.local
+   ```
+
+3. **Run Development Server**
+   
+   **🔧 Development Environment (Recommended):**
+   ```bash
+   # Start using development script
+   ./scripts/dev.sh
+   ```
+   
+   **🧪 Local Production Testing:**
+   ```bash
+   # Test production configuration locally
+   ./scripts/test-prod.sh
+   ```
+   
+   **⚡ Direct Execution:**
+   ```bash
+   # Development mode (warnings are normal)
+   python main.py
+   
+   # Production mode (using Gunicorn)
+   python wsgi.py
+   ```
+
+### Install Test Dependencies
 
 ```bash
 pip install -r requirements-test.txt

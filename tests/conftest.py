@@ -55,6 +55,9 @@ def mock_config():
             'db_name': 'test_db',
             'user': 'test_user',
             'password': 'test_password'
+        },
+        'commands': {
+            'help': 'Test help message'
         }
     }
 

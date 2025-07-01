@@ -32,16 +32,16 @@ vim deploy/.env
 
 ```bash
 # 基本部署（互動模式）
-./deploy/deploy-to-cloudrun.sh
+./scripts/deploy/deploy-to-cloudrun.sh
 
 # 自動部署（不詢問確認）
-./deploy/deploy-to-cloudrun.sh --auto
+./scripts/deploy/deploy-to-cloudrun.sh --auto
 
 # 檢查配置（乾運行）
-./deploy/deploy-to-cloudrun.sh --dry-run
+./scripts/deploy/deploy-to-cloudrun.sh --dry-run
 
 # 從特定步驟開始（錯誤修復）
-./deploy/deploy-to-cloudrun.sh --start-from build-image
+./scripts/deploy/deploy-to-cloudrun.sh --start-from build-image
 ```
 
 ## 🔧 部署腳本功能
@@ -76,20 +76,20 @@ vim deploy/.env
 
 ```bash
 # 設定監控和警報
-./deploy/monitoring-setup.sh --dry-run
+./scripts/deploy/monitoring-setup.sh --dry-run
 
 # 自動設定監控
-./deploy/monitoring-setup.sh --auto
+./scripts/deploy/monitoring-setup.sh --auto
 ```
 
 ## 🌐 負載平衡器設定
 
 ```bash
 # 設定全球負載平衡器
-./deploy/setup-loadbalancer.sh --dry-run
+./scripts/deploy/setup-loadbalancer.sh --dry-run
 
 # 自動設定負載平衡器
-./deploy/setup-loadbalancer.sh --auto
+./scripts/deploy/setup-loadbalancer.sh --auto
 ```
 
 ## 🔐 安全性配置
@@ -143,7 +143,7 @@ export DB_NAME="your_db_name"
 4. **Docker 建置失敗**
    ```bash
    # 從建置步驟重新開始
-   ./deploy/deploy-to-cloudrun.sh --start-from build-image
+   ./scripts/deploy/deploy-to-cloudrun.sh --start-from build-image
    ```
 
 ### 重新開始部署
@@ -153,7 +153,7 @@ export DB_NAME="your_db_name"
 ```bash
 # 查看錯誤訊息中的建議指令
 # 通常格式為：
-./deploy/deploy-to-cloudrun.sh --start-from [FAILED_STEP]
+./scripts/deploy/deploy-to-cloudrun.sh --start-from [FAILED_STEP]
 ```
 
 ## 💡 最佳實踐

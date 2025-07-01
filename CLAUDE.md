@@ -9,12 +9,33 @@ This is a Line Bot that connects to OpenAI Assistant API, deployed on Google Clo
 ## Development Commands
 
 ### Local Development
+
+#### 🔧 開發環境（推薦）
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Run locally
+# Setup local environment
+cp .env.local.example .env.local
+# 編輯 .env.local 填入配置
+
+# Run development server
+./scripts/dev.sh
+```
+
+#### 🧪 本地生產測試
+```bash
+# Test production configuration locally
+./scripts/test-prod.sh
+```
+
+#### ⚡ 直接運行
+```bash
+# Development mode (會顯示警告，正常現象)
 python main.py
+
+# Production mode (使用 Gunicorn)
+python wsgi.py
 ```
 
 ### Docker Development

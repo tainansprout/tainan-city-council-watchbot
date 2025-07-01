@@ -197,7 +197,7 @@ class SecurityMiddleware:
         client_id = self._get_client_id()
         
         # 根據端點類型決定速率限制
-        if request.endpoint == 'callback':
+        if request.endpoint in ['callback', 'webhooks_line']:
             max_requests = security_config.get_rate_limit('webhook')
         elif request.endpoint in ['ask', 'index']:
             max_requests = security_config.get_rate_limit('test')
@@ -215,7 +215,7 @@ class SecurityMiddleware:
             abort(413)  # Payload Too Large
         
         # 檢查 Content-Type（對於 POST 請求）
-        if request.method == 'POST' and request.endpoint not in ['callback', 'index']:
+        if request.method == 'POST' and request.endpoint not in ['callback', 'webhooks_line', 'index']:
             if not request.is_json:
                 logger.warning("Non-JSON POST request rejected")
                 abort(400)

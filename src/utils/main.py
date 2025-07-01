@@ -45,24 +45,54 @@ def get_role_and_content(response):
     return 'assistant', str(response)
 
 def get_content_and_reference(response, file_dict) -> str:
+    import re
+    
     data = get_response_data(response)
     if not data:
+        logger.debug("get_content_and_reference: 沒有找到助理回應數據")
         return ''
+    
     text = data['content'][0]['text']['value']
     annotations = data['content'][0]['text']['annotations']
+    
+    logger.debug(f"get_content_and_reference: 註解數量={len(annotations)}")
+    
+    # 檢查是否有複雜引用格式在原始文本中
+    complex_citations = re.findall(r'【[^】]+】', text)
+    if complex_citations:
+        logger.debug(f"get_content_and_reference: 發現 {len(complex_citations)} 個複雜引用格式:")
+        for citation in complex_citations:
+            logger.debug(f"  - {citation}")
+    
     text = s2t_converter.convert(text)
+    
     # 替換註釋文本
     ref_mapping = {}
     for i, annotation in enumerate(annotations, 1):
+        logger.debug(f"get_content_and_reference: 處理註解 {i}: {annotation}")
         original_text = annotation['text']
+        # 對annotation文本也進行s2t轉換，確保與主文本一致
+        original_text = s2t_converter.convert(original_text)
         file_id = annotation['file_citation']['file_id']
         replacement_text = f"[{i}]"
+        
+        logger.debug(f"  替換 '{original_text}' → '{replacement_text}'")
         text = text.replace(original_text, replacement_text)
         ref_mapping[replacement_text] = f"{replacement_text}: {file_dict.get(file_id)}"
+
+    # 檢查處理後是否還有複雜引用格式
+    remaining_complex = re.findall(r'【[^】]+】', text)
+    if remaining_complex:
+        logger.warning(f"get_content_and_reference: 處理後仍有 {len(remaining_complex)} 個未處理的複雜引用:")
+        for citation in remaining_complex:
+            logger.warning(f"  - {citation}")
 
     # 添加文件識別碼引用
     reference_text = '\n'.join(ref_mapping.values())
     final_text = f"{text}\n\n{reference_text}".strip()
+    
+    logger.debug(f"get_content_and_reference: 最終文本長度={len(final_text)}")
+    logger.debug(f"get_content_and_reference: 生成了 {len(ref_mapping)} 個引用")
 
     return final_text
 

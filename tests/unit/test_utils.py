@@ -188,6 +188,178 @@ class TestContentAndReference:
             
             result = get_content_and_reference(response, {})
             assert result == '這是沒有引用的回應'
+    
+    def test_get_content_and_reference_missing_file(self):
+        """測試缺失檔案時產生 None 引用（用於觸發檔案字典刷新）"""
+        response = {
+            'data': [
+                {
+                    'role': 'assistant',
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': {
+                                'value': '引用不存在的檔案【6:99†不存在的檔案.txt】',
+                                'annotations': [
+                                    {
+                                        'text': '【6:99†不存在的檔案.txt】',
+                                        'file_citation': {
+                                            'file_id': 'file-nonexistent'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        with patch('src.utils.s2t_converter') as mock_converter:
+            mock_converter.convert.side_effect = lambda x: x.replace('【6:99†不存在的檔案.txt】', '[1]')
+            
+            result = get_content_and_reference(response, {})
+            
+            assert '[1]' in result
+            assert '[1]: None' in result
+            assert detect_none_references(result) is True
+    
+    def test_get_content_and_reference_opencc_conversion(self):
+        """測試 OpenCC 轉換導致的字符不匹配問題"""
+        response = {
+            'data': [
+                {
+                    'role': 'assistant',
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': {
+                                'value': '議員關心學校安全問題【6:14†第4屆第2次定期會民政教育部門業務報告及質詢2023年10月11日(教育局、人事處、秘書處).txt】。',
+                                'annotations': [
+                                    {
+                                        'text': '【6:14†第4屆第2次定期會民政教育部門業務報告及質詢2023年10月11日(教育局、人事處、秘書處).txt】',
+                                        'file_citation': {
+                                            'file_id': 'file-education123'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        file_dict = {
+            'file-education123': '第4屆第2次定期會民政教育部門業務報告及質詢2023年10月11日(教育局、人事處、秘書處)'
+        }
+        
+        with patch('src.utils.s2t_converter') as mock_converter:
+            # 模擬 OpenCC 將 "秘書處" 轉換為 "祕書處"
+            def convert_side_effect(text):
+                return text.replace('秘書處', '祕書處')
+            
+            mock_converter.convert.side_effect = convert_side_effect
+            
+            result = get_content_and_reference(response, file_dict)
+            
+            # 應該成功轉換，不留下複雜引用格式
+            assert '[1]' in result
+            assert '【' not in result
+            assert '】' not in result
+    
+    def test_get_content_and_reference_multiple_citations(self):
+        """測試多個引用的處理"""
+        response = {
+            'data': [
+                {
+                    'role': 'assistant',
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': {
+                                'value': '根據多次會議【6:8†會議1.txt】和【6:12†會議2.txt】的討論',
+                                'annotations': [
+                                    {
+                                        'text': '【6:8†會議1.txt】',
+                                        'file_citation': {
+                                            'file_id': 'file-meeting1'
+                                        }
+                                    },
+                                    {
+                                        'text': '【6:12†會議2.txt】',
+                                        'file_citation': {
+                                            'file_id': 'file-meeting2'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        file_dict = {
+            'file-meeting1': '會議1',
+            'file-meeting2': '會議2'
+        }
+        
+        with patch('src.utils.s2t_converter') as mock_converter:
+            mock_converter.convert.side_effect = lambda x: x.replace('【6:8†會議1.txt】', '[1]').replace('【6:12†會議2.txt】', '[2]')
+            
+            result = get_content_and_reference(response, file_dict)
+            
+            assert '[1]' in result
+            assert '[2]' in result
+            assert '[1]: 會議1' in result
+            assert '[2]: 會議2' in result
+            assert '【' not in result
+    
+    def test_get_content_and_reference_duplicate_citations(self):
+        """測試重複引用的處理"""
+        response = {
+            'data': [
+                {
+                    'role': 'assistant',
+                    'content': [
+                        {
+                            'type': 'text',
+                            'text': {
+                                'value': '第一次提到【6:8†同一檔案.txt】，第二次又提到【6:8†同一檔案.txt】',
+                                'annotations': [
+                                    {
+                                        'text': '【6:8†同一檔案.txt】',
+                                        'file_citation': {
+                                            'file_id': 'file-same'
+                                        }
+                                    },
+                                    {
+                                        'text': '【6:8†同一檔案.txt】',
+                                        'file_citation': {
+                                            'file_id': 'file-same'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        file_dict = {'file-same': '同一檔案'}
+        
+        with patch('src.utils.s2t_converter') as mock_converter:
+            mock_converter.convert.side_effect = lambda x: x.replace('【6:8†同一檔案.txt】', '[1]', 1).replace('【6:8†同一檔案.txt】', '[2]', 1)
+            
+            result = get_content_and_reference(response, file_dict)
+            
+            # 每次引用都應該獲得獨立的編號
+            assert '[1]' in result
+            assert '[2]' in result
+            assert '[1]: 同一檔案' in result
+            assert '[2]: 同一檔案' in result
 
 
 class TestModelValidation:
@@ -234,8 +406,8 @@ class TestModelValidation:
         mock_model = Mock()
         mock_model.list_files.return_value = (False, None, 'API error')
         
-        with pytest.raises(Exception, match='API error'):
-            get_file_dict(mock_model)
+        result = get_file_dict(mock_model)
+        assert result == {}  # 錯誤時返回空字典
 
 
 class TestUtilsIntegration:

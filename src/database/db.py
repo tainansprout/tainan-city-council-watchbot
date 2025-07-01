@@ -130,5 +130,5 @@ class Database:
             'checked_in': pool.checkedin(),
             'checked_out': pool.checkedout(),
             'overflow': pool.overflow(),
-            'invalid': pool.invalid()
+            'invalid': getattr(pool, 'invalidated', 0)  # 使用 invalidated 或默認值
         }
