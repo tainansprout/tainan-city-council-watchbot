@@ -53,7 +53,7 @@ class TestOpenAIMocks:
         # 驗證 API 調用
         mock_post.assert_called_once()
         call_args = mock_post.call_args
-        assert 'https://api.openai.com/v1/chat/completions' in call_args[1]['url']
+        assert 'https://api.openai.com/v1/chat/completions' in call_args[0][0]
     
     @patch('requests.post')
     def test_mock_chat_completion_error(self, mock_post, openai_model):
@@ -182,7 +182,7 @@ class TestAnthropicMocks:
         # 驗證 API 調用
         mock_post.assert_called_once()
         call_args = mock_post.call_args
-        assert 'anthropic.com' in call_args[1]['url']
+        assert 'anthropic.com' in call_args[0][0]
     
     @patch('requests.post')
     def test_mock_anthropic_error(self, mock_post, anthropic_model):
@@ -353,7 +353,7 @@ class TestOllamaMocks:
         mock_post.return_value = mock_response
         
         # 測試生成嵌入
-        embedding = ollama_model._generate_embedding("test text")
+        embedding = ollama_model._get_embedding("test text")
         
         assert embedding == [0.1, 0.2, 0.3, 0.4, 0.5]
         mock_post.assert_called_once()
@@ -424,7 +424,7 @@ class TestLineBotMocks:
     
     def test_mock_line_webhook_parser(self):
         """測試模擬 Line Webhook 解析器"""
-        with patch('linebot.v3.webhooks.WebhookParser.parse') as mock_parse:
+        with patch('linebot.v3.WebhookHandler.handle') as mock_handle:
             # 建立模擬事件
             mock_event = Mock()
             mock_event.type = 'message'
@@ -433,17 +433,17 @@ class TestLineBotMocks:
             mock_event.source.user_id = 'test_user'
             mock_event.reply_token = 'test_reply_token'
             
-            mock_parse.return_value = [mock_event]
+            mock_handle.return_value = [mock_event]
             
             # 模擬解析
             body = '{"events": [{"type": "message"}]}'
             signature = 'test_signature'
             
-            events = mock_parse(body, signature)
+            events = mock_handle(body, signature)
             
             assert len(events) == 1
             assert events[0].type == 'message'
-            mock_parse.assert_called_once_with(body, signature)
+            mock_handle.assert_called_once_with(body, signature)
 
 
 class TestExternalServiceIntegration:
@@ -482,7 +482,7 @@ class TestExternalServiceIntegration:
             from src.services.chat_service import ChatService
             from src.database import Database
             
-            db_config = {'host': 'localhost', 'port': 5432, 'db_name': 'test'}
+            db_config = {'host': 'localhost', 'port': 5432, 'db_name': 'test', 'user': 'test_user', 'password': 'test_password'}
             db = Database(db_config)
             
             model = OpenAIModel(api_key='test_key', assistant_id='test_id')

@@ -5,6 +5,7 @@ from linebot.v3.messaging import TextMessage
 from src.services.chat_service import ChatService
 from src.services.audio_service import AudioService
 from src.core.exceptions import OpenAIError, DatabaseError, ThreadError
+from src.models.base import ChatResponse, RAGResponse, RAGResponse
 
 
 class TestChatService:
@@ -55,14 +56,7 @@ class TestChatService:
         mock_database.query_thread.return_value = 'test_thread_123'
         mock_openai_model.retrieve_thread.return_value = (True, Mock(), None)
         
-        mock_rag_response = Mock()
-        mock_rag_response.answer = 'Test response'
-        mock_rag_response.sources = [{
-            'filename': 'test.txt',
-            'text': 'source content'
-        }]
-        
-        mock_openai_model.query_with_rag.return_value = (True, mock_rag_response, None)
+        mock_openai_model.query_with_rag.return_value = (True, RAGResponse(answer='Test response', sources=[], metadata={'thread_messages': []}), None)
         
         response = chat_service.handle_message('test_user', 'Hello')
         

@@ -1,22 +1,37 @@
 #!/bin/bash
 
-cd "$(dirname "$0")"
-pushd ..
+# 移動到腳本所在目錄，然後移動到項目根目錄
+cd "$(dirname "${BASH_SOURCE[0]}")"
+pushd ../.. > /dev/null
+PROJECT_ROOT="$(pwd)"
+popd > /dev/null
 
-# Google Cloud 監控和日誌設定腳本
-# 為 ChatGPT Line Bot 設定完整的監控體系
+# 載入環境變數配置
+if [ -f "$PROJECT_ROOT/config/deploy/.env" ]; then
+    echo "載入環境變數配置..."
+    set -o allexport
+    source "$PROJECT_ROOT/config/deploy/.env"
+    set +o allexport
+else
+    echo "警告: 找不到 $PROJECT_ROOT/config/deploy/.env 檔案"
+    echo "請複製 $PROJECT_ROOT/config/deploy/.env.example 為 $PROJECT_ROOT/config/deploy/.env 並填入實際的值"
+    exit 1
+fi
 
-# 設定變數
-PROJECT_ID="your-project-id"  # 請替換為你的專案 ID
-REGION="asia-east1"
-SERVICE_NAME="chatgpt-line-bot"
-NOTIFICATION_EMAIL="your-email@example.com"  # 請替換為你的郵箱
+# 驗證必要的環境變數
+required_vars=("PROJECT_ID" "REGION" "SERVICE_NAME" "NOTIFICATION_EMAIL")
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        echo "錯誤: 環境變數 $var 未設定"
+        exit 1
+    fi
+done
 
 # 顏色代碼
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+RED='''\033[0;31m'''
+GREEN='''\033[0;32m'''
+YELLOW='''\033[1;33m'''
+NC='''\033[0m''' # No Color
 
 echo -e "${GREEN}📊 設定 Google Cloud 監控和日誌${NC}"
 

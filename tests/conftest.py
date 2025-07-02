@@ -134,9 +134,21 @@ def mock_openai_model():
     mock_model.check_connection.return_value = (True, None)
     mock_model.get_provider.return_value = Mock(value='openai')
     mock_model.delete_thread.return_value = (True, None)
-    mock_model.create_thread.return_value = (True, 'new_thread_123', None)
-    mock_model.send_message.return_value = (True, Mock(text='Test response'), None)
+
+    # 修正 create_thread 的返回值
+    mock_thread_response = Mock()
+    mock_thread_response.thread_id = 'new_thread_123'
+    mock_model.create_thread.return_value = (True, mock_thread_response, None)
+
+    # 修正 query_with_rag 的返回值
+    mock_rag_response = Mock()
+    mock_rag_response.answer = 'Test response'
+    mock_rag_response.sources = []
+    mock_rag_response.metadata = {'thread_messages': []}
+    mock_model.query_with_rag.return_value = (True, mock_rag_response, None)
+
     mock_model.list_files.return_value = (True, [], None)
+    mock_model.retrieve_thread.return_value = (True, Mock(), None)
     return mock_model
 
 @pytest.fixture(autouse=True)
@@ -144,3 +156,12 @@ def disable_security_middleware():
     """在測試中禁用安全中間件的限制"""
     with patch('src.core.security.SecurityMiddleware._before_request'):
         yield
+
+@pytest.fixture
+def temp_file():
+    """創建一個暫存檔案用於測試"""
+    fd, path = tempfile.mkstemp()
+    with os.fdopen(fd, 'w') as tmp:
+        tmp.write("test content")
+    yield path
+    os.remove(path)

@@ -307,18 +307,14 @@ class TestConfigurationEndpoints:
 
 class TestPerformanceEndpoints:
     """效能測試端點"""
-    
-    @pytest.fixture
-    def client(self):
-        app.config['TESTING'] = True
-        with app.test_client() as client:
-            yield client
-    
-    def test_concurrent_webhook_requests(self, client):
+
+    def test_concurrent_webhook_requests(self):
         """測試並發 webhook 請求"""
         import threading
-        import time
-        
+        import json
+        from unittest.mock import patch
+        from main import app
+
         webhook_data = {
             'events': [
                 {
@@ -338,49 +334,33 @@ class TestPerformanceEndpoints:
         
         headers = {
             'Content-Type': 'application/json',
-            'X-Line-Signature': 'test_signature'
+            'X-Line-Signature': 'a_valid_signature'
         }
         
         results = []
         
         def make_request():
             try:
-                with patch('main.chat_service') as mock_chat_service, \
-                     patch('linebot.v3.WebhookHandler.handle') as mock_parse, \
-                     patch('linebot.v3.messaging.MessagingApi.reply_message'):
-                    
-                    mock_event = Mock()
-                    mock_event.type = 'message'
-                    mock_event.message.type = 'text'
-                    mock_event.message.text = 'concurrent test'
-                    mock_event.source.user_id = 'U' + '4' * 32
-                    mock_event.reply_token = 'concurrent_token'
-                    
-                    mock_parse.return_value = [mock_event]
-                    mock_chat_service.handle_message.return_value = Mock(text='Response')
-                    
-                    response = client.post(
-                        '/callback',
-                        data=json.dumps(webhook_data),
-                        headers=headers
-                    )
-                    results.append(response.status_code)
+                with app.test_client() as thread_client:
+                    with patch('main._handle_line_webhook', return_value='OK'):
+                        response = thread_client.post(
+                            '/callback',
+                            data=json.dumps(webhook_data),
+                            headers=headers
+                        )
+                        results.append(response.status_code)
             except Exception as e:
                 results.append(str(e))
         
-        # 建立多個執行緒並發送請求
         threads = []
-        for i in range(5):
+        for _ in range(5):
             t = threading.Thread(target=make_request)
             threads.append(t)
             t.start()
         
-        # 等待所有執行緒完成
         for t in threads:
             t.join()
         
-        # 檢查結果
         assert len(results) == 5
-        # 大部分請求應該成功（可能會有一些因為模擬設定而失敗）
         success_count = sum(1 for r in results if r == 200)
-        assert success_count >= 3  # 至少 60% 成功率
+        assert success_count == 5, f"Expected 5 successful requests, but got {success_count}. Results: {results}"
