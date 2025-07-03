@@ -2,25 +2,56 @@
 
 [中文](README.md) | English
 
-This project is a chatbot using Line as the front-end, connected to multiple LLM providers including OpenAI Assistant API, Anthropic Claude, Google Gemini, and Ollama. The bot supports RAG (Retrieval-Augmented Generation) functionality and will be deployed on Google Cloud Run with Google Cloud SQL for thread management.
+This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram and other platforms, integrated with multiple AI model providers (OpenAI, Anthropic Claude, Google Gemini, Ollama). The bot uses modular architecture design, deployed on Google Cloud Run, and uses Google Cloud SQL for conversation history management.
+
+## Core Features
+
+🤖 **Multi-AI Model Support**: Unified interface integrating OpenAI, Anthropic, Gemini, Ollama  
+🌐 **Multi-Platform Support**: Unified management of LINE, Discord, Telegram platforms  
+📚 **RAG Knowledge Base**: All models support document retrieval and citation features  
+🔗 **Unified Citation Processing**: Consistent citation formatting across models  
+🎯 **Platform Abstraction**: Factory Pattern supports rapid expansion of new platforms  
+🛡️ **Enterprise-Grade Security**: Input validation, rate limiting, error handling  
+📊 **Monitoring & Logging**: Complete system monitoring and performance metrics
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
-- [Obtaining OpenAI API Token](#obtaining-openai-api-token)
-- [Setting Up OpenAI Assistant API](#setting-up-openai-assistant-api)
-- [Configuring the Line Bot](#configuring-the-line-bot)
-- [Configuring Google Cloud SQL](#configuring-google-cloud-sql)
-- [Finalizing Configuration Files](#finalizing-configuration-files)
-- [Deploying to Google Cloud Run](#deploying-to-google-cloud-run)
-- [Testing the Application](#testing-the-application)
+- [AI Model Setup](#ai-model-setup)
+  - [OpenAI Assistant API](#setting-up-openai-assistant-api)
+  - [Anthropic Claude](#setting-up-anthropic-claude)
+  - [Google Gemini](#setting-up-google-gemini)
+  - [Ollama Local Models](#setting-up-ollama-local-models)
+- [Platform Setup](#platform-setup)
+  - [LINE Bot](#configuring-the-line-bot)
+  - [Discord Bot](#setting-up-discord-bot)
+  - [Telegram Bot](#setting-up-telegram-bot)
+- [System Configuration](#system-configuration)
+  - [Database Setup](#configuring-google-cloud-sql)
+  - [Multi-Platform Configuration](#configuration-management)
+- [Deployment](#deployment)
+  - [Local Development](#local-development-setup)
+  - [Google Cloud Run](#deploying-to-google-cloud-run)
 - [Development & Testing](#development--testing)
 
 ## Prerequisites
 
-- A Google Cloud Platform account with billing enabled
-- Access to OpenAI API
-- A Line Developers account
+### Basic Requirements
+- Python 3.8+ development environment
+- Google Cloud Platform account (for deployment and database)
+
+### AI Model Providers (choose at least one)
+- **OpenAI**: API key and Assistant setup
+- **Anthropic Claude**: API key
+- **Google Gemini**: API key
+- **Ollama**: Local model runtime environment
+
+### Chat Platforms (choose at least one)
+- **LINE**: LINE Developers account
+- **Discord**: Discord Developer Portal account
+- **Telegram**: Telegram BotFather setup
+
+## AI Model Setup
 
 ## Obtaining OpenAI API Token
 
@@ -331,6 +362,54 @@ If you want to manually control each step:
    # Production mode (using Gunicorn)
    python wsgi.py
    ```
+
+## System Architecture
+
+### Core Components
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Platform Layer│    │   AI Model Layer │    │   Data Layer    │
+├─────────────────┤    ├──────────────────┤    ├─────────────────┤
+│ • LINE Bot      │    │ • OpenAI         │    │ • PostgreSQL    │
+│ • Discord Bot   │───▶│ • Anthropic      │───▶│ • Thread Mgmt   │
+│ • Telegram Bot  │    │ • Gemini         │    │ • Conv History  │
+│ • Web Chat      │    │ • Ollama         │    │ • User Data     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+          │                       │                       │
+          └───────────────────────┼───────────────────────┘
+                                  ▼
+                    ┌──────────────────────────┐
+                    │    Unified Processing    │
+                    ├──────────────────────────┤
+                    │ • ChatService (Core)    │
+                    │ • ResponseFormatter      │
+                    │ • AudioService          │
+                    │ • ConversationManager   │
+                    └──────────────────────────┘
+```
+
+### Unified Citation Processing
+
+All AI models' document citations are unified through `ResponseFormatter`:
+
+**Processing Flow**:
+1. **AI Model Response** → Contains RAGResponse (answer + sources)
+2. **ResponseFormatter** → Unifies source formatting to readable citations
+3. **Final Response** → Consistent citation format `[1]: Document Name`
+
+**Supported Citation Formats**:
+- **OpenAI**: Assistant API file citations `[i]` → `[i]: filename`
+- **Anthropic**: Claude Files API references `[filename]` → `[i]: filename`  
+- **Gemini**: Semantic Retrieval results → `[i]: filename (Relevance: 95%)`
+- **Ollama**: Vector search results → `[i]: filename (Similarity: 0.89)`
+
+### Design Patterns
+
+- **Factory Pattern**: Dynamic creation of AI models and platforms
+- **Strategy Pattern**: Unified interface for different AI models
+- **Registry Pattern**: Registration management for platforms and models
+- **Adapter Pattern**: Adaptation of platform-specific features
 
 ### Install Test Dependencies
 

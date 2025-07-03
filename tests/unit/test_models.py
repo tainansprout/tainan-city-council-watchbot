@@ -139,13 +139,37 @@ class TestAnthropicModel:
         assert response.content == 'Hello! How can I assist you?'
         assert error is None
     
-    def test_upload_knowledge_file_success(self, anthropic_model, temp_file):
-        is_successful, file_info, error = anthropic_model.upload_knowledge_file(temp_file)
+    @patch('requests.post')
+    def test_upload_knowledge_file_success(self, mock_post, anthropic_model):
+        # Mock API response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'id': 'file-123',
+            'purpose': 'knowledge_base',
+            'filename': 'test.txt'
+        }
+        mock_post.return_value = mock_response
         
-        assert is_successful is True
-        assert file_info.filename == temp_file.split('/')[-1]
-        assert file_info.purpose == 'knowledge_base'
-        assert error is None
+        # Create temporary test file
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write('Test file content')
+            temp_file = f.name
+        
+        try:
+            is_successful, file_info, error = anthropic_model.upload_knowledge_file(temp_file)
+            
+            assert is_successful is True
+            assert file_info.file_id == 'file-123'
+            assert file_info.filename == os.path.basename(temp_file)
+            assert file_info.purpose == 'knowledge_base'
+            assert error is None
+            
+        finally:
+            os.unlink(temp_file)
     
     def test_query_with_rag_no_sources(self, anthropic_model):
         # 沒有知識庫的情況

@@ -12,6 +12,20 @@ def pytest_configure(config):
     # 正確設定 asyncio 的 fixture loop scope
     import pytest_asyncio
     pytest_asyncio.plugin.DEFAULT_FIXTURE_LOOP_SCOPE = "function"
+    
+    # 配置測試標記
+    config.addinivalue_line(
+        "markers", "integration: 標記為整合測試"
+    )
+    config.addinivalue_line(
+        "markers", "slow: 標記為慢速測試"
+    )
+    config.addinivalue_line(
+        "markers", "database: 標記為資料庫相關測試"
+    )
+    config.addinivalue_line(
+        "markers", "external: 標記為需要外部服務的測試"
+    )
 
 # 設定測試環境變數
 os.environ.update({
@@ -165,3 +179,31 @@ def temp_file():
         tmp.write("test content")
     yield path
     os.remove(path)
+
+@pytest.fixture
+def mock_database_session():
+    """Mock 資料庫 session"""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from src.models.database import Base
+    
+    # 使用記憶體 SQLite 資料庫
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    SessionLocal = sessionmaker(bind=engine)
+    
+    session = SessionLocal()
+    yield session
+    session.close()
+
+# 測試收集配置
+def pytest_collection_modifyitems(config, items):
+    """修改測試收集行為"""
+    # 為整合測試添加 slow 標記
+    for item in items:
+        if "integration" in item.nodeid:
+            item.add_marker(pytest.mark.slow)
+        
+        # 為資料庫測試添加標記
+        if "database" in item.nodeid.lower() or "db" in item.nodeid.lower():
+            item.add_marker(pytest.mark.database)

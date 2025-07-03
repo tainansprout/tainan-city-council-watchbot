@@ -1,0 +1,169 @@
+---
+# 多平台設定檔案
+# 此檔案定義所有支援的平台配置
+
+# ============================================================================
+# 平台設定 - 支援多平台同時運行
+# ============================================================================
+
+platforms:
+  # LINE 平台設定
+  line:
+    enabled: true
+    channel_access_token: "YOUR_LINE_CHANNEL_ACCESS_TOKEN"
+    channel_secret: "YOUR_LINE_CHANNEL_SECRET"
+    
+    # LINE 特定設定
+    webhook_path: "/webhooks/line"
+    signature_header: "X-Line-Signature"
+    
+    # 功能開關
+    features:
+      rich_menu: true
+      quick_reply: true
+      flex_message: false
+    
+    # 訊息限制
+    limits:
+      max_text_length: 5000
+      max_audio_duration: 300  # 秒
+    
+  # Discord 平台設定 (未來支援)
+  discord:
+    enabled: false
+    bot_token: "YOUR_DISCORD_BOT_TOKEN"
+    application_id: "YOUR_DISCORD_APPLICATION_ID"
+    
+    # Discord 特定設定
+    webhook_path: "/webhooks/discord"
+    signature_header: "X-Discord-Signature"
+    
+    # 功能開關
+    features:
+      slash_commands: true
+      embeds: true
+      reactions: true
+    
+    # 訊息限制
+    limits:
+      max_text_length: 2000
+      max_embed_fields: 25
+    
+  # Telegram 平台設定 (未來支援)
+  telegram:
+    enabled: false
+    bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
+    
+    # Telegram 特定設定
+    webhook_path: "/webhooks/telegram"
+    webhook_url: "YOUR_WEBHOOK_URL"
+    
+    # 功能開關
+    features:
+      inline_keyboard: true
+      media_groups: true
+      polls: false
+    
+    # 訊息限制
+    limits:
+      max_text_length: 4096
+      max_caption_length: 1024
+    
+  # Web 平台設定 (測試介面)
+  web:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8080
+    
+    # Web 特定設定
+    endpoint: "/chat"
+    cors_enabled: true
+    cors_origins: ["*"]
+    
+    # 功能開關
+    features:
+      file_upload: true
+      markdown: true
+      syntax_highlighting: false
+    
+    # 訊息限制
+    limits:
+      max_text_length: 10000
+      max_file_size: 10485760  # 10MB
+
+# ============================================================================
+# 平台路由設定
+# ============================================================================
+
+routing:
+  # Webhook 路徑對應
+  webhooks:
+    line: "/webhooks/line"
+    discord: "/webhooks/discord" 
+    telegram: "/webhooks/telegram"
+    
+  # 健康檢查路徑
+  health_checks:
+    global: "/health"
+    line: "/health/line"
+    discord: "/health/discord"
+    telegram: "/health/telegram"
+
+# ============================================================================
+# 平台特定指令
+# ============================================================================
+
+platform_commands:
+  # LINE 專用指令
+  line:
+    share: "歡迎分享本聊天機器人給朋友：\nhttps://line.me/R/ti/p/@yourbotid"
+    richmenu: "豐富選單功能說明..."
+    
+  # Discord 專用指令  
+  discord:
+    invite: "邀請機器人到你的伺服器：\nhttps://discord.com/oauth2/authorize?client_id=YOURID"
+    server: "查看伺服器資訊"
+    
+  # Telegram 專用指令
+  telegram:
+    channel: "加入我們的頻道獲取更新：\nhttps://t.me/yourchannel"
+    group: "加入討論群組：\nhttps://t.me/yourgroup"
+
+# ============================================================================
+# 平台特定設定
+# ============================================================================
+
+platform_specific:
+  # LINE 特定設定
+  line:
+    # Rich Menu 設定
+    rich_menu:
+      enabled: true
+      menu_id: "YOUR_RICH_MENU_ID"
+      
+    # Quick Reply 設定
+    quick_reply:
+      enabled: true
+      max_items: 13
+      
+  # Discord 特定設定
+  discord:
+    # 斜線指令設定
+    slash_commands:
+      enabled: true
+      global_commands: true
+      
+    # 嵌入訊息設定
+    embeds:
+      default_color: 0x00ff00
+      footer_text: "Powered by Your Bot"
+      
+  # Telegram 特定設定
+  telegram:
+    # 內聯鍵盤設定
+    inline_keyboard:
+      enabled: true
+      max_buttons_per_row: 3
+      
+    # 解析模式
+    parse_mode: "Markdown"  # HTML, Markdown, MarkdownV2

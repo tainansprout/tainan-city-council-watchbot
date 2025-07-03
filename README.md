@@ -1,27 +1,58 @@
 https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
 中文 | [English](README.en.md)
 
-本專案是使用 Line 作為前端，連接 OpenAI Assistant API 的聊天機器人。機器人將部署在 Google Cloud Run 上，並使用 Google Cloud SQL 來存取聊天線程 ID。
+本專案是一個**多平台聊天機器人**，支援 LINE、Discord、Telegram 等多個平台，整合了多種 AI 模型提供商（OpenAI、Anthropic Claude、Google Gemini、Ollama）。機器人採用模組化架構設計，部署在 Google Cloud Run 上，並使用 Google Cloud SQL 進行對話歷史管理。
+
+## 核心特色
+
+🤖 **多 AI 模型支援**: 統一介面整合 OpenAI、Anthropic、Gemini、Ollama  
+🌐 **多平台支援**: LINE、Discord、Telegram 等平台統一管理  
+📚 **RAG 知識庫**: 所有模型支援文檔檢索與引用功能  
+🔗 **統一引用處理**: 跨模型的一致引用格式化  
+🎯 **平台抽象化**: Factory Pattern 支援快速擴展新平台  
+🛡️ **企業級安全**: 輸入驗證、速率限制、錯誤處理  
+📊 **監控與日志**: 完整的系統監控和性能指標
 
 ## 目錄
 
 - [前置準備](#前置準備)
-- [取得 OpenAI 的 API Token](#取得-openai-的-api-token)
-- [設定 OpenAI Assistant API](#設定-openai-assistant-api)
-- [設定 Line Bot](#設定-line-bot)
-- [設定環境變數](#設定環境變數)
-- [設定 Google Cloud SQL](#設定-google-cloud-sql)
-- [完成設定檔](#完成設定檔)
-- [部署到 Google Cloud Run](#部署到-google-cloud-run)
-- [測試程式運作](#測試程式運作)
+- [AI 模型設定](#ai-模型設定)
+  - [OpenAI Assistant API](#設定-openai-assistant-api)
+  - [Anthropic Claude](#設定-anthropic-claude)
+  - [Google Gemini](#設定-google-gemini)
+  - [Ollama 本地模型](#設定-ollama-本地模型)
+- [平台設定](#平台設定)
+  - [LINE Bot](#設定-line-bot)
+  - [Discord Bot](#設定-discord-bot)
+  - [Telegram Bot](#設定-telegram-bot)
+- [系統配置](#系統配置)
+  - [資料庫設定](#設定-google-cloud-sql)
+  - [多平台配置管理](#配置管理)
+- [部署](#部署)
+  - [本地開發](#本地開發配置)
+  - [Google Cloud Run](#部署到-google-cloud-run)
+- [開發與測試](#開發與測試)
 
 ## 前置準備
 
-- 一個已啟用計費的 Google Cloud Platform 帳號
-- OpenAI API 使用權限
-- Line Developers 帳號
+### 基本需求
+- Python 3.8+ 開發環境
+- Google Cloud Platform 帳號（用於部署和資料庫）
 
-## 取得 OpenAI 的 API Token
+### AI 模型提供商（至少選擇一個）
+- **OpenAI**: API 金鑰和 Assistant 設定
+- **Anthropic Claude**: API 金鑰
+- **Google Gemini**: API 金鑰
+- **Ollama**: 本地模型運行環境
+
+### 聊天平台（至少選擇一個）
+- **LINE**: LINE Developers 帳號
+- **Discord**: Discord Developer Portal 帳號
+- **Telegram**: Telegram BotFather 設定
+
+## AI 模型設定
+
+### 取得 OpenAI 的 API Token
 
 1. [OpenAI Platform](https://platform.openai.com/) 平台中註冊/登入帳號
 
@@ -30,6 +61,58 @@ https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
 3. 進入 Project 後，於左邊尋找 Project → API Key
 
 4. 點選右上角的 `+ Create` ，即可生成 OpenAI 的 API Token。
+
+### 設定 Anthropic Claude
+
+1. **取得 Claude API Key**
+   - 前往 [Anthropic Console](https://console.anthropic.com/)
+   - 註冊並登入帳號
+   - 在 API Keys 頁面建立新的 API Key
+
+2. **選擇模型**
+   - 建議使用 `claude-3-sonnet-20240229` 或 `claude-3-haiku-20240307`
+   - 根據需求選擇平衡效能和成本的模型
+
+### 設定 Google Gemini
+
+1. **取得 Gemini API Key**
+   - 前往 [Google AI Studio](https://aistudio.google.com/)
+   - 登入 Google 帳號
+   - 在 API Keys 頁面建立新的 API Key
+
+2. **選擇模型**
+   - 建議使用 `gemini-1.5-pro-latest` 或 `gemini-1.5-flash-latest`
+   - Gemini 支援長上下文和多模態功能
+
+### 設定 Ollama 本地模型
+
+1. **安裝 Ollama**
+   ```bash
+   # macOS
+   brew install ollama
+   
+   # Linux
+   curl -fsSL https://ollama.ai/install.sh | sh
+   
+   # Windows - 下載安裝程式
+   # https://ollama.ai/download
+   ```
+
+2. **下載模型**
+   ```bash
+   # 下載 Llama 3.1 8B 模型（推薦）
+   ollama pull llama3.1:8b
+   
+   # 或下載其他模型
+   ollama pull mistral:7b
+   ollama pull codellama:13b
+   ```
+
+3. **啟動服務**
+   ```bash
+   ollama serve
+   # 預設在 http://localhost:11434 運行
+   ```
 
 ## 設定 OpenAI Assistant API
 
@@ -69,6 +152,43 @@ https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
    - 將 Webhook URL 設定為稍後部署的 Google Cloud Run 地址（可在部署完成後更新）
    - 啟用 Webhook，將「使用 Webhook」開關切換為開啟
 
+## 平台設定
+
+### 設定 Discord Bot
+
+1. **建立 Discord 應用程式**
+   - 前往 [Discord Developer Portal](https://discord.com/developers/applications)
+   - 點選 "New Application" 建立新應用程式
+   - 為應用程式命名
+
+2. **建立 Bot**
+   - 在左側選單選擇 "Bot"
+   - 點選 "Add Bot" 建立機器人
+   - 複製 Bot Token（注意保密）
+
+3. **設定權限**
+   - 在 "OAuth2" → "URL Generator" 中選擇適當的權限
+   - 生成邀請連結並將 Bot 加入伺服器
+
+### 設定 Telegram Bot
+
+1. **與 BotFather 對話**
+   - 在 Telegram 中搜尋 @BotFather
+   - 發送 `/newbot` 指令建立新機器人
+   - 按照指示設定機器人名稱和用戶名
+
+2. **取得 Bot Token**
+   - BotFather 會提供 Bot Token
+   - 保存此 Token 用於配置
+
+3. **設定 Webhook**
+   - 部署完成後，使用以下 API 設定 Webhook：
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+        -H "Content-Type: application/json" \
+        -d '{"url": "https://your-app.run.app/webhook/telegram"}'
+   ```
+
 ## 設定 Google Cloud SQL
 
 1. **建立 Cloud SQL 個體**
@@ -81,13 +201,44 @@ https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
    - 設定執行個體名稱、密碼等資訊
    - 建立連線操作用之帳戶，並記錄使用者名稱與密碼
    - 建立資料庫
-   - 使用Cloud SQL Studio於資料庫中執行以下SQL指令以建立Table
+   - 使用 Alembic 建立多平台資料庫架構：
+    ```bash
+    # 初始化 Alembic（如果尚未完成）
+    alembic init alembic
+    
+    # 建立初始遷移
+    alembic revision --autogenerate -m "Initial multi-platform schema"
+    
+    # 執行遷移
+    alembic upgrade head
+    ```
+    
+   - 或者手動建立多平台 Table：
     ```sql
+    -- OpenAI thread 管理（支援多平台）
     CREATE TABLE user_thread_table (
-        user_id VARCHAR(255) PRIMARY KEY,
-        thread_id VARCHAR(255),
+        user_id VARCHAR(255) NOT NULL,
+        platform VARCHAR(50) NOT NULL DEFAULT 'line',
+        thread_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, platform)
+    );
+    
+    -- 其他模型的對話歷史（支援多平台）
+    CREATE TABLE simple_conversation_history (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        platform VARCHAR(50) NOT NULL DEFAULT 'line',
+        model_provider VARCHAR(50) NOT NULL,
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    
+    -- 建立效能索引
+    CREATE INDEX idx_thread_user_platform ON user_thread_table(user_id, platform);
+    CREATE INDEX idx_conversation_user_platform ON simple_conversation_history(user_id, platform);
+    CREATE INDEX idx_conversation_user_platform_provider ON simple_conversation_history(user_id, platform, model_provider);
     ```
 
 3. **取得連線資訊**
@@ -167,41 +318,96 @@ vim config/config.yml
 ```
 
 ```yaml
-line:
-  channel_access_token: YOUR_CHANNEL_ACCESS_TOKEN
-  channel_secret: YOUR_CHANNEL_SECRET
+# 應用程式資訊
+app:
+  name: "Multi-Platform Chat Bot"
+  version: "2.0.0"
 
+# AI 模型設定（選擇一個作為主要提供商）
+llm:
+  provider: "openai"  # openai, anthropic, gemini, ollama
+
+# AI 模型提供商設定
 openai:
   api_key: YOUR_OPENAI_API_KEY
   assistant_id: YOUR_ASSISTANT_ID
 
+anthropic:
+  api_key: YOUR_ANTHROPIC_API_KEY
+  model: "claude-3-sonnet-20240229"
+
+gemini:
+  api_key: YOUR_GEMINI_API_KEY
+  model: "gemini-1.5-pro-latest"
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3.1:8b"
+
+# 資料庫設定
 db:
   host: YOUR_DB_HOST
   port: 5432
-  db_name: YOUR_DB_NAME
-  user: YOUR_DB_USER
+  database: YOUR_DB_NAME
+  username: YOUR_DB_USER
   password: YOUR_DB_PASSWORD
   sslmode: verify-ca
   sslrootcert: config/ssl/ca-cert.crt
   sslcert: config/ssl/client.crt
   sslkey: config/ssl/client.key
+
+# 平台設定
+platforms:
+  line:
+    enabled: true
+    channel_access_token: YOUR_LINE_CHANNEL_ACCESS_TOKEN
+    channel_secret: YOUR_LINE_CHANNEL_SECRET
+  
+  discord:
+    enabled: false  # 設為 true 以啟用
+    bot_token: YOUR_DISCORD_BOT_TOKEN
+  
+  telegram:
+    enabled: false  # 設為 true 以啟用
+    bot_token: YOUR_TELEGRAM_BOT_TOKEN
+
+# 文字處理設定
+text_processing:
+  preprocessors: []
+  post_replacements: []
+
+# 指令設定
+commands:
+  help: "提供系統說明和可用指令"
+  reset: "重置對話歷史"
 ```
 
 **方法 2: 使用環境變數**
 
 ```bash
-# 設定環境變數
-export LINE_CHANNEL_ACCESS_TOKEN="your_token"
-export LINE_CHANNEL_SECRET="your_secret"
+# 基本設定
+export LLM_PROVIDER="openai"  # 或 anthropic, gemini, ollama
+
+# AI 模型 API 金鑰（根據所選提供商設定）
 export OPENAI_API_KEY="sk-proj-xxxxxxxx"
 export OPENAI_ASSISTANT_ID="asst_xxxxxxxx"
+export ANTHROPIC_API_KEY="sk-ant-xxxxxxxx"
+export GEMINI_API_KEY="AIza-xxxxxxxx"
+
+# 平台設定（啟用所需平台）
+export LINE_CHANNEL_ACCESS_TOKEN="your_line_token"
+export LINE_CHANNEL_SECRET="your_line_secret"
+export DISCORD_BOT_TOKEN="your_discord_token"
+export TELEGRAM_BOT_TOKEN="your_telegram_token"
+
+# 資料庫設定
 export DB_HOST="your_db_host"
 export DB_USER="your_db_user"
 export DB_PASSWORD="your_db_password"
 export DB_NAME="your_db_name"
 
-# 運行應用
-python main.py
+# 運行應用（使用新的多平台應用）
+python -m src.app
 ```
 
 ### ☁️ 生產環境配置
@@ -349,6 +555,54 @@ cp config/deploy/.env.example config/deploy/.env
    # 生產模式（使用 Gunicorn）
    python wsgi.py
    ```
+
+## 系統架構
+
+### 核心組件
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   平台層        │    │   AI 模型層      │    │   資料層        │
+├─────────────────┤    ├──────────────────┤    ├─────────────────┤
+│ • LINE Bot      │    │ • OpenAI         │    │ • PostgreSQL    │
+│ • Discord Bot   │───▶│ • Anthropic      │───▶│ • Thread 管理   │
+│ • Telegram Bot  │    │ • Gemini         │    │ • 對話歷史      │
+│ • Web Chat      │    │ • Ollama         │    │ • 使用者資料    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+          │                       │                       │
+          └───────────────────────┼───────────────────────┘
+                                  ▼
+                    ┌──────────────────────────┐
+                    │     統一處理層           │
+                    ├──────────────────────────┤
+                    │ • ChatService (核心服務)│
+                    │ • ResponseFormatter      │
+                    │ • AudioService          │
+                    │ • ConversationManager   │
+                    └──────────────────────────┘
+```
+
+### 統一引用處理
+
+所有 AI 模型的文檔引用都通過 `ResponseFormatter` 統一處理：
+
+**處理流程**：
+1. **AI 模型回應** → 包含 RAGResponse (answer + sources)
+2. **ResponseFormatter** → 統一格式化 sources 為可讀引用
+3. **最終回應** → 一致的引用格式 `[1]: 文檔名稱`
+
+**支援的引用格式**：
+- **OpenAI**: Assistant API 文件引用 `[i]` → `[i]: filename`
+- **Anthropic**: Claude Files API 引用 `[filename]` → `[i]: filename`  
+- **Gemini**: Semantic Retrieval 結果 → `[i]: filename (相關性: 95%)`
+- **Ollama**: 向量搜尋結果 → `[i]: filename (相似度: 0.89)`
+
+### 設計模式
+
+- **Factory Pattern**: AI 模型和平台的動態創建
+- **Strategy Pattern**: 不同 AI 模型的統一介面
+- **Registry Pattern**: 平台和模型的註冊管理
+- **Adapter Pattern**: 平台特定功能的適配
 
 ### 安裝測試依賴
 

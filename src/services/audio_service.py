@@ -4,7 +4,7 @@ import logging
 from typing import Any
 from linebot.v3.messaging import TextMessage
 
-from ..models import OpenAIModel
+from ..models.base import FullLLMInterface
 from ..core.exceptions import OpenAIError
 from ..core.error_handler import ErrorHandler
 from .chat_service import ChatService
@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 class AudioService:
-    def __init__(self, model: OpenAIModel, chat_service: ChatService):
+    def __init__(self, model: FullLLMInterface, chat_service: ChatService):
         self.model = model
         self.chat_service = chat_service
         self.error_handler = ErrorHandler()
     
-    def handle_audio_message(self, user_id: str, audio_content: bytes) -> TextMessage:
+    def handle_audio_message(self, user_id: str, audio_content: bytes, platform: str = 'line') -> TextMessage:
         """處理音訊訊息"""
         input_audio_path = None
         
@@ -31,7 +31,7 @@ class AudioService:
             logger.info(f"Audio transcribed for user {user_id}: {text}")
             
             # 使用聊天服務處理轉錄文字
-            return self.chat_service.handle_message(user_id, text)
+            return self.chat_service.handle_message(user_id, text, platform)
             
         except Exception as e:
             logger.error(f"Error processing audio for user {user_id}: {e}")
@@ -58,16 +58,18 @@ class AudioService:
             raise OpenAIError(f"Failed to save audio file: {e}")
     
     def _transcribe_audio(self, input_audio_path: str) -> str:
-        """轉錄音訊檔案"""
+        """轉錄音訊檔案 - 使用統一接口"""
         try:
-            is_successful, response, error_message = self.model.audio_transcriptions(
-                input_audio_path, 'whisper-1'
+            # 使用統一的音訊轉錄接口
+            is_successful, transcribed_text, error_message = self.model.transcribe_audio(
+                input_audio_path, 
+                model='whisper-1'  # 各模型可以有不同的參數處理方式
             )
             
             if not is_successful:
                 raise OpenAIError(f"Audio transcription failed: {error_message}")
             
-            return response['text']
+            return transcribed_text
             
         except Exception as e:
             if isinstance(e, OpenAIError):

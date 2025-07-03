@@ -1,5 +1,6 @@
 import requests
 import logging
+import re
 from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ from .base import (
     RAGResponse
 )
 from ..utils.retry import retry_with_backoff, retry_on_rate_limit, CircuitBreaker
+from ..utils import s2t_converter
 
 
 class OpenAIModel(FullLLMInterface):
@@ -190,16 +192,18 @@ class OpenAIModel(FullLLMInterface):
             if not is_successful:
                 return False, None, error_message
             
-            # 提取來源資訊
-            sources = self._extract_sources_from_response(chat_response.metadata.get('thread_messages', {}))
+            # 使用 OpenAI 特定的引用處理邏輯
+            thread_messages = chat_response.metadata.get('thread_messages', {})
+            formatted_content, sources = self._process_openai_response(thread_messages)
             
             rag_response = RAGResponse(
-                answer=chat_response.content,
+                answer=formatted_content,
                 sources=sources,
                 metadata={
                     'thread_id': thread_id,
                     'model': 'openai-assistant',
-                    'thread_messages': chat_response.metadata.get('thread_messages')
+                    'thread_messages': thread_messages,
+                    'raw_content': chat_response.content
                 }
             )
             
@@ -242,13 +246,19 @@ class OpenAIModel(FullLLMInterface):
         try:
             is_successful, files, error_message = self.list_files()
             if not is_successful:
+                logger.warning(f"Failed to get file references: {error_message}")
                 return {}
             
-            return {
-                file.file_id: file.filename.replace('.txt', '').replace('.json', '') 
-                for file in files
-            }
+            file_dict = {}
+            for file in files:
+                filename = file.filename.replace('.txt', '').replace('.json', '')
+                file_dict[file.file_id] = filename
+            
+            logger.debug(f"Loaded {len(file_dict)} file references")
+            return file_dict
+            
         except Exception as e:
+            logger.error(f"Error getting file references: {e}")
             return {}
     
     def _extract_sources_from_response(self, thread_messages: Dict) -> List[Dict[str, str]]:
@@ -279,6 +289,84 @@ class OpenAIModel(FullLLMInterface):
             logger.error(f"Error extracting sources: {e}")
         
         return sources
+    
+    def _process_openai_response(self, thread_messages: Dict) -> Tuple[str, List[Dict[str, str]]]:
+        """
+        處理 OpenAI Assistant API 的回應，包括引用格式化
+        這個方法封裝了原本的 get_content_and_reference 邏輯
+        """
+        try:
+            # 取得助理回應數據
+            data = self._get_response_data(thread_messages)
+            if not data:
+                logger.debug("_process_openai_response: 沒有找到助理回應數據")
+                return '', []
+            
+            text = data['content'][0]['text']['value']
+            annotations = data['content'][0]['text']['annotations']
+            
+            logger.debug(f"_process_openai_response: 註解數量={len(annotations)}")
+            
+            # 檢查是否有複雜引用格式在原始文本中
+            complex_citations = re.findall(r'【[^】]+】', text)
+            if complex_citations:
+                logger.debug(f"_process_openai_response: 發現 {len(complex_citations)} 個複雜引用格式")
+            
+            # 轉換為繁體中文
+            text = s2t_converter.convert(text)
+            
+            # 取得檔案字典用於引用處理
+            file_dict = self.get_file_references()
+            
+            # 替換註釋文本和建立來源清單
+            sources = []
+            
+            for i, annotation in enumerate(annotations, 1):
+                logger.debug(f"_process_openai_response: 處理註解 {i}: {annotation}")
+                original_text = annotation['text']
+                # 對 annotation 文本也進行 s2t 轉換，確保與主文本一致
+                original_text = s2t_converter.convert(original_text)
+                file_id = annotation['file_citation']['file_id']
+                replacement_text = f"[{i}]"
+                
+                logger.debug(f"  替換 '{original_text}' → '{replacement_text}'")
+                text = text.replace(original_text, replacement_text)
+                
+                # 建立來源清單（供 ResponseFormatter 統一處理）
+                filename = file_dict.get(file_id, 'Unknown')
+                sources.append({
+                    'file_id': file_id,
+                    'filename': filename,
+                    'quote': annotation['file_citation'].get('quote', ''),
+                    'type': 'file_citation'
+                })
+            
+            # 檢查處理後是否還有複雜引用格式
+            remaining_complex = re.findall(r'【[^】]+】', text)
+            if remaining_complex:
+                logger.warning(f"_process_openai_response: 處理後仍有 {len(remaining_complex)} 個未處理的複雜引用")
+            
+            # 直接返回處理後的文本，讓 ResponseFormatter 統一處理 sources
+            final_text = text.strip()
+            
+            logger.debug(f"_process_openai_response: 最終文本長度={len(final_text)}, 生成了 {len(sources)} 個來源")
+            
+            return final_text, sources
+            
+        except Exception as e:
+            logger.error(f"Error processing OpenAI response: {e}")
+            return '', []
+    
+    def _get_response_data(self, response: Dict) -> Dict:
+        """從 OpenAI 回應中提取助理數據"""
+        try:
+            for item in response.get('data', []):
+                if item.get('role') == 'assistant' and item.get('content') and item['content'][0].get('type') == 'text':
+                    return item
+            return None
+        except Exception as e:
+            logger.error(f"Error getting response data: {e}")
+            return None
     
     def transcribe_audio(self, audio_file_path: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
         """音訊轉文字"""
@@ -478,3 +566,100 @@ class OpenAIModel(FullLLMInterface):
             
         except Exception as e:
             return False, None, str(e)
+    
+    # === 🆕 新的用戶級對話管理接口 ===
+    
+    def chat_with_user(self, user_id: str, message: str, platform: str = 'line', **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """
+        主要對話接口：使用 OpenAI Assistant API 的 thread 系統
+        
+        OpenAI 使用原生 thread 管理，與其他模型的簡化對話歷史不同
+        
+        Args:
+            user_id: 用戶 ID (如 Line user ID)
+            message: 用戶訊息
+            platform: 平台識別 (\'line\', \'discord\', \'telegram\')
+            **kwargs: 額外參數
+                
+        Returns:
+            (is_successful, rag_response, error_message)
+        """
+        try:
+            # 1. 取得或創建用戶的 thread
+            from ..database.db import get_thread_id_by_user_id, save_thread_id
+            
+            thread_id = get_thread_id_by_user_id(user_id)
+            
+            if not thread_id:
+                # 創建新 thread
+                is_successful, thread_info, error = self.create_thread()
+                if not is_successful:
+                    return False, None, f"Failed to create thread: {error}"
+                
+                thread_id = thread_info.thread_id
+                save_thread_id(user_id, thread_id)
+                logger.info(f"Created new thread {thread_id} for user {user_id}")
+            
+            # 2. 添加用戶訊息到 thread
+            user_message = ChatMessage(role='user', content=message)
+            is_successful, error = self.add_message_to_thread(thread_id, user_message)
+            if not is_successful:
+                return False, None, f"Failed to add message to thread: {error}"
+            
+            # 3. 執行 Assistant
+            is_successful, chat_response, error = self.run_assistant(thread_id, **kwargs)
+            if not is_successful:
+                return False, None, error
+            
+            # 4. 處理 OpenAI 回應格式（引用等）
+            thread_messages = chat_response.metadata.get('thread_messages', {})
+            formatted_content, sources = self._process_openai_response(thread_messages)
+            
+            # 5. 將處理後的內容轉換為 RAGResponse
+            rag_response = RAGResponse(
+                answer=formatted_content,
+                sources=sources,  # 傳遞 sources 給 ResponseFormatter 統一處理
+                metadata={
+                    'user_id': user_id,
+                    'thread_id': thread_id,
+                    'model_provider': 'openai',
+                    'uses_native_threads': True,
+                    'finish_reason': chat_response.finish_reason,
+                    'raw_metadata': chat_response.metadata,
+                    'raw_content': chat_response.content
+                }
+            )
+            
+            logger.info(f"Completed OpenAI chat with user {user_id}, thread {thread_id}, response length: {len(rag_response.answer) if rag_response else 0}")
+            return True, rag_response, None
+            
+        except Exception as e:
+            logger.error(f"Error in chat_with_user for user {user_id}: {e}")
+            return False, None, str(e)
+    
+    def clear_user_history(self, user_id: str, platform: str = 'line') -> Tuple[bool, Optional[str]]:
+        """清除用戶對話歷史（刪除 OpenAI thread）"""
+        try:
+            from ..database.db import get_thread_id_by_user_id, delete_thread_id
+            
+            # 1. 取得用戶的 thread ID
+            thread_id = get_thread_id_by_user_id(user_id)
+            if not thread_id:
+                logger.info(f"No thread found for user {user_id}")
+                return True, None  # 沒有 thread 也算成功
+            
+            # 2. 刪除 OpenAI thread
+            is_successful, error = self.delete_thread(thread_id)
+            if not is_successful:
+                logger.error(f"Failed to delete OpenAI thread {thread_id}: {error}")
+                # 繼續執行，至少清除本地記錄
+            
+            # 3. 刪除本地 thread 記錄
+            delete_thread_id(user_id)
+            
+            logger.info(f"Cleared conversation history for user {user_id}, thread {thread_id}")
+            return True, None
+            
+        except Exception as e:
+            logger.error(f"Error clearing history for user {user_id}: {e}")
+            return False, str(e)

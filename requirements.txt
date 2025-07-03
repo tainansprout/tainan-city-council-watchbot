@@ -17,6 +17,7 @@ youtube-transcript-api>=0.6.0,<1.0.0
 pyyaml>=6.0,<7.0
 psycopg2-binary>=2.9.0,<3.0.0
 SQLAlchemy>=2.0.0,<3.0.0
+alembic>=1.16.0,<2.0.0
 
 # HTTP requests
 requests>=2.31.0,<3.0.0

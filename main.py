@@ -55,11 +55,13 @@ handler = WebhookHandler(config['line']['channel_secret'])
 
 # 初始化服務
 database = Database(config['db'])
-model = ModelFactory.create_from_config({
-    'provider': 'openai',
-    'api_key': config['openai']['api_key'],
-    'assistant_id': config['openai']['assistant_id']
-})
+
+# 使用正確的配置結構
+model_config = {
+    'provider': config['llm']['provider'],
+    **config[config['llm']['provider']]  # 動態取得對應提供商的配置
+}
+model = ModelFactory.create_from_config(model_config)
 chat_service = ChatService(model, database, config)
 audio_service = AudioService(model, chat_service)
 
@@ -143,7 +145,7 @@ def handle_text_message(event):
     
     # 使用清理後的內容
     clean_text = validation_result['cleaned_content']
-    msg = chat_service.handle_message(user_id, clean_text)
+    msg = chat_service.handle_message(user_id, clean_text, platform='line')
     
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
@@ -163,7 +165,7 @@ def handle_audio_message(event):
         line_bot_blob_api = MessagingApiBlob(api_client)
         audio_content = line_bot_blob_api.get_message_content(message_id=event.message.id)
         
-        msg = audio_service.handle_audio_message(user_id, audio_content)
+        msg = audio_service.handle_audio_message(user_id, audio_content, platform='line')
         
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(

@@ -88,6 +88,31 @@ class BaseLLMInterface(ABC):
         pass
 
 
+class UserConversationInterface(ABC):
+    """用戶級對話管理介面 - 新的簡化統一接口"""
+    
+    @abstractmethod
+    def chat_with_user(self, user_id: str, message: str, platform: str = 'line', **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """
+        主要對話接口：結合對話歷史 + RAG 功能
+        
+        Args:
+            user_id: 用戶 ID (如 Line user ID)
+            message: 用戶訊息
+            platform: 平台識別 ('line', 'discord', 'telegram')
+            **kwargs: 額外參數
+            
+        Returns:
+            (is_successful, rag_response, error_message)
+        """
+        pass
+    
+    @abstractmethod
+    def clear_user_history(self, user_id: str, platform: str = 'line') -> Tuple[bool, Optional[str]]:
+        """清除用戶對話歷史"""
+        pass
+
+
 class RAGInterface(ABC):
     """RAG（檢索增強生成）介面 - 統一的 RAG 功能抽象"""
     
@@ -154,6 +179,6 @@ class ImageInterface(ABC):
         pass
 
 
-class FullLLMInterface(BaseLLMInterface, RAGInterface, AssistantInterface, AudioInterface, ImageInterface):
-    """完整的 LLM 介面 - 包含所有功能（含 RAG）"""
+class FullLLMInterface(BaseLLMInterface, UserConversationInterface, RAGInterface, AssistantInterface, AudioInterface, ImageInterface):
+    """完整的 LLM 介面 - 包含所有功能（含用戶對話管理和 RAG）"""
     pass

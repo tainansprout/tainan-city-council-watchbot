@@ -187,27 +187,26 @@ class TestChatFlow:
         assert isinstance(response, TextMessage)
         assert 'OpenAI API Token 有誤，請重新設定。' in response.text
     
-    @patch('src.services.chat_service.get_file_dict')
-    def test_file_dict_refresh_flow(self, mock_get_file_dict, integration_setup):
-        """測試檔案字典刷新流程"""
+    def test_response_formatter_integration_flow(self, integration_setup):
+        """測試 ResponseFormatter 整合流程（重構後版本）"""
         setup = integration_setup
         chat_service = setup['chat_service']
         
-        # 設定檔案字典模擬
-        mock_get_file_dict.return_value = {
-            'file_123': 'document1',
-            'file_456': 'document2'
-        }
+        # 驗證 ResponseFormatter 正確初始化
+        assert hasattr(chat_service, 'response_formatter')
+        assert chat_service.response_formatter is not None
         
-        # 執行刷新
-        chat_service._refresh_file_dict()
+        # 測試不同來源格式的處理
+        sources = [
+            {'filename': 'document1.txt', 'type': 'file_citation'},
+            {'document_id': 'doc-123', 'title': 'Gemini Document', 'type': 'document'}
+        ]
         
-        # 驗證檔案字典更新
-        assert chat_service.file_dict == {
-            'file_123': 'document1',
-            'file_456': 'document2'
-        }
-        mock_get_file_dict.assert_called_once()
+        result = chat_service.response_formatter._format_sources(sources)
+        
+        # 驗證格式化結果
+        assert '[1]: document1' in result
+        assert '[2]: Gemini Document' in result
 
 
 class TestDatabaseIntegration:
