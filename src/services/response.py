@@ -1,5 +1,7 @@
 import logging
+import json
 from typing import Dict, List, Any
+from flask import Response
 from ..models.base import RAGResponse
 from ..utils import s2t_converter
 
@@ -185,3 +187,32 @@ class ResponseFormatter:
         except Exception as e:
             logger.error(f"Error formatting simple response: {e}")
             return content if content else "回應處理失敗"
+    
+    def json_response(self, data: Dict[str, Any], status_code: int = 200) -> Response:
+        """
+        統一的 JSON 回應處理，確保 UTF-8 編碼
+        
+        Args:
+            data: 要回應的資料字典
+            status_code: HTTP 狀態碼
+            
+        Returns:
+            正確編碼的 Flask Response 物件
+        """
+        try:
+            json_str = json.dumps(data, ensure_ascii=False, indent=2)
+            return Response(
+                json_str, 
+                status=status_code, 
+                mimetype='application/json; charset=utf-8'
+            )
+        except Exception as e:
+            logger.error(f"Error creating JSON response: {e}")
+            # 備用回應
+            error_data = {'error': '回應處理失敗'}
+            json_str = json.dumps(error_data, ensure_ascii=False)
+            return Response(
+                json_str,
+                status=500,
+                mimetype='application/json; charset=utf-8'
+            )

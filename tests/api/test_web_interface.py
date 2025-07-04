@@ -80,7 +80,7 @@ class TestWebInterface:
         assert login_response.status_code == 200
         
         # 模擬成功的聊天服務回應
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_response = Mock()
             mock_response.content = "您好！我是台南議會觀測機器人。"
             mock_process.return_value = mock_response
@@ -368,7 +368,7 @@ class TestWebInterfaceErrorHandling:
         client.post('/chat', data={'password': 'test123'})
         
         # 模擬聊天服務錯誤
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_process.side_effect = Exception("聊天服務錯誤")
             
             response = client.post('/ask', 
@@ -429,7 +429,7 @@ class TestWebInterfaceSecurityFeatures:
         # 模擬惡意輸入
         malicious_input = '<script>alert("xss")</script>'
         
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_response = Mock()
             mock_response.content = f"您輸入了: {malicious_input}"
             mock_process.return_value = mock_response

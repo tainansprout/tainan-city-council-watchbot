@@ -20,7 +20,7 @@ class UserThread(Base):
     __tablename__ = 'user_thread_table'
 
     user_id = Column(String(255), primary_key=True)
-    # platform = Column(String(50), primary_key=True, default='line')  # 暫時註解，直到資料庫更新
+    platform = Column(String(50), primary_key=True, default='line')
     thread_id = Column(String(255))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -89,8 +89,8 @@ class Database:
         """查詢用戶對話串"""
         with self.get_session() as session:
             user_thread = session.query(UserThread).filter(
-                UserThread.user_id == user_id
-                # UserThread.platform == platform  # 暫時註解，直到資料庫更新
+                UserThread.user_id == user_id,
+                UserThread.platform == platform
             ).first()
             return user_thread.thread_id if user_thread else None
 
@@ -98,8 +98,8 @@ class Database:
         """儲存用戶對話串"""
         with self.get_session() as session:
             user_thread = session.query(UserThread).filter(
-                UserThread.user_id == user_id
-                # UserThread.platform == platform  # 暫時註解，直到資料庫更新
+                UserThread.user_id == user_id,
+                UserThread.platform == platform
             ).first()
             
             if user_thread:
@@ -108,7 +108,7 @@ class Database:
             else:
                 user_thread = UserThread(
                     user_id=user_id,
-                    # platform=platform,  # 暫時註解，直到資料庫更新
+                    platform=platform,
                     thread_id=thread_id,
                     created_at=datetime.datetime.utcnow()
                 )
@@ -118,8 +118,8 @@ class Database:
         """刪除用戶對話串"""
         with self.get_session() as session:
             session.query(UserThread).filter(
-                UserThread.user_id == user_id
-                # UserThread.platform == platform  # 暫時註解，直到資料庫更新
+                UserThread.user_id == user_id,
+                UserThread.platform == platform
             ).delete()
 
     def close_engine(self):

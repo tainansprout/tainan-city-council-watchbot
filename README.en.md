@@ -189,44 +189,13 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
    - Set up the instance name and password.
    - Create an account for connection operations, noting down the username and password.
    - Create the database
-   - Use Alembic to create multi-platform database schema:
+   - Use Alembic to create database schema:
     ```bash
-    # Initialize Alembic (if not already done)
-    alembic init alembic
+    # One-click complete database structure setup
+    python scripts/setup_database.py setup
     
-    # Create initial migration
-    alembic revision --autogenerate -m "Initial multi-platform schema"
-    
-    # Execute migration
+    # Or manually use Alembic (advanced users)
     alembic upgrade head
-    ```
-    
-   - Or manually create multi-platform tables:
-    ```sql
-    -- OpenAI thread management (multi-platform support)
-    CREATE TABLE user_thread_table (
-        user_id VARCHAR(255) NOT NULL,
-        platform VARCHAR(50) NOT NULL DEFAULT 'line',
-        thread_id VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user_id, platform)
-    );
-    
-    -- Conversation history for other models (multi-platform support)
-    CREATE TABLE simple_conversation_history (
-        id SERIAL PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        platform VARCHAR(50) NOT NULL DEFAULT 'line',
-        model_provider VARCHAR(50) NOT NULL,
-        role VARCHAR(20) NOT NULL,
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    -- Create performance indexes
-    CREATE INDEX idx_thread_user_platform ON user_thread_table(user_id, platform);
-    CREATE INDEX idx_conversation_user_platform ON simple_conversation_history(user_id, platform);
-    CREATE INDEX idx_conversation_user_platform_provider ON simple_conversation_history(user_id, platform, model_provider);
     ```
 
 3. **Get Connection Information**
@@ -626,19 +595,60 @@ auth:
 │ • LINE Bot      │    │ • OpenAI         │    │ • PostgreSQL    │
 │ • Discord Bot   │───▶│ • Anthropic      │───▶│ • Thread Mgmt   │
 │ • Telegram Bot  │    │ • Gemini         │    │ • Conv History  │
-│ • Web Chat      │    │ • Ollama         │    │ • User Data     │
+│ • Web Chat      │    │ • Ollama         │    │ • Multi-Platform│
 └─────────────────┘    └──────────────────┘    └─────────────────┘
           │                       │                       │
           └───────────────────────┼───────────────────────┘
                                   ▼
                     ┌──────────────────────────┐
-                    │    Unified Processing    │
+                    │      Service Layer      │
                     ├──────────────────────────┤
-                    │ • ChatService (Core)    │
-                    │ • ResponseFormatter      │
-                    │ • AudioService          │
-                    │ • ConversationManager   │
+                    │ • chat.py (Chat Service) │
+                    │ • conversation.py (Conv) │
+                    │ • response.py (Response) │
+                    │ • audio.py (Audio Proc)  │
                     └──────────────────────────┘
+                                  │
+                    ┌──────────────────────────┐
+                    │     Database Layer      │
+                    ├──────────────────────────┤
+                    │ • connection.py (Conn)   │
+                    │ • models.py (Data Model) │
+                    │ • operations.py (Ops)    │
+                    │ • init_db.py (Init)      │
+                    └──────────────────────────┘
+```
+
+### File Structure
+
+```
+src/
+├── services/           # Service Layer
+│   ├── chat.py        # Core chat service
+│   ├── conversation.py # Conversation management
+│   ├── response.py    # Response formatting
+│   └── audio.py       # Audio processing
+├── database/          # Database Layer
+│   ├── connection.py  # Database connection
+│   ├── models.py      # Data models
+│   ├── operations.py  # Database operations
+│   └── init_db.py     # Database initialization
+├── templates/         # Web templates
+│   ├── chat.html
+│   └── login.html
+├── platforms/         # Platform support
+├── models/           # AI model integration
+├── core/             # Core modules
+└── utils/            # Utility modules
+
+scripts/
+└── setup_database.py # One-click database setup
+
+alembic/               # Database migration management
+├── versions/
+│   ├── 000_initial_schema.py      # Complete initial structure
+│   └── 001_add_platform_support.py # Multi-platform support
+└── alembic.ini        # Alembic configuration
 ```
 
 ### Unified Citation Processing
@@ -662,6 +672,31 @@ All AI models' document citations are unified through `ResponseFormatter`:
 - **Strategy Pattern**: Unified interface for different AI models
 - **Registry Pattern**: Registration management for platforms and models
 - **Adapter Pattern**: Adaptation of platform-specific features
+
+### Database Architecture
+
+The system uses PostgreSQL database with multi-platform conversation management. The database structure includes:
+
+- **User Thread Management**: Supports OpenAI Assistant API multi-platform thread management
+- **Conversation History**: Stores conversation records for non-OpenAI models
+- **Multi-Platform Support**: All tables support LINE, Discord, Telegram, and other platforms
+
+### Database Initialization
+
+```bash
+# One-click complete database structure setup
+python scripts/setup_database.py setup
+
+# Check database status
+python scripts/setup_database.py status
+
+# Run health check
+python scripts/setup_database.py health
+
+# Use Alembic directly (advanced users)
+alembic upgrade head  # Execute database migrations
+alembic current       # Check current version
+```
 
 ### Install Test Dependencies
 

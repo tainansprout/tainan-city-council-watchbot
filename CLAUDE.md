@@ -90,12 +90,11 @@ curl https://{service-url}/health
 - **src/platforms/line_handler.py**: LINE platform-specific message handling
 - **src/platforms/factory.py**: Platform factory and registry for handler management
 
-#### Service Layer
-- **src/services/core_chat_service.py**: Platform-agnostic core conversation logic
-- **src/services/conversation_manager_orm.py**: Conversation history management
-- **src/services/response_formatter.py**: Unified response formatting
-- **src/services/chat_service.py**: Legacy chat service (maintained for compatibility)
-- **src/services/audio_service.py**: Audio processing service
+#### Service Layer (重構後)
+- **src/services/chat.py**: Platform-agnostic core conversation logic (原 core_chat_service.py)
+- **src/services/conversation.py**: Conversation history management (整合版)
+- **src/services/response.py**: Unified response formatting (原 response_formatter.py)
+- **src/services/audio.py**: Audio processing service (原 audio_service.py)
 
 #### Configuration Management (v2.0)
 - **src/core/config.py**: ConfigManager singleton with thread-safe configuration caching
@@ -109,9 +108,11 @@ curl https://{service-url}/health
 - **src/models/ollama_model.py**: Local Ollama model integration
 - **src/models/factory.py**: Model factory for provider selection
 
-#### Database Layer
-- **src/models/database.py**: SQLAlchemy ORM models with multi-platform support
-- **src/database/db.py**: Database connection management
+#### Database Layer (重構後)
+- **src/database/connection.py**: Database connection management (原 db.py)
+- **src/database/models.py**: SQLAlchemy ORM models with multi-platform support (原 models/database.py)
+- **src/database/operations.py**: Database operations toolkit (新增)
+- **src/database/init_db.py**: Database initialization scripts (新增)
 
 #### Configuration and Utilities
 - **src/core/config.py**: Multi-platform configuration management
@@ -407,15 +408,16 @@ src/models/
 └── ollama_model.py            # Ollama 本地模型實作
 ```
 
-#### Service Layer Structure
+#### Service Layer Structure (重構後)
 ```
 src/services/
-├── core_chat_service.py       # 核心聊天服務
+├── chat.py                    # 核心聊天服務 (原 core_chat_service.py)
 │   └── CoreChatService        # 平台無關的聊天邏輯
-├── response_formatter.py      # 統一回應格式化
+├── response.py                # 統一回應格式化 (原 response_formatter.py)
 │   └── ResponseFormatter      # 跨模型的引用處理
-├── conversation_manager_orm.py # 對話歷史管理
-└── audio_service.py           # 音訊處理服務
+├── conversation.py            # 對話歷史管理 (整合版)
+│   └── ORMConversationManager # 統一對話管理器
+└── audio.py                   # 音訊處理服務 (原 audio_service.py)
 ```
 
 #### Unified Interface Design
@@ -483,10 +485,19 @@ class FullLLMInterface:
 
 ## Migration and Database Management
 
-### Database Initialization
+### Database Initialization (重構後)
 ```bash
-# Initialize Alembic migrations
-alembic init migrations
+# 一鍵完整資料庫結構設置
+python scripts/setup_database.py setup
+
+# 檢查資料庫狀態
+python scripts/setup_database.py status
+
+# 執行健康檢查
+python scripts/setup_database.py health
+
+# Initialize Alembic migrations (manual method)
+alembic init alembic
 
 # Create initial migration
 alembic revision --autogenerate -m "Initial multi-platform schema"
@@ -495,17 +506,20 @@ alembic revision --autogenerate -m "Initial multi-platform schema"
 alembic upgrade head
 ```
 
-### Platform Migration Commands
+### Platform Migration Commands (重構後)
 ```bash
-# Run database setup script
-./scripts/db.sh init
-
-# Add platform support to existing data
-python scripts/db_commands.py migrate-platform-support
+# Run consolidated database setup script
+python scripts/setup_database.py setup
 
 # Check migration status
 alembic current
 alembic history
+
+# Upgrade to latest version
+alembic upgrade head
+
+# Check database operations health
+python scripts/setup_database.py health
 ```
 
 ## Testing
@@ -524,13 +538,17 @@ python -m pytest --cov=src --cov-report=html
 
 # Run platform-specific tests
 python -m pytest tests/unit/test_platforms.py
-python -m pytest tests/unit/test_core_chat_service.py
+python -m pytest tests/unit/test_chat_service.py
 ```
 
-### Test Structure
+### Test Structure (重構後)
 - `tests/unit/`: Unit tests for individual components
   - `test_platforms.py`: Platform abstraction tests
-  - `test_core_chat_service.py`: Core chat service tests
+  - `test_chat_service.py`: Core chat service tests (原 test_core_chat_service.py)
+  - `test_conversation_service.py`: Conversation management tests (重構版)
+  - `test_response_service.py`: Response formatting tests (原 test_response_formatter.py)
+  - `test_database_models.py`: Database models tests (新增)
+  - `test_database_operations.py`: Database operations tests (新增)
   - `test_models.py`: AI model integration tests
 - `tests/integration/`: End-to-end integration tests
   - `test_platform_integration.py`: Platform workflow tests

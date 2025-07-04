@@ -71,7 +71,7 @@ class TestCompleteLoginLogoutFlow:
         assert '台南議會觀測機器人' in response_text
         
         # 6. 使用聊天功能
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             from unittest.mock import Mock
             mock_response = Mock()
             mock_response.content = "這是測試回應"
@@ -176,7 +176,7 @@ class TestCompleteLoginLogoutFlow:
         # 登入後應該可以訪問
         client.post('/login', json={'password': 'test123'})
         
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             from unittest.mock import Mock
             mock_response = Mock()
             mock_response.content = "測試回應"

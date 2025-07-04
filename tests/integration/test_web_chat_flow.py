@@ -48,7 +48,7 @@ class TestWebChatFlow:
         assert 'chat-container' in login_response.get_data(as_text=True)
         
         # 3. 發送聊天訊息
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_response = Mock()
             mock_response.content = "您好！我是台南議會觀測機器人，請問有什麼可以幫助您的嗎？"
             mock_process.return_value = mock_response
@@ -63,7 +63,7 @@ class TestWebChatFlow:
             assert '台南議會觀測機器人' in data['message']
         
         # 4. 繼續對話
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_response = Mock()
             mock_response.content = "我可以幫您查詢台南市議會的會議記錄、議員資訊等。"
             mock_process.return_value = mock_response
@@ -84,7 +84,7 @@ class TestWebChatFlow:
         
         # 模擬多次 API 調用，確保 session 持續有效
         for i in range(3):
-            with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+            with patch('src.services.chat.CoreChatService.process_message') as mock_process:
                 mock_response = Mock()
                 mock_response.content = f"第 {i+1} 次回應"
                 mock_process.return_value = mock_response
@@ -112,7 +112,7 @@ class TestWebChatFlow:
         ]
         
         for message in test_messages:
-            with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+            with patch('src.services.chat.CoreChatService.process_message') as mock_process:
                 mock_response = Mock()
                 mock_response.content = f"針對「{message[:10]}...」的回應"
                 mock_process.return_value = mock_response
@@ -139,7 +139,7 @@ class TestWebChatFlow:
         
         # 每個會話發送訊息
         for i, session in enumerate(sessions):
-            with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+            with patch('src.services.chat.CoreChatService.process_message') as mock_process:
                 mock_response = Mock()
                 mock_response.content = f"用戶 {i+1} 的回應"
                 mock_process.return_value = mock_response
@@ -185,7 +185,7 @@ class TestWebChatErrorRecovery:
         client.post('/chat', data={'password': 'test123'})
         
         # 第一次請求失敗
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_process.side_effect = Exception("服務暫時不可用")
             
             response = client.post('/ask', 
@@ -195,7 +195,7 @@ class TestWebChatErrorRecovery:
             assert response.status_code == 500
         
         # 第二次請求成功
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_response = Mock()
             mock_response.content = "服務已恢復正常"
             mock_process.return_value = mock_response
@@ -214,7 +214,7 @@ class TestWebChatErrorRecovery:
         client.post('/chat', data={'password': 'test123'})
         
         # 模擬超時
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_process.side_effect = TimeoutError("請求超時")
             
             response = client.post('/ask', 
@@ -261,7 +261,7 @@ class TestWebChatIntegrationWithDatabase:
         client.post('/chat', data={'password': 'test123'})
         
         # 模擬對話管理器
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_response = Mock()
             mock_response.content = "對話已保存到資料庫"
             mock_process.return_value = mock_response
@@ -283,7 +283,7 @@ class TestWebChatIntegrationWithDatabase:
         client.post('/chat', data={'password': 'test123'})
         
         # 模擬資料庫錯誤
-        with patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+        with patch('src.services.chat.CoreChatService.process_message') as mock_process:
             mock_process.side_effect = Exception("資料庫連接失敗")
             
             response = client.post('/ask', 

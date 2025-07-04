@@ -44,9 +44,11 @@ model = ModelFactory.create_from_config({
 
 ## 3. **模組化架構** 📦
 
-### 新增檔案：
-- `src/services/chat_service.py` - 聊天邏輯服務
-- `src/services/audio_service.py` - 音訊處理服務
+### 新增檔案（重構後）：
+- `src/services/chat.py` - 聊天邏輯服務 (原 chat_service.py)
+- `src/services/audio.py` - 音訊處理服務 (原 audio_service.py)
+- `src/services/conversation.py` - 對話管理服務 (整合版)
+- `src/services/response.py` - 回應格式化服務 (原 response_formatter.py)
 
 ### 改善：
 - ✅ 拆分 127 行的大型函數
@@ -56,7 +58,7 @@ model = ModelFactory.create_from_config({
 
 ## 4. **資料庫連線管理** 🗄️
 
-### 改善 `src/db.py`：
+### 改善 `src/database/connection.py` (原 db.py)：
 - ✅ Context Manager 管理 session
 - ✅ 連線池優化設定
 - ✅ 型別提示

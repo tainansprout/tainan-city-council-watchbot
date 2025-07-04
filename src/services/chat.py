@@ -6,11 +6,11 @@ import os
 import logging
 from typing import Dict, Any, Optional, Tuple
 from ..models.base import FullLLMInterface, ModelProvider
-from ..database.db import Database
+from ..database.connection import Database
 from ..utils import preprocess_text, postprocess_text
 from ..core.exceptions import OpenAIError, DatabaseError, ThreadError
 from ..core.error_handler import ErrorHandler
-from .response_formatter import ResponseFormatter
+from .response import ResponseFormatter
 from ..platforms.base import PlatformMessage, PlatformResponse, PlatformUser
 
 logger = logging.getLogger(__name__)
@@ -75,12 +75,19 @@ class CoreChatService:
             logger.error(f"Error handling text message for user {user.user_id}: {type(e).__name__}: {e}")
             logger.error(f"Error details - Platform: {platform}, Message: {text[:100]}...")
             
-            # 對於 LINE 平台使用簡化錯誤訊息，其他平台也使用簡化訊息
-            error_message = self.error_handler.get_error_message(e, use_detailed=False)
-            return PlatformResponse(
-                content=error_message,
-                response_type="text"
-            )
+            # 檢查是否為測試用戶（來自 /chat 介面）
+            is_test_user = user.user_id.startswith("U" + "0" * 32)
+            
+            if is_test_user:
+                # 測試用戶：拋出異常讓上層 /ask 端點處理，顯示詳細錯誤
+                raise
+            else:
+                # 實際平台用戶：使用簡化錯誤訊息
+                error_message = self.error_handler.get_error_message(e, use_detailed=False)
+                return PlatformResponse(
+                    content=error_message,
+                    response_type="text"
+                )
     
     def _handle_audio_message(self, user: PlatformUser, audio_data: bytes, platform: str) -> PlatformResponse:
         """處理音訊訊息"""
@@ -106,12 +113,19 @@ class CoreChatService:
             logger.error(f"Error processing audio for user {user.user_id}: {type(e).__name__}: {e}")
             logger.error(f"Error details - Platform: {platform}, Audio size: {len(audio_data) if audio_data else 0} bytes")
             
-            # 對於音訊錯誤使用簡化訊息
-            error_message = self.error_handler.get_error_message(e, use_detailed=False)
-            return PlatformResponse(
-                content=error_message,
-                response_type="text"
-            )
+            # 檢查是否為測試用戶（來自 /chat 介面）
+            is_test_user = user.user_id.startswith("U" + "0" * 32)
+            
+            if is_test_user:
+                # 測試用戶：拋出異常讓上層 /ask 端點處理，顯示詳細錯誤
+                raise
+            else:
+                # 實際平台用戶：使用簡化錯誤訊息
+                error_message = self.error_handler.get_error_message(e, use_detailed=False)
+                return PlatformResponse(
+                    content=error_message,
+                    response_type="text"
+                )
         
         finally:
             # 清理臨時檔案
@@ -186,13 +200,24 @@ class CoreChatService:
                 platform=platform
             )
             if not is_successful:
-                raise OpenAIError(f"Chat with user failed: {error_message}")
+                # 檢查原始錯誤訊息，保留原始錯誤類型
+                if error_message and 'database' in error_message.lower():
+                    raise DatabaseError(error_message)
+                elif error_message and ('column' in error_message.lower() or 'sql' in error_message.lower()):
+                    raise DatabaseError(error_message)
+                else:
+                    raise OpenAIError(f"Chat with user failed: {error_message}")
             formatted_response = self.response_formatter.format_rag_response(rag_response)
             logger.debug(f"Processed conversation response length: {len(formatted_response)}")
             return formatted_response
         except Exception as e:
-            if isinstance(e, OpenAIError):
+            if isinstance(e, (OpenAIError, DatabaseError)):
                 raise
+            # 檢查是否為資料庫相關錯誤
+            error_str = str(e).lower()
+            if ('database' in error_str or 'sql' in error_str or 'column' in error_str or 
+                'psycopg' in error_str or 'table' in error_str):
+                raise DatabaseError(f"Database operation failed: {e}")
             raise OpenAIError(f"Conversation processing failed: {e}")
     
     def _save_audio_file(self, audio_content: bytes) -> str:

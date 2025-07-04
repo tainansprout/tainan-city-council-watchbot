@@ -16,23 +16,31 @@ pip install -r requirements-orm.txt
 ./scripts/db.sh setup
 ```
 
-### 2. 日常使用命令
+### 2. 日常使用命令 (重構後)
 
 ```bash
-# 檢查資料庫連線和狀態
-./scripts/db.sh check
+# 一鍵完整資料庫設置
+python scripts/setup_database.py setup
 
+# 檢查資料庫狀態
+python scripts/setup_database.py status
+
+# 執行健康檢查
+python scripts/setup_database.py health
+
+# 傳統 Alembic 操作
 # 查看遷移狀態
-./scripts/db.sh status
+alembic current
+alembic history
 
 # 創建新的遷移（當模型改變時）
-./scripts/db.sh migrate -m "Add new feature"
+alembic revision --autogenerate -m "Add new feature"
 
 # 應用遷移到資料庫
-./scripts/db.sh upgrade
+alembic upgrade head
 
 # 回滾上一個遷移
-./scripts/db.sh rollback
+alembic downgrade -1
 ```
 
 ## 資料庫架構
@@ -57,7 +65,7 @@ pip install -r requirements-orm.txt
 ### 連線池設置
 
 ```python
-# 連線池配置 (src/models/database.py)
+# 連線池配置 (src/database/models.py)
 pool_size=20,          # 基本連線數
 max_overflow=30,       # 最大溢出連線
 pool_timeout=30,       # 連線等待超時
@@ -82,7 +90,7 @@ connect_args={
 ### 基本查詢
 
 ```python
-from src.models.database import get_db_session, SimpleConversationHistory
+from src.database.models import get_db_session, SimpleConversationHistory
 
 # 使用 session
 with get_db_session() as session:

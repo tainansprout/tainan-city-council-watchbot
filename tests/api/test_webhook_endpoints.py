@@ -65,7 +65,7 @@ class TestWebhookEndpoints:
     def test_new_webhook_endpoint_line(self, client, line_webhook_data, line_headers):
         """測試新的 LINE webhook 端點 /webhooks/line"""
         with patch('src.platforms.line_handler.LineHandler.handle_webhook') as mock_webhook, \
-             patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process, \
+             patch('src.services.chat.CoreChatService.process_message') as mock_process, \
              patch('src.platforms.line_handler.LineHandler.send_response') as mock_send:
             
             # 模擬 webhook 處理成功
@@ -280,7 +280,7 @@ class TestWebhookErrorHandling:
         }
         
         with patch('src.platforms.line_handler.LineHandler.handle_webhook') as mock_webhook, \
-             patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process:
+             patch('src.services.chat.CoreChatService.process_message') as mock_process:
             
             # webhook 處理正常
             mock_message = Mock()
@@ -317,7 +317,7 @@ class TestWebhookErrorHandling:
         }
         
         with patch('src.platforms.line_handler.LineHandler.handle_webhook') as mock_webhook, \
-             patch('src.services.core_chat_service.CoreChatService.process_message') as mock_process, \
+             patch('src.services.chat.CoreChatService.process_message') as mock_process, \
              patch('src.platforms.line_handler.LineHandler.send_response') as mock_send:
             
             # webhook 處理和訊息處理正常

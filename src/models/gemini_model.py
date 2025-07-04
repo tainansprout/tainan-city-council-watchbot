@@ -14,7 +14,7 @@ from .base import (
     RAGResponse
 )
 from ..utils.retry import retry_on_rate_limit
-from ..services.conversation_manager import get_conversation_manager
+from ..services.conversation import get_conversation_manager
 import logging
 
 logger = logging.getLogger(__name__)

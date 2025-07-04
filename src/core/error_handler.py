@@ -129,7 +129,10 @@ class ErrorHandler:
             return 'database_connection_failed'
         elif 'database' in error_str_lower and 'timeout' in error_str_lower:
             return 'database_timeout'
-        elif 'sql' in error_str_lower or 'query' in error_str_lower:
+        elif ('sql' in error_str_lower or 'query' in error_str_lower or 
+              'column' in error_str_lower or 'table' in error_str_lower or
+              'postgresql' in error_str_lower or 'psycopg' in error_str_lower or
+              'relation' in error_str_lower or 'does not exist' in error_str_lower):
             return 'database_query_failed'
         
         # 音訊相關錯誤

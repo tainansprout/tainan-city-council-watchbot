@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.database import Database, UserThread
+from src.database import Database, UserThreadTable
 from src.core.exceptions import DatabaseError
 
 # 使用 pytest.fixture 來集中管理 mock

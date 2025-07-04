@@ -98,13 +98,13 @@ class TestConversationManagerIntegration:
         # Mock get_db_session to use our test database
         original_get_session = manager.get_session
         
-        with patch('src.services.conversation_manager_orm.get_db_session') as mock_get_session:
+        with patch('src.services.conversation_manager.get_db_session') as mock_get_session:
             mock_get_session.side_effect = original_get_session
             yield manager
     
     def test_orm_conversation_manager_full_workflow(self, test_database):
         """測試 ORM 對話管理器完整工作流程"""
-        from src.services.conversation_manager_orm import ORMConversationManager
+        from src.services.conversation import ORMConversationManager
         
         manager = ORMConversationManager()
         user_id = "integration_test_user"
@@ -137,7 +137,7 @@ class TestConversationManagerIntegration:
     
     def test_multi_provider_conversations(self, test_database):
         """測試多提供商對話管理"""
-        from src.services.conversation_manager_orm import ORMConversationManager
+        from src.services.conversation import ORMConversationManager
         
         manager = ORMConversationManager()
         user_id = "multi_provider_user"
@@ -166,7 +166,7 @@ class TestConversationManagerIntegration:
     
     def test_conversation_cleanup(self, test_database):
         """測試對話清理功能"""
-        from src.services.conversation_manager_orm import ORMConversationManager
+        from src.services.conversation import ORMConversationManager
         from datetime import datetime, timedelta
         
         manager = ORMConversationManager()
@@ -286,14 +286,14 @@ class TestFullDatabaseIntegration:
     def test_end_to_end_conversation_flow(self):
         """測試端到端對話流程"""
         from src.models.database import DatabaseManager
-        from src.services.conversation_manager_orm import ORMConversationManager
+        from src.services.conversation import ORMConversationManager
         
         # 設置測試資料庫
         manager = DatabaseManager("sqlite:///:memory:")
         manager.create_all_tables()
         
         # Mock 全域 session 取得函數
-        with patch('src.services.conversation_manager_orm.get_db_session') as mock_get_session:
+        with patch('src.services.conversation_manager.get_db_session') as mock_get_session:
             mock_get_session.side_effect = manager.get_session
             
             conv_manager = ORMConversationManager()

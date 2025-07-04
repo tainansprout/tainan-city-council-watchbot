@@ -7,13 +7,13 @@ from linebot.v3.messaging import TextMessage
 from ..models.base import FullLLMInterface
 from ..core.exceptions import OpenAIError
 from ..core.error_handler import ErrorHandler
-from .chat_service import ChatService
+from .chat import CoreChatService
 
 logger = logging.getLogger(__name__)
 
 
 class AudioService:
-    def __init__(self, model: FullLLMInterface, chat_service: ChatService):
+    def __init__(self, model: FullLLMInterface, chat_service: CoreChatService):
         self.model = model
         self.chat_service = chat_service
         self.error_handler = ErrorHandler()

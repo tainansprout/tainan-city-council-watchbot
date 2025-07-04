@@ -427,10 +427,10 @@ class TestAnthropicModel:
         assert rag_response.metadata['user_id'] == 'test_user_123'
         assert rag_response.metadata['model_provider'] == 'anthropic'
         
-        # 驗證方法調用
-        mock_get_conversations.assert_called_once_with('test_user_123', limit=5)
-        mock_conversation_manager.add_message.assert_any_call('test_user_123', 'anthropic', 'user', 'What can you tell me about our previous discussion?')
-        mock_conversation_manager.add_message.assert_any_call('test_user_123', 'anthropic', 'assistant', "Based on our conversation, here's my response.")
+        # 驗證方法調用 (現在包含 platform 參數)
+        mock_get_conversations.assert_called_once_with('test_user_123', 'line', limit=5)
+        mock_conversation_manager.add_message.assert_any_call('test_user_123', 'anthropic', 'user', 'What can you tell me about our previous discussion?', 'line')
+        mock_conversation_manager.add_message.assert_any_call('test_user_123', 'anthropic', 'assistant', "Based on our conversation, here's my response.", 'line')
     
     @patch('src.models.anthropic_model.AnthropicModel.query_with_rag')
     @patch('src.models.anthropic_model.AnthropicModel._get_recent_conversations')

@@ -2,18 +2,18 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from linebot.v3.messaging import TextMessage
 
-from src.services.chat_service import ChatService
-from src.services.audio_service import AudioService
+from src.services.chat import CoreChatService
+from src.services.audio import AudioService
 from src.core.exceptions import OpenAIError, DatabaseError, ThreadError
 from src.models.base import ChatResponse, RAGResponse
 
 
 class TestChatService:
-    """聊天服務單元測試 - 重構後版本"""
+    """聊天服務單元測試"""
     
     @pytest.fixture
     def chat_service(self, mock_openai_model, mock_database, mock_config):
-        return ChatService(mock_openai_model, mock_database, mock_config)
+        return CoreChatService(mock_openai_model, mock_database, mock_config)
     
     def test_handle_help_command(self, chat_service):
         response = chat_service.handle_message('test_user', '/help')

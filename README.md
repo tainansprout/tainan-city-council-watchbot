@@ -202,44 +202,13 @@
    - 設定執行個體名稱、密碼等資訊
    - 建立連線操作用之帳戶，並記錄使用者名稱與密碼
    - 建立資料庫
-   - 使用 Alembic 建立多平台資料庫架構：
+   - 使用 Alembic 建立資料庫架構：
     ```bash
-    # 初始化 Alembic（如果尚未完成）
-    alembic init alembic
+    # 一鍵建立完整資料庫結構
+    python scripts/setup_database.py setup
     
-    # 建立初始遷移
-    alembic revision --autogenerate -m "Initial multi-platform schema"
-    
-    # 執行遷移
+    # 或者手動使用 Alembic（進階用戶）
     alembic upgrade head
-    ```
-    
-   - 或者手動建立多平台 Table：
-    ```sql
-    -- OpenAI thread 管理（支援多平台）
-    CREATE TABLE user_thread_table (
-        user_id VARCHAR(255) NOT NULL,
-        platform VARCHAR(50) NOT NULL DEFAULT 'line',
-        thread_id VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user_id, platform)
-    );
-    
-    -- 其他模型的對話歷史（支援多平台）
-    CREATE TABLE simple_conversation_history (
-        id SERIAL PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        platform VARCHAR(50) NOT NULL DEFAULT 'line',
-        model_provider VARCHAR(50) NOT NULL,
-        role VARCHAR(20) NOT NULL,
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    -- 建立效能索引
-    CREATE INDEX idx_thread_user_platform ON user_thread_table(user_id, platform);
-    CREATE INDEX idx_conversation_user_platform ON simple_conversation_history(user_id, platform);
-    CREATE INDEX idx_conversation_user_platform_provider ON simple_conversation_history(user_id, platform, model_provider);
     ```
 
 3. **取得連線資訊**
@@ -643,19 +612,60 @@ auth:
 │ • LINE Bot      │    │ • OpenAI         │    │ • PostgreSQL    │
 │ • Discord Bot   │───▶│ • Anthropic      │───▶│ • Thread 管理   │
 │ • Telegram Bot  │    │ • Gemini         │    │ • 對話歷史      │
-│ • Web Chat      │    │ • Ollama         │    │ • 使用者資料    │
+│ • Web Chat      │    │ • Ollama         │    │ • 多平台支援    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
           │                       │                       │
           └───────────────────────┼───────────────────────┘
                                   ▼
                     ┌──────────────────────────┐
-                    │     統一處理層           │
+                    │        服務層            │
                     ├──────────────────────────┤
-                    │ • ChatService (核心服務)│
-                    │ • ResponseFormatter      │
-                    │ • AudioService          │
-                    │ • ConversationManager   │
+                    │ • chat.py (聊天服務)    │
+                    │ • conversation.py (對話) │
+                    │ • response.py (回應格式) │
+                    │ • audio.py (音訊處理)   │
                     └──────────────────────────┘
+                                  │
+                    ┌──────────────────────────┐
+                    │        資料庫層          │
+                    ├──────────────────────────┤
+                    │ • connection.py (連接)   │
+                    │ • models.py (資料模型)   │
+                    │ • operations.py (操作)   │
+                    │ • init_db.py (初始化)    │
+                    └──────────────────────────┘
+```
+
+### 檔案結構
+
+```
+src/
+├── services/           # 服務層
+│   ├── chat.py        # 核心聊天服務
+│   ├── conversation.py # 對話管理
+│   ├── response.py    # 回應格式化
+│   └── audio.py       # 音訊處理
+├── database/          # 資料庫層
+│   ├── connection.py  # 資料庫連接
+│   ├── models.py      # 資料模型
+│   ├── operations.py  # 資料庫操作工具
+│   └── init_db.py     # 資料庫初始化
+├── templates/         # 網頁模板
+│   ├── chat.html
+│   └── login.html
+├── platforms/         # 平台支援
+├── models/           # AI 模型整合
+├── core/             # 核心模組
+└── utils/            # 工具模組
+
+scripts/
+└── setup_database.py # 一鍵資料庫設置
+
+alembic/               # 資料庫遷移管理
+├── versions/
+│   ├── 000_initial_schema.py      # 完整初始結構
+│   └── 001_add_platform_support.py # 多平台支援
+└── alembic.ini        # Alembic 配置
 ```
 
 ### 統一引用處理
@@ -679,6 +689,31 @@ auth:
 - **Strategy Pattern**: 不同 AI 模型的統一介面
 - **Registry Pattern**: 平台和模型的註冊管理
 - **Adapter Pattern**: 平台特定功能的適配
+
+### 資料庫架構
+
+系統使用 PostgreSQL 資料庫，支援多平台對話管理。資料庫結構包含：
+
+- **用戶 Thread 管理**: 支援 OpenAI Assistant API 的多平台線程管理
+- **對話歷史**: 儲存非 OpenAI 模型的對話記錄
+- **多平台支援**: 所有表格都支援 LINE、Discord、Telegram 等平台
+
+### 資料庫初始化
+
+```bash
+# 一鍵建立完整資料庫結構
+python scripts/setup_database.py setup
+
+# 檢查資料庫狀態
+python scripts/setup_database.py status
+
+# 執行健康檢查
+python scripts/setup_database.py health
+
+# 使用 Alembic 直接管理（進階用戶）
+alembic upgrade head  # 執行資料庫遷移
+alembic current       # 查看目前版本
+```
 
 ### 安裝測試依賴
 

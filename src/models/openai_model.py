@@ -586,9 +586,9 @@ class OpenAIModel(FullLLMInterface):
         """
         try:
             # 1. 取得或創建用戶的 thread
-            from ..database.db import get_thread_id_by_user_id, save_thread_id
+            from ..database.connection import get_thread_id_by_user_id, save_thread_id
             
-            thread_id = get_thread_id_by_user_id(user_id)
+            thread_id = get_thread_id_by_user_id(user_id, platform)
             
             if not thread_id:
                 # 創建新 thread
@@ -597,8 +597,8 @@ class OpenAIModel(FullLLMInterface):
                     return False, None, f"Failed to create thread: {error}"
                 
                 thread_id = thread_info.thread_id
-                save_thread_id(user_id, thread_id)
-                logger.info(f"Created new thread {thread_id} for user {user_id}")
+                save_thread_id(user_id, thread_id, platform)
+                logger.info(f"Created new thread {thread_id} for user {user_id} on platform {platform}")
             
             # 2. 添加用戶訊息到 thread
             user_message = ChatMessage(role='user', content=message)
@@ -640,12 +640,12 @@ class OpenAIModel(FullLLMInterface):
     def clear_user_history(self, user_id: str, platform: str = 'line') -> Tuple[bool, Optional[str]]:
         """清除用戶對話歷史（刪除 OpenAI thread）"""
         try:
-            from ..database.db import get_thread_id_by_user_id, delete_thread_id
+            from ..database.connection import get_thread_id_by_user_id, delete_thread_id
             
             # 1. 取得用戶的 thread ID
-            thread_id = get_thread_id_by_user_id(user_id)
+            thread_id = get_thread_id_by_user_id(user_id, platform)
             if not thread_id:
-                logger.info(f"No thread found for user {user_id}")
+                logger.info(f"No thread found for user {user_id} on platform {platform}")
                 return True, None  # 沒有 thread 也算成功
             
             # 2. 刪除 OpenAI thread
@@ -655,9 +655,9 @@ class OpenAIModel(FullLLMInterface):
                 # 繼續執行，至少清除本地記錄
             
             # 3. 刪除本地 thread 記錄
-            delete_thread_id(user_id)
+            delete_thread_id(user_id, platform)
             
-            logger.info(f"Cleared conversation history for user {user_id}, thread {thread_id}")
+            logger.info(f"Cleared conversation history for user {user_id} on platform {platform}, thread {thread_id}")
             return True, None
             
         except Exception as e:

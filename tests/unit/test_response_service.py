@@ -1,7 +1,11 @@
+"""
+回應服務測試
+測試 src/services/response.py 中的 ResponseFormatter
+"""
 import pytest
 from unittest.mock import Mock, patch
 
-from src.services.response_formatter import ResponseFormatter
+from src.services.response import ResponseFormatter
 from src.models.base import RAGResponse
 
 
@@ -166,7 +170,7 @@ class TestResponseFormatter:
         result = formatter.format_rag_response(rag_response)
         assert result == ''
     
-    @patch('src.services.response_formatter.s2t_converter')
+    @patch('src.services.response.s2t_converter')
     def test_chinese_conversion_error_handling(self, mock_converter, formatter):
         """測試中文轉換錯誤處理"""
         mock_converter.convert.side_effect = Exception("Conversion error")
@@ -176,3 +180,140 @@ class TestResponseFormatter:
         
         # 即使轉換失敗，也應該返回原始內容
         assert '測試回應' in result or '回應處理失敗' in result
+
+
+class TestJSONResponse:
+    """測試 JSON 回應處理"""
+    
+    @pytest.fixture
+    def formatter(self):
+        config = {'text_processing': {}}
+        return ResponseFormatter(config)
+    
+    def test_json_response_basic(self, formatter):
+        """測試基本 JSON 回應"""
+        data = {'message': 'Hello', 'status': 'success'}
+        response = formatter.json_response(data)
+        
+        # 檢查回應類型和狀態碼
+        assert response.status_code == 200
+        assert response.content_type == 'application/json; charset=utf-8'
+        
+        # 檢查內容
+        import json
+        content = json.loads(response.get_data(as_text=True))
+        assert content['message'] == 'Hello'
+        assert content['status'] == 'success'
+    
+    def test_json_response_chinese_text(self, formatter):
+        """測試中文內容的 JSON 回應"""
+        data = {
+            'name': '台南議會觀測機器人',
+            'message': '測試中文回應',
+            'error': '需要先登入'
+        }
+        response = formatter.json_response(data)
+        
+        # 檢查狀態和編碼
+        assert response.status_code == 200
+        assert 'charset=utf-8' in response.content_type
+        
+        # 檢查中文內容正確輸出（不是 Unicode 編碼）
+        content_text = response.get_data(as_text=True)
+        assert '台南議會觀測機器人' in content_text
+        assert '測試中文回應' in content_text
+        assert '需要先登入' in content_text
+        
+        # 確保不是 Unicode 轉義格式
+        assert '\\u' not in content_text
+    
+    def test_json_response_custom_status_code(self, formatter):
+        """測試自定義狀態碼"""
+        data = {'error': '密碼錯誤', 'success': False}
+        response = formatter.json_response(data, status_code=401)
+        
+        assert response.status_code == 401
+        assert response.content_type == 'application/json; charset=utf-8'
+        
+        import json
+        content = json.loads(response.get_data(as_text=True))
+        assert content['error'] == '密碼錯誤'
+        assert content['success'] is False
+    
+    def test_json_response_complex_data(self, formatter):
+        """測試複雜資料結構"""
+        data = {
+            'platforms': ['line', 'discord'],
+            'models': {
+                'provider': 'openai',
+                'available_providers': ['openai', 'ollama']
+            },
+            'config': {
+                'enabled': True,
+                'max_length': 1000
+            }
+        }
+        response = formatter.json_response(data)
+        
+        assert response.status_code == 200
+        
+        import json
+        content = json.loads(response.get_data(as_text=True))
+        assert content['platforms'] == ['line', 'discord']
+        assert content['models']['provider'] == 'openai'
+        assert content['config']['enabled'] is True
+    
+    def test_json_response_error_handling(self, formatter):
+        """測試錯誤處理"""
+        # 創建一個無法序列化的物件
+        import datetime
+        
+        class UnserializableObject:
+            def __init__(self):
+                self.created = datetime.datetime.now()
+        
+        data = {
+            'message': 'test',
+            'unserializable': UnserializableObject()  # 這會導致 JSON 序列化失敗
+        }
+        
+        response = formatter.json_response(data)
+        
+        # 應該返回錯誤回應
+        assert response.status_code == 500
+        assert response.content_type == 'application/json; charset=utf-8'
+        
+        import json
+        content = json.loads(response.get_data(as_text=True))
+        assert content['error'] == '回應處理失敗'
+    
+    def test_json_response_empty_data(self, formatter):
+        """測試空資料"""
+        data = {}
+        response = formatter.json_response(data)
+        
+        assert response.status_code == 200
+        assert response.content_type == 'application/json; charset=utf-8'
+        
+        import json
+        content = json.loads(response.get_data(as_text=True))
+        assert content == {}
+    
+    def test_json_response_none_values(self, formatter):
+        """測試包含 None 值的資料"""
+        data = {
+            'message': None,
+            'user': 'test_user',
+            'data': None,
+            'success': True
+        }
+        response = formatter.json_response(data)
+        
+        assert response.status_code == 200
+        
+        import json
+        content = json.loads(response.get_data(as_text=True))
+        assert content['message'] is None
+        assert content['user'] == 'test_user'
+        assert content['data'] is None
+        assert content['success'] is True

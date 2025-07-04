@@ -1,9 +1,10 @@
 """
-核心聊天服務的單元測試
+聊天服務的單元測試
+測試 src/services/chat.py 中的 CoreChatService
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from src.services.core_chat_service import CoreChatService
+from src.services.chat import CoreChatService
 from src.platforms.base import PlatformMessage, PlatformResponse, PlatformUser, PlatformType
 from src.models.base import ModelProvider, RAGResponse
 from src.core.exceptions import OpenAIError, DatabaseError, ThreadError
@@ -219,8 +220,8 @@ class TestErrorHandling:
 class TestAudioProcessing:
     """測試音訊處理"""
     
-    @patch('src.services.core_chat_service.os.path.exists')
-    @patch('src.services.core_chat_service.os.remove')
+    @patch('src.services.chat.os.path.exists')
+    @patch('src.services.chat.os.remove')
     @patch('builtins.open', create=True)
     def test_handle_audio_message(self, mock_open, mock_remove, mock_exists, chat_service, sample_user):
         """測試處理音訊訊息"""

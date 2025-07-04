@@ -198,7 +198,7 @@ def mock_database_session():
     """Mock 資料庫 session"""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from src.models.database import Base
+    from src.database.models import Base
     
     # 使用記憶體 SQLite 資料庫
     engine = create_engine("sqlite:///:memory:")

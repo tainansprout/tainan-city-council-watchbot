@@ -8,7 +8,7 @@ import os
 os.environ.setdefault('FLASK_ENV', 'testing')
 
 from main import create_app
-from src.services.core_chat_service import CoreChatService
+from src.services.chat import CoreChatService
 
 
 class TestHealthEndpoint:

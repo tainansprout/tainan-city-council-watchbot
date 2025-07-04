@@ -71,7 +71,7 @@ class TestPlatformIntegration:
             assert app.config == test_config
             assert app.model == mock_model
             assert app.database == mock_database
-            assert app.core_chat_service is not None
+            assert app.chat is not None
     
     @patch('src.models.factory.ModelFactory.create_from_config')
     @patch('src.database.db.Database')

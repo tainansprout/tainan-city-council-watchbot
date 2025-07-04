@@ -4,8 +4,8 @@ from linebot.v3.messaging import TextMessage, AudioMessage
 import tempfile
 import os
 
-from src.services.chat_service import ChatService
-from src.services.audio_service import AudioService
+from src.services.chat import CoreChatService
+from src.services.audio import AudioService
 from src.models.factory import ModelFactory
 from src.database import Database
 from src.models.base import ChatMessage, ChatResponse, RAGResponse, FileInfo, ThreadInfo
@@ -51,12 +51,12 @@ class TestChatFlow:
         mock_model.assistant_id = 'test_assistant'
         
         # 建立服務實例
-        chat_service = ChatService(mock_model, mock_database, mock_config)
-        audio_service = AudioService(mock_model, chat_service)
+        chat_service = CoreChatService(mock_model, mock_database, mock_config)
+        audio = AudioService(mock_model, chat_service)
         
         return {
             'chat_service': chat_service,
-            'audio_service': audio_service,
+            'audio': audio,
             'mock_model': mock_model,
             'mock_database': mock_database,
             'config': mock_config
@@ -106,7 +106,7 @@ class TestChatFlow:
     def test_complete_audio_to_chat_flow(self, integration_setup):
         """測試完整的語音轉文字再聊天的流程"""
         setup = integration_setup
-        audio_service = setup['audio_service']
+        audio = setup['audio']
         mock_model = setup['mock_model']
         mock_database = setup['mock_database']
 
@@ -115,12 +115,12 @@ class TestChatFlow:
         mock_model.retrieve_thread.return_value = (True, ThreadInfo(thread_id='thread_123'), None)
         
         audio_content = b'fake_audio_data'
-        with patch.object(audio_service, '_transcribe_audio', return_value='請問今天的天氣如何？') as mock_transcribe_audio,              patch('os.path.exists', return_value=True),              patch('os.remove') as mock_remove,              patch('builtins.open', create=True),              patch('uuid.uuid4') as mock_uuid:
+        with patch.object(audio, '_transcribe_audio', return_value='請問今天的天氣如何？') as mock_transcribe_audio,              patch('os.path.exists', return_value=True),              patch('os.remove') as mock_remove,              patch('builtins.open', create=True),              patch('uuid.uuid4') as mock_uuid:
             
             mock_uuid.return_value.__str__ = Mock(return_value='test-uuid')
             
             # 執行測試
-            response = audio_service.handle_audio_message('user_123', audio_content)
+            response = audio.handle_audio_message('user_123', audio_content)
             
             # 驗證結果
             assert isinstance(response, TextMessage)
@@ -187,14 +187,14 @@ class TestChatFlow:
         assert isinstance(response, TextMessage)
         assert 'OpenAI API Token 有誤，請重新設定。' in response.text
     
-    def test_response_formatter_integration_flow(self, integration_setup):
+    def test_response_integration_flow(self, integration_setup):
         """測試 ResponseFormatter 整合流程（重構後版本）"""
         setup = integration_setup
         chat_service = setup['chat_service']
         
         # 驗證 ResponseFormatter 正確初始化
-        assert hasattr(chat_service, 'response_formatter')
-        assert chat_service.response_formatter is not None
+        assert hasattr(chat_service, 'response')
+        assert chat_service.response is not None
         
         # 測試不同來源格式的處理
         sources = [
@@ -202,7 +202,7 @@ class TestChatFlow:
             {'document_id': 'doc-123', 'title': 'Gemini Document', 'type': 'document'}
         ]
         
-        result = chat_service.response_formatter._format_sources(sources)
+        result = chat_service.response._format_sources(sources)
         
         # 驗證格式化結果
         assert '[1]: document1' in result

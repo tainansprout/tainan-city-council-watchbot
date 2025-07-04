@@ -17,8 +17,8 @@ from .core.error_handler import ErrorHandler
 
 # 模型和服務
 from .models.factory import ModelFactory
-from .database.db import Database
-from .services.core_chat_service import CoreChatService
+from .database.connection import Database
+from .services.chat import CoreChatService
 
 # 平台架構
 from .platforms.factory import get_platform_factory, get_config_validator
@@ -53,16 +53,22 @@ class MultiPlatformChatBot:
         
         # Flask 應用程式 - 設定模板和靜態文件路徑
         import os
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        template_folder = os.path.join(project_root, 'templates')
+        src_root = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(src_root)
+        template_folder = os.path.join(src_root, 'templates')  # src/templates/
         static_folder = os.path.join(project_root, 'static') if os.path.exists(os.path.join(project_root, 'static')) else None
         
         self.app = Flask(__name__, 
                         template_folder=template_folder,
                         static_folder=static_folder)
         
+        # 設置 Flask 配置 - 確保 JSON 正確編碼中文
+        self.app.config['JSON_AS_ASCII'] = False
+        self.app.config['JSONIFY_MIMETYPE'] = 'application/json; charset=utf-8'
+        
         # 初始化應用程式
         self._initialize_app()
+    
     
     def _initialize_app(self):
         """初始化應用程式組件"""
@@ -140,6 +146,12 @@ class MultiPlatformChatBot:
     def _initialize_core_service(self):
         """初始化核心聊天服務"""
         logger.info("Initializing core chat service...")
+        
+        # 初始化回應格式化器
+        from .services.response import ResponseFormatter
+        self.response_formatter = ResponseFormatter(self.config)
+        
+        # 初始化核心聊天服務
         self.core_chat_service = CoreChatService(
             model=self.model,
             database=self.database,
@@ -186,12 +198,27 @@ class MultiPlatformChatBot:
         # 根路徑
         @self.app.route("/")
         def home():
-            return jsonify({
+            # 獲取當前使用的模型信息
+            model_info = {
+                'provider': self.config.get('llm', {}).get('provider', 'unknown'),
+                'available_providers': []
+            }
+            
+            # 檢查可用的模型提供商
+            for provider in ['openai', 'anthropic', 'gemini', 'ollama']:
+                if self.config.get(provider, {}).get('api_key') or provider == 'ollama':
+                    model_info['available_providers'].append(provider)
+            
+            response_data = {
                 'name': self.config.get('app', {}).get('name', 'Multi-Platform Chat Bot'),
                 'version': self.config.get('app', {}).get('version', '2.0.0'),
                 'platforms': [p.value for p in self.platform_manager.get_enabled_platforms()],
+                'models': model_info,
                 'status': 'running'
-            })
+            }
+            
+            # 使用 ResponseFormatter 的 JSON 回應處理
+            return self.response_formatter.json_response(response_data)
         
         # 指標端點
         @self.app.route("/metrics")
@@ -216,11 +243,11 @@ class MultiPlatformChatBot:
             elif request.method == 'POST':
                 # POST 請求僅接受 JSON 格式登入
                 if not request.is_json:
-                    return jsonify({'success': False, 'error': '請使用 JSON 格式提交'}), 400
+                    return self.response_formatter.json_response({'success': False, 'error': '請使用 JSON 格式提交'}, 400)
                 
                 data = request.get_json()
                 if not data or 'password' not in data:
-                    return jsonify({'success': False, 'error': '缺少密碼欄位'}), 400
+                    return self.response_formatter.json_response({'success': False, 'error': '缺少密碼欄位'}, 400)
                 
                 password = data.get('password', '')
                 
@@ -229,9 +256,9 @@ class MultiPlatformChatBot:
                 if test_auth and test_auth.verify_password(password):
                     __import__('flask').session['test_authenticated'] = True
                     __import__('flask').session.permanent = True
-                    return jsonify({'success': True, 'message': '登入成功'})
+                    return self.response_formatter.json_response({'success': True, 'message': '登入成功'})
                 else:
-                    return jsonify({'success': False, 'error': '密碼錯誤'}), 401
+                    return self.response_formatter.json_response({'success': False, 'error': '密碼錯誤'}, 401)
         
         # JSON 登入端點
         @self.app.route('/login', methods=['GET', 'POST'])
@@ -246,11 +273,11 @@ class MultiPlatformChatBot:
             elif request.method == 'POST':
                 # POST 請求處理 JSON 登入
                 if not request.is_json:
-                    return jsonify({'success': False, 'error': '請使用 JSON 格式提交'}), 400
+                    return self.response_formatter.json_response({'success': False, 'error': '請使用 JSON 格式提交'}, 400)
                 
                 data = request.get_json()
                 if not data or 'password' not in data:
-                    return jsonify({'success': False, 'error': '缺少密碼欄位'}), 400
+                    return self.response_formatter.json_response({'success': False, 'error': '缺少密碼欄位'}, 400)
                 
                 password = data.get('password', '')
                 
@@ -258,9 +285,9 @@ class MultiPlatformChatBot:
                 if test_auth and test_auth.verify_password(password):
                     __import__('flask').session['test_authenticated'] = True
                     __import__('flask').session.permanent = True
-                    return jsonify({'success': True, 'message': '登入成功'})
+                    return self.response_formatter.json_response({'success': True, 'message': '登入成功'})
                 else:
-                    return jsonify({'success': False, 'error': '密碼錯誤'}), 401
+                    return self.response_formatter.json_response({'success': False, 'error': '密碼錯誤'}, 401)
         
         # 登出端點
         @self.app.route('/logout', methods=['POST'])
@@ -268,7 +295,7 @@ class MultiPlatformChatBot:
             """登出功能 - 清除 session"""
             __import__('flask').session.pop('test_authenticated', None)
             __import__('flask').session.clear()
-            return jsonify({'success': True, 'message': '已成功登出'})
+            return self.response_formatter.json_response({'success': True, 'message': '已成功登出'})
         
         # 測試用聊天端點 - 僅用於開發測試
         @self.app.route('/ask', methods=['POST'])
@@ -277,7 +304,7 @@ class MultiPlatformChatBot:
             """測試用聊天端點 - 僅用於開發測試"""
             # 檢查認證
             if 'test_authenticated' not in __import__('flask').session or not __import__('flask').session['test_authenticated']:
-                return jsonify({'error': '需要先登入'}), 401
+                return self.response_formatter.json_response({'error': '需要先登入'}, 401)
             
             try:
                 # 獲取清理後的輸入
@@ -286,7 +313,7 @@ class MultiPlatformChatBot:
                 # 長度檢查 - 在生產環境中限制更嚴格以防止濫用
                 max_length = security_config.get_max_message_length(is_test=True)
                 if len(user_message) > max_length:
-                    return jsonify({'error': f'測試訊息長度不能超過 {max_length} 字符'}), 400
+                    return self.response_formatter.json_response({'error': f'測試訊息長度不能超過 {max_length} 字符'}, 400)
                 
                 # 使用固定的測試用戶 ID
                 test_user_id = "U" + "0" * 32  # 固定的測試用戶 ID
