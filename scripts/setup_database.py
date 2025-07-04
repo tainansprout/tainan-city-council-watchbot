@@ -94,8 +94,8 @@ def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # 檢查命令行參數
-    action = "setup"
+    # 檢查命令行參數，預設改為 status
+    action = "status"
     if len(sys.argv) > 1:
         action = sys.argv[1].lower()
     

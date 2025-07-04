@@ -118,27 +118,42 @@ def main():
         raise
 
 # 為 WSGI 服務器創建應用實例 (生產環境使用)
-# 確保在所有情況下都能正確創建 application 實例
-try:
-    # 直接創建 application 實例，供 Gunicorn 使用
-    application = create_app()
-    logger.info("WSGI application created successfully")
-except Exception as e:
-    logger.error(f"Failed to create WSGI application: {e}")
-    import traceback
-    logger.error(f"Full traceback: {traceback.format_exc()}")
+# 使用懶加載避免重複初始化
+_application = None
+
+def get_wsgi_application():
+    """懶加載 WSGI 應用實例，避免重複初始化"""
+    global _application
+    if _application is None:
+        try:
+            _application = create_app()
+            logger.info("WSGI application created successfully")
+        except Exception as e:
+            logger.error(f"Failed to create WSGI application: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            
+            # 創建一個基本的錯誤應用
+            from flask import Flask
+            _application = Flask(__name__)
+            
+            @_application.route('/health')
+            def error_health():
+                return {'status': 'error', 'message': str(e)}, 503
+            
+            @_application.route('/')
+            def error_index():
+                return {'status': 'error', 'message': f'Application failed to start: {str(e)}'}, 503
     
-    # 創建一個基本的錯誤應用
-    from flask import Flask
-    application = Flask(__name__)
-    
-    @application.route('/health')
-    def error_health():
-        return {'status': 'error', 'message': str(e)}, 503
-    
-    @application.route('/')
-    def error_index():
-        return {'status': 'error', 'message': f'Application failed to start: {str(e)}'}, 503
+    return _application
+
+# 為 WSGI 服務器提供應用實例的屬性
+class LazyWSGIApp:
+    def __call__(self, environ, start_response):
+        return get_wsgi_application()(environ, start_response)
+
+# 為 WSGI 服務器提供 application 實例
+application = LazyWSGIApp()
 
 
 if __name__ == "__main__":
