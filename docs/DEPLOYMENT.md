@@ -95,14 +95,17 @@ gcloud sql users create chatgpt_user \
 ### 步驟 3: 敏感資訊管理
 
 ```bash
-# 建立 Secret Manager 密鑰
-echo -n "your_openai_api_key" | gcloud secrets create openai-api-key --data-file=-
-echo -n "your_line_token" | gcloud secrets create line-channel-access-token --data-file=-
-echo -n "your_line_secret" | gcloud secrets create line-channel-secret --data-file=-
-echo -n "your_db_host" | gcloud secrets create db-host --data-file=-
-echo -n "your_db_user" | gcloud secrets create db-user --data-file=-
-echo -n "your_db_password" | gcloud secrets create db-password --data-file=-
-echo -n "your_db_name" | gcloud secrets create db-name --data-file=-
+# 載入環境變數
+source config/deploy/.env
+
+# 建立 Secret Manager 密鑰（從 .env 文件讀取）
+echo -n "$OPENAI_API_KEY_SECRET" | gcloud secrets create openai-api-key --data-file=-
+echo -n "$LINE_CHANNEL_ACCESS_TOKEN_SECRET" | gcloud secrets create line-channel-access-token --data-file=-
+echo -n "$LINE_CHANNEL_SECRET_SECRET" | gcloud secrets create line-channel-secret --data-file=-
+echo -n "$DB_HOST_SECRET" | gcloud secrets create db-host --data-file=-
+echo -n "$DB_USER_SECRET" | gcloud secrets create db-user --data-file=-
+echo -n "$DB_PASSWORD_SECRET" | gcloud secrets create db-password --data-file=-
+echo -n "$DB_NAME_SECRET" | gcloud secrets create db-name --data-file=-
 ```
 
 ### 步驟 4: 部署應用程式
