@@ -29,13 +29,16 @@ cp .env.local.example .env.local
 ./scripts/test-prod.sh
 ```
 
-#### ⚡ 直接運行
+#### ⚡ 統一運行方式 (v2.0)
 ```bash
-# Development mode (會顯示警告，正常現象)
+# Development mode (自動檢測環境)
 python main.py
 
-# Production mode (使用 Gunicorn)
-python wsgi.py
+# Production mode (自動啟動 Gunicorn)
+FLASK_ENV=production python main.py
+
+# 向後兼容方式（已整合到 main.py）
+gunicorn -c gunicorn.conf.py main:application
 ```
 
 ### Docker Development
@@ -52,23 +55,36 @@ docker build -t chatgpt-line-bot .
 # Build and push to Google Container Registry
 gcloud builds submit --tag gcr.io/{project-id}/{image-name}
 
-# Deploy to Cloud Run
+# Deploy to Cloud Run with new unified architecture
 gcloud run deploy {service-name} \
   --image gcr.io/{project-id}/{image-name} \
   --platform managed \
   --port 8080 \
   --memory 2G \
   --timeout=2m \
-  --region {region}
+  --region {region} \
+  --set-env-vars FLASK_ENV=production
+
+# Health check after deployment
+curl https://{service-url}/health
 ```
 
 ## Architecture
 
+### 🎯 **New Architecture Highlights (v2.0)**
+
+1. **Unified Entry Point**: `main.py` automatically detects environment and switches between development/production modes
+2. **Backward Compatibility**: All existing import paths and WSGI configurations continue to work
+3. **Multi-Platform Ready**: Factory pattern enables easy addition of new platforms (Discord, Telegram, etc.)
+4. **Environment Auto-Detection**: No manual configuration needed for development vs production
+5. **Comprehensive Testing**: New test architecture with proper separation and fixtures
+
 ### Core Components
 
 #### Application Layer
-- **src/app.py**: Multi-platform Flask application with unified webhook handlers
-- **main.py**: Legacy entry point (deprecated - use src/app.py)
+- **main.py**: Unified entry point with automatic environment detection (v2.0)
+- **src/app.py**: Multi-platform Flask application with unified webhook handlers and web interface
+- **wsgi.py**: Legacy WSGI wrapper (functionality integrated into main.py)
 
 #### Platform Layer (Strategy Pattern)
 - **src/platforms/base.py**: Platform abstraction interfaces and data classes
@@ -77,9 +93,14 @@ gcloud run deploy {service-name} \
 
 #### Service Layer
 - **src/services/core_chat_service.py**: Platform-agnostic core conversation logic
-- **src/services/chat_service.py**: Legacy service (deprecated)
 - **src/services/conversation_manager_orm.py**: Conversation history management
 - **src/services/response_formatter.py**: Unified response formatting
+- **backup/old_architecture/chat_service.py**: Legacy service (archived)
+- **backup/old_architecture/audio_service.py**: Legacy audio service (archived)
+
+#### Configuration Management (v2.0)
+- **src/core/config.py**: ConfigManager singleton with thread-safe configuration caching
+- **src/core/security.py**: Security middleware with unified JSON API validation
 
 #### Model Layer (Factory Pattern)
 - **src/models/base.py**: Abstract model interfaces and data structures
@@ -91,7 +112,7 @@ gcloud run deploy {service-name} \
 
 #### Database Layer
 - **src/models/database.py**: SQLAlchemy ORM models with multi-platform support
-- **src/database/db.py**: Legacy database interface (deprecated)
+- **src/database/db.py**: Database connection management
 
 #### Configuration and Utilities
 - **src/core/config.py**: Multi-platform configuration management
@@ -175,6 +196,13 @@ text_processing:
 commands:
   help: "提供系統說明和可用指令"
   reset: "重置對話歷史"
+
+# Authentication (v2.0)
+auth:
+  method: "simple_password"  # simple_password, basic_auth, token
+  password: "${TEST_PASSWORD}"  # For simple_password method
+  # Production: Use environment variable TEST_PASSWORD
+  # Development: Set directly in config.yml
 ```
 
 #### Platform Configuration (`config/platforms.yml`)
@@ -257,24 +285,63 @@ The ResponseFormatter ensures consistent citation formatting across all models.
 
 ## API Endpoints
 
-### Multi-Platform Webhooks
-- `POST /webhook/line`: LINE platform webhook
-- `POST /webhook/discord`: Discord platform webhook  
-- `POST /webhook/telegram`: Telegram platform webhook
-- `POST /callback`: Legacy LINE webhook (deprecated)
+### Multi-Platform Webhooks (v2.0)
+- `POST /webhooks/line`: LINE platform webhook (new unified route)
+- `POST /webhooks/discord`: Discord platform webhook  
+- `POST /webhooks/telegram`: Telegram platform webhook
+- `POST /callback`: Legacy LINE webhook (backward compatible)
 
-### System Endpoints
-- `GET /`: Application health check and status
-- `GET /health`: Detailed health check with database and model status
-- `GET /metrics`: Application metrics and statistics
+### System Endpoints (Enhanced in v2.0)
+- `GET /`: Application information with platform status and version
+- `GET /health`: Comprehensive health check (database, model, platforms, auth)
+- `GET /metrics`: Application metrics with platform and database statistics
 
-### Web Interface (Optional)
-- `GET /chat`: Web-based chat interface
-- `POST /ask`: Web API for direct chat functionality
+### Web Interface with Authentication (v2.0)
+- `GET /login`: Web login interface with password authentication
+- `POST /login`: JSON-based login authentication (unified format)
+- `GET /chat`: Web-based chat interface (requires authentication)
+- `POST /ask`: Web API for direct chat functionality (requires authentication)
+- `POST /logout`: Logout and session clearing
 
-### Configuration and Management
-- `GET /config`: Current configuration status
-- `GET /platforms`: Available platform information
+## Important Development Notes (v2.0)
+
+### 🚀 **Deployment and Running**
+- **Development**: Simply run `python main.py` - auto-detects as development environment
+- **Production**: Set `FLASK_ENV=production` and run `python main.py` - auto-starts Gunicorn
+- **WSGI**: All existing WSGI configurations work unchanged (`gunicorn main:application`)
+- **Docker**: No changes needed - containers will auto-detect environment
+
+### 🔧 **Configuration Changes**
+- **New Format**: Platform configs moved to `platforms.{platform}` structure  
+- **Backward Compatible**: Environment variables work as before
+- **Auto-Detection**: Missing `FLASK_ENV` defaults to development
+
+### 🧪 **Testing**
+- **New Structure**: Tests organized by component type (unit, integration, api)
+- **Mock Configs**: Use new multi-platform format in test fixtures
+- **Import Paths**: Use `from main import create_app` instead of `from main import app`
+
+### 🔐 **Authentication System (v2.0)**
+- **Session-Based Auth**: Web interface uses Flask sessions for authentication
+- **JSON-Only API**: All authentication endpoints use unified JSON format
+- **Route Protection**: Protected routes automatically redirect to login
+- **Configuration**: Authentication settings in `config.yml` under `auth` section
+- **Security**: Input validation and security middleware for all endpoints
+
+### ⚙️ **ConfigManager Singleton (v2.0)**
+- **Thread-Safe Loading**: Configuration loaded once and cached safely
+- **Performance Optimized**: Eliminates repeated file I/O during requests  
+- **Auto-Initialization**: Lazy loading with double-checked locking pattern
+- **Memory Efficient**: Single instance shared across all threads
+
+### 📝 **Key Changes for Developers**
+1. `main.py` is now the primary entry point for all environments
+2. Platform configurations use new nested structure
+3. Health endpoints return enhanced information  
+4. All webhook routes follow `/webhooks/{platform}` pattern
+5. Backward compatibility maintained for existing deployments
+6. **ConfigManager replaces direct config loading** - use `ConfigManager().get_config()`
+7. **JSON-only authentication** - all login/logout flows use JSON format
 
 ## Dependencies
 

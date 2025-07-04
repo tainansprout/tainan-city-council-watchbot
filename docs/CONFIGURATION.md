@@ -32,6 +32,34 @@
 2. **環境變數覆蓋**: 檢查對應的環境變數，如果存在則覆蓋 YAML 中的值
 3. **配置驗證**: 檢查必要配置項是否存在
 
+### ⚙️ ConfigManager Singleton (v2.0)
+
+新版本使用 ConfigManager 單例模式來管理配置：
+
+**特色**：
+- **執行緒安全**: 使用雙重檢查鎖定模式確保執行緒安全
+- **效能優化**: 配置僅載入一次，避免重複 I/O 操作
+- **記憶體高效**: 單一實例在所有請求間共享
+- **懶載入**: 只有在需要時才載入配置
+
+**使用方式**：
+```python
+from src.core.config import ConfigManager
+
+# 取得配置管理器實例
+config_manager = ConfigManager()
+
+# 取得完整配置
+config = config_manager.get_config()
+
+# 取得特定配置值
+line_token = config_manager.get_value('platforms.line.channel_access_token')
+db_host = config_manager.get_value('db.host')
+
+# 強制重新載入配置（開發時使用）
+config_manager.force_reload()
+```
+
 ### 🌍 支援的環境變數
 
 #### LINE Bot 配置
@@ -54,13 +82,13 @@
 - `DB_SSLCERT` → `db.sslcert`
 - `DB_SSLKEY` → `db.sslkey`
 
-#### 認證配置
-- `TEST_AUTH_METHOD` → `auth.method`
-- `TEST_PASSWORD` → `auth.password`
-- `TEST_USERNAME` → `auth.username`
-- `TEST_API_TOKEN` → `auth.api_token`
-- `TEST_SECRET_KEY` → `auth.secret_key`
-- `TEST_TOKEN_EXPIRY` → `auth.token_expiry`
+#### 認證配置 (v2.0)
+- `TEST_AUTH_METHOD` → `auth.method` (認證方式: simple_password, basic_auth, token)
+- `TEST_PASSWORD` → `auth.password` (簡單密碼認證的密碼)
+- `TEST_USERNAME` → `auth.username` (Basic Auth 用戶名)
+- `TEST_API_TOKEN` → `auth.api_token` (API Token 認證用)
+- `TEST_SECRET_KEY` → `auth.secret_key` (Session 密鑰)
+- `TEST_TOKEN_EXPIRY` → `auth.token_expiry` (Token 有效期，秒為單位)
 
 #### 其他配置
 - `LOG_LEVEL` → `log_level`

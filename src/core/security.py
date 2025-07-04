@@ -215,9 +215,11 @@ class SecurityMiddleware:
             abort(413)  # Payload Too Large
         
         # 檢查 Content-Type（對於 POST 請求）
-        if request.method == 'POST' and request.endpoint not in ['callback', 'webhooks_line', 'index']:
+        # 豁免清單：僅允許 webhook 端點使用非 JSON 格式
+        non_json_allowed_endpoints = ['callback', 'webhooks_line']
+        if request.method == 'POST' and request.endpoint not in non_json_allowed_endpoints:
             if not request.is_json:
-                logger.warning("Non-JSON POST request rejected")
+                logger.warning(f"Non-JSON POST request rejected for endpoint: {request.endpoint}")
                 abort(400)
     
     def _after_request(self, response):

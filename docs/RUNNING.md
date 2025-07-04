@@ -6,8 +6,8 @@
 
 ```
 ChatGPT-Line-Bot/
-├── main.py                 # Flask 應用主文件
-├── wsgi.py                 # WSGI 入口點（生產環境）
+├── main.py                 # 統一入口點（v2.0）- 自動環境偵測
+├── wsgi.py                 # 向後兼容的 WSGI 入口點
 ├── gunicorn.conf.py        # Gunicorn 配置文件
 ├── .env.local.example      # 本地開發環境變量模板
 ├── scripts/                # 啟動腳本
@@ -61,10 +61,13 @@ vim config/deploy/.env
 ./scripts/dev.sh
 ```
 
-**直接運行:**
+**統一啟動方式 (v2.0):**
 ```bash
-export FLASK_ENV=development
+# 自動偵測為開發環境
 python main.py
+
+# 或明確指定開發環境
+FLASK_ENV=development python main.py
 ```
 
 **特點:**
@@ -81,10 +84,13 @@ python main.py
 ./scripts/test-prod.sh
 ```
 
-**直接運行:**
+**統一啟動方式 (v2.0):**
 ```bash
-export FLASK_ENV=production
-gunicorn -c gunicorn.conf.py wsgi:application
+# 自動啟動 Gunicorn 輕量級配置
+FLASK_ENV=production python main.py
+
+# 向後兼容方式
+gunicorn -c gunicorn.conf.py main:application
 ```
 
 **特點:**
@@ -100,10 +106,13 @@ gunicorn -c gunicorn.conf.py wsgi:application
 ./scripts/prod.sh
 ```
 
-**直接運行:**
+**統一啟動方式 (v2.0):**
 ```bash
-export FLASK_ENV=production
-gunicorn -c gunicorn.conf.py wsgi:application
+# 自動啟動 Gunicorn 完整配置
+FLASK_ENV=production python main.py
+
+# 向後兼容方式
+gunicorn -c gunicorn.conf.py main:application
 ```
 
 **Docker 運行:**

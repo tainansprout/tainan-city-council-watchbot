@@ -33,7 +33,7 @@ fi
 
 # 使用較輕量的配置進行本地測試
 echo "🔧 使用本地測試配置"
-echo "📱 應用: wsgi:application"
+echo "📱 應用: main:application"
 echo "🌐 URL: http://localhost:$PORT"
 echo "環境: $FLASK_ENV"
 echo ""
@@ -49,4 +49,4 @@ gunicorn \
     --access-logfile - \
     --error-logfile - \
     --log-level info \
-    wsgi:application
+    main:application

@@ -64,6 +64,7 @@ class LineHandler(BasePlatformHandler):
     def get_required_config_fields(self) -> List[str]:
         return ['channel_access_token', 'channel_secret']
     
+    
     def validate_signature(self, request_data: bytes, signature: str) -> bool:
         """驗證 LINE webhook 簽名"""
         try:

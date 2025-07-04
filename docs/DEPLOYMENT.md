@@ -26,23 +26,23 @@ git clone <repository-url>
 cd ChatGPT-Line-Bot
 
 # 2. 設定環境變數
-cp deploy/.env.example deploy/.env
-# 編輯 deploy/.env 檔案，填入實際的 API 金鑰和配置
+cp config/deploy/.env.example config/deploy/.env
+# 編輯 config/deploy/.env 檔案，填入實際的 API 金鑰和配置
 
 # 3. 執行部署腳本
-chmod +x deploy/deploy-to-cloudrun.sh
-./deploy/deploy-to-cloudrun.sh
+chmod +x scripts/deploy/deploy-to-cloudrun.sh
+./scripts/deploy/deploy-to-cloudrun.sh
 ```
 
 ### 2. 高可用性部署（包含 Load Balancer）
 ```bash
 # 1. 基本部署完成後
-chmod +x deploy/setup-loadbalancer.sh
-./deploy/setup-loadbalancer.sh
+chmod +x scripts/deploy/setup-loadbalancer.sh
+./scripts/deploy/setup-loadbalancer.sh
 
 # 2. 設定監控
-chmod +x deploy/setup-monitoring.sh
-./deploy/setup-monitoring.sh
+chmod +x scripts/deploy/setup-monitoring.sh
+./scripts/deploy/setup-monitoring.sh
 ```
 
 ## 🏗️ 詳細部署步驟
@@ -109,17 +109,17 @@ echo -n "your_db_name" | gcloud secrets create db-name --data-file=-
 
 ```bash
 # 建立 Docker 映像
-gcloud builds submit --tag gcr.io/$PROJECT_ID/chatgpt-line-bot -f deploy/Dockerfile.cloudrun .
+gcloud builds submit --tag gcr.io/$PROJECT_ID/chatgpt-line-bot -f config/deploy/Dockerfile.cloudrun .
 
 # 部署到 Cloud Run
-gcloud run services replace deploy/cloudrun-service.yaml --region=asia-east1
+gcloud run services replace config/deploy/cloudrun-service.yaml --region=asia-east1
 ```
 
 ### 步驟 5: 設定 Load Balancer（可選但推薦）
 
 ```bash
 # 執行 Load Balancer 設定腳本
-./deploy/setup-loadbalancer.sh
+./scripts/deploy/setup-loadbalancer.sh
 ```
 
 這會建立：
@@ -136,7 +136,7 @@ gcloud run services replace deploy/cloudrun-service.yaml --region=asia-east1
 
 ```bash
 # 執行監控設定腳本
-./deploy/setup-monitoring.sh
+./scripts/deploy/setup-monitoring.sh
 ```
 
 這會建立：
@@ -175,6 +175,58 @@ gcloud run services update chatgpt-line-bot \
 # 更新 Secret Manager 中的值
 echo -n "new_api_key" | gcloud secrets versions add openai-api-key --data-file=-
 ```
+
+## 🚀 新架構特色 (v2.0)
+
+### 統一啟動方式
+新版本支援環境自動偵測：
+
+```bash
+# 開發環境（自動偵測）
+python main.py
+
+# 生產環境（自動啟動 Gunicorn）
+FLASK_ENV=production python main.py
+
+# 向後兼容 WSGI
+gunicorn -c gunicorn.conf.py main:application
+```
+
+### 🔐 Web 測試介面
+
+部署完成後，您可以通過以下方式測試：
+
+1. **訪問 Web 測試介面**
+   ```bash
+   # 訪問登入頁面
+   https://your-service-url/login
+   
+   # 使用設定的測試密碼登入
+   # 登入成功後自動跳轉到聊天介面
+   ```
+
+2. **配置測試認證**
+   ```bash
+   # 在 Secret Manager 中設定測試密碼
+   echo -n "your_secure_test_password" | gcloud secrets create test-password --data-file=-
+   
+   # 在 Cloud Run 環境變數中配置
+   gcloud run services update chatgpt-line-bot \
+       --region=asia-east1 \
+       --set-env-vars TEST_PASSWORD="your_secure_test_password"
+   ```
+
+3. **安全最佳實踐**
+   - 生產環境請使用強密碼
+   - 定期更新測試密碼
+   - 可考慮使用 IP 白名單限制測試介面存取
+
+### ⚙️ ConfigManager 優化
+
+新版本包含 ConfigManager singleton 模式：
+- **效能優化**: 配置僅載入一次，避免重複 I/O
+- **執行緒安全**: 支援多執行緒環境
+- **記憶體高效**: 單一實例在所有請求間共享
 
 ## 🔄 CI/CD 設定
 

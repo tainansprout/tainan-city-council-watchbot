@@ -4,9 +4,20 @@ app:
   name: "台南議會觀測機器人"
   description: "台南市議會會議記錄檢索系統"
 
-line:
-  channel_access_token: 
-  channel_secret: 
+# 平台設定 (v2.0)
+platforms:
+  line:
+    enabled: true
+    channel_access_token: 
+    channel_secret: 
+  
+  discord:
+    enabled: false
+    bot_token: 
+  
+  telegram:
+    enabled: false
+    bot_token: 
 
 # AI 模型配置
 llm:
@@ -110,4 +121,10 @@ logfile: ./logs/chatbot.log
 
 commands:
   help: "這裡是台南市議會聊天機器人，目前已經輸入了台南市議會第四屆公開議事錄中的會議逐字稿，請輸入您的問題，以便我檢索逐字稿內容來回應您。若您希望重設聊天內容，請輸入「/reset」以重置聊天。"
+
+# Web 測試介面認證設定 (v2.0)
+auth:
+  method: simple_password  # simple_password, basic_auth, token
+  password: your_test_password_here  # 生產環境請使用環境變數 TEST_PASSWORD
+  
 ...

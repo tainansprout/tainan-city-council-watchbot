@@ -220,7 +220,7 @@
         </div>
         {% endif %}
         
-        <form method="POST">
+        <form id="loginForm">
             <div class="form-group">
                 <label for="password">密碼</label>
                 <div class="input-wrapper">
@@ -228,7 +228,7 @@
                     <input type="password" id="password" name="password" required placeholder="請輸入密碼">
                 </div>
             </div>
-            <button type="submit" class="login-button">
+            <button type="submit" class="login-button" id="loginButton">
                 <i class="fas fa-sign-in-alt" style="margin-right: 0.5rem;"></i>
                 登入
             </button>
@@ -247,8 +247,61 @@
             document.getElementById('password').focus();
         });
 
-        // 移除Enter鍵提交功能，避免與注音輸入法衝突
-        // 使用者只能通過點擊按鈕登入
+        // 處理 JSON 登入提交
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const password = document.getElementById('password').value;
+            const button = document.getElementById('loginButton');
+            
+            // 禁用按鈕，顯示載入狀態
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 0.5rem;"></i>登入中...';
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ password: password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // 登入成功，跳轉到聊天頁面
+                    window.location.href = '/chat';
+                } else {
+                    // 登入失敗，顯示錯誤訊息
+                    showError(data.error || '登入失敗，請重試');
+                }
+            } catch (error) {
+                console.error('登入錯誤:', error);
+                showError('網路錯誤，請檢查連線後重試');
+            } finally {
+                // 恢復按鈕狀態
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-sign-in-alt" style="margin-right: 0.5rem;"></i>登入';
+            }
+        });
+        
+        function showError(message) {
+            // 移除舊的錯誤訊息
+            const oldError = document.querySelector('.error');
+            if (oldError) {
+                oldError.remove();
+            }
+            
+            // 創建新的錯誤訊息
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i>' + message;
+            
+            // 插入到表單前面
+            const form = document.getElementById('loginForm');
+            form.parentNode.insertBefore(errorDiv, form);
+        }
     </script>
 </body>
 </html>

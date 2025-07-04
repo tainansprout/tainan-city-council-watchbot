@@ -53,11 +53,17 @@ def setup_test_environment():
 
 @pytest.fixture
 def mock_config():
-    """模擬配置"""
+    """模擬配置 - 新的多平台格式"""
     return {
-        'line': {
-            'channel_access_token': 'test_token',
-            'channel_secret': 'test_secret'
+        'platforms': {
+            'line': {
+                'enabled': True,
+                'channel_access_token': 'test_token',
+                'channel_secret': 'test_secret'
+            }
+        },
+        'llm': {
+            'provider': 'openai'
         },
         'openai': {
             'api_key': 'test_openai_key',
@@ -77,13 +83,19 @@ def mock_config():
 
 @pytest.fixture
 def client():
-    """Flask 測試客戶端"""
+    """Flask 測試客戶端 - 使用新架構"""
     # 避免導入時的初始化問題
     with patch('src.core.config.load_config') as mock_load_config:
         mock_load_config.return_value = {
-            'line': {
-                'channel_access_token': 'test_token',
-                'channel_secret': 'test_secret'
+            'platforms': {
+                'line': {
+                    'enabled': True,
+                    'channel_access_token': 'test_token',
+                    'channel_secret': 'test_secret'
+                }
+            },
+            'llm': {
+                'provider': 'openai'
             },
             'openai': {
                 'api_key': 'test_openai_key',
@@ -98,7 +110,8 @@ def client():
             }
         }
         
-        from main import app
+        from main import create_app
+        app = create_app()
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False
         

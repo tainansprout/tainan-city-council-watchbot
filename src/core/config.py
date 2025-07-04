@@ -1,6 +1,7 @@
 import yaml
 import os
 from typing import Dict, Any, Optional
+import threading
 
 
 def _get_env_value(key: str, default: Any = None) -> Any:
@@ -94,48 +95,148 @@ def _merge_env_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
-def load_config(file_path: str = "config/config.yml") -> Dict[str, Any]:
+class ConfigManager:
     """
-    加載配置文件，優先級：
-    1. config.yml 基本配置
-    2. 環境變數覆蓋
+    配置管理器 - 使用 Singleton 模式確保配置只載入一次
+    線程安全的配置管理
     """
-    config = {}
+    _instance = None
+    _lock = threading.Lock()
     
-    # 1. 嘗試加載 YAML 配置文件
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            config = yaml.safe_load(file) or {}
-            print(f"✅ 成功載入配置文件: {file_path}")
-    except FileNotFoundError:
-        print(f"⚠️  配置文件不存在: {file_path}，使用環境變數配置")
-    except yaml.YAMLError as exc:
-        print(f"❌ 配置文件格式錯誤: {exc}")
-        return {}
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super(ConfigManager, cls).__new__(cls)
+                    cls._instance._initialized = False
+        return cls._instance
     
-    # 2. 使用環境變數覆蓋配置
-    config = _merge_env_config(config)
+    def __init__(self):
+        if self._initialized:
+            return
+        
+        self._config = {}
+        self._file_path = None
+        self._load_count = 0
+        self._initialized = True
     
-    # 3. 驗證必要配置
-    required_configs = [
-        ('line', 'channel_access_token'),
-        ('line', 'channel_secret'),
-        ('openai', 'api_key'),
-        ('db', 'host'),
-        ('db', 'user'),
-        ('db', 'password')
-    ]
+    def get_config(self, file_path: str = "config/config.yml", force_reload: bool = False) -> Dict[str, Any]:
+        """
+        獲取配置，只在第一次或強制重載時載入文件
+        
+        Args:
+            file_path: 配置文件路徑
+            force_reload: 是否強制重新載入
+        """
+        with self._lock:
+            # 如果是第一次載入或強制重載或文件路徑改變
+            if not self._config or force_reload or self._file_path != file_path:
+                self._load_config(file_path)
+                self._file_path = file_path
+            
+            return self._config.copy()  # 返回副本，避免外部修改
     
-    missing_configs = []
-    for section, key in required_configs:
-        if section not in config or not config[section].get(key):
-            missing_configs.append(f"{section}.{key}")
+    def _load_config(self, file_path: str):
+        """內部載入配置的方法"""
+        self._load_count += 1
+        config = {}
+        
+        # 1. 嘗試加載 YAML 配置文件
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                config = yaml.safe_load(file) or {}
+                if self._load_count == 1:
+                    print(f"✅ 成功載入配置文件: {file_path}")
+                else:
+                    print(f"🔄 重新載入配置文件 (第 {self._load_count} 次): {file_path}")
+                    
+        except FileNotFoundError:
+            if self._load_count == 1:
+                print(f"⚠️  配置文件不存在: {file_path}，使用環境變數配置")
+        except yaml.YAMLError as exc:
+            print(f"❌ 配置文件格式錯誤: {exc}")
+            return
+        
+        # 2. 使用環境變數覆蓋配置
+        config = _merge_env_config(config)
+        
+        # 3. 驗證必要配置
+        self._validate_config(config)
+        
+        self._config = config
     
-    if missing_configs:
-        print(f"⚠️  缺少必要配置: {', '.join(missing_configs)}")
-        print("請檢查 config.yml 或設定對應的環境變數")
+    def _validate_config(self, config: Dict[str, Any]):
+        """驗證配置的完整性"""
+        required_configs = [
+            ('openai', 'api_key'),
+            ('db', 'host'),
+            ('db', 'user'),
+            ('db', 'password')
+        ]
+        
+        missing_configs = []
+        for section, key in required_configs:
+            if section not in config or not config[section].get(key):
+                missing_configs.append(f"{section}.{key}")
+        
+        if missing_configs and self._load_count == 1:
+            print(f"⚠️  缺少必要配置: {', '.join(missing_configs)}")
+            print("請檢查 config.yml 或設定對應的環境變數")
     
-    return config
+    def reload_config(self, file_path: str = None):
+        """重新載入配置"""
+        if file_path is None:
+            file_path = self._file_path or "config/config.yml"
+        return self.get_config(file_path, force_reload=True)
+    
+    def get_value(self, path: str, default: Any = None) -> Any:
+        """
+        使用點分隔符獲取嵌套配置值
+        例如: get_value('db.host', 'localhost')
+        """
+        config = self.get_config()
+        keys = path.split('.')
+        value = config
+        
+        try:
+            for key in keys:
+                value = value[key]
+            return value if value is not None else default
+        except (KeyError, TypeError):
+            return default
+
+
+# 全域配置管理器實例
+_config_manager = ConfigManager()
+
+
+# 全域配置緩存 (向後兼容)
+_config_cache = {}
+_config_loaded = False
+_config_load_count = 0
+
+def load_config(file_path: str = "config/config.yml", force_reload: bool = False) -> Dict[str, Any]:
+    """
+    加載配置文件 - 使用 ConfigManager 單例模式
+    
+    Args:
+        file_path: 配置文件路徑
+        force_reload: 是否強制重新載入
+    
+    Returns:
+        配置字典
+    """
+    return _config_manager.get_config(file_path, force_reload)
+
+
+def get_cached_config(file_path: str = "config/config.yml") -> Dict[str, Any]:
+    """獲取緩存的配置，如果不存在則載入"""
+    return _config_manager.get_config(file_path)
+
+
+def clear_config_cache():
+    """清除配置緩存，強制重新載入"""
+    _config_manager.reload_config()
 
 
 def get_config_value(config: Dict[str, Any], path: str, default: Any = None) -> Any:
@@ -154,6 +255,22 @@ def get_config_value(config: Dict[str, Any], path: str, default: Any = None) -> 
         return default
 
 
+# 便利函數 - 直接使用 ConfigManager
+def get_config(file_path: str = "config/config.yml") -> Dict[str, Any]:
+    """獲取配置 - 便利函數"""
+    return _config_manager.get_config(file_path)
+
+
+def get_value(path: str, default: Any = None) -> Any:
+    """獲取配置值 - 便利函數"""
+    return _config_manager.get_value(path, default)
+
+
+def reload_config(file_path: str = None) -> Dict[str, Any]:
+    """重新載入配置 - 便利函數"""
+    return _config_manager.reload_config(file_path)
+
+
 # 例如使用
 if __name__ == "__main__":
     config = load_config()
@@ -163,3 +280,9 @@ if __name__ == "__main__":
     print(f"Database: {'✅ 已設定' if config.get('db', {}).get('host') else '❌ 未設定'}")
     print(f"Auth Method: {config.get('auth', {}).get('method', '未設定')}")
     print(f"Log Level: {config.get('log_level', '未設定')}")
+    
+    # 測試 ConfigManager
+    print("\n=== ConfigManager 測試 ===")
+    print(f"使用 get_value: OpenAI API Key: {'✅ 已設定' if get_value('openai.api_key') else '❌ 未設定'}")
+    print(f"使用 get_value: DB Host: {get_value('db.host', '未設定')}")
+    print(f"使用 get_value: Auth Method: {get_value('auth.method', '未設定')}")

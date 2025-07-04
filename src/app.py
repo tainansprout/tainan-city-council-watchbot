@@ -4,14 +4,15 @@
 """
 import atexit
 import logging
-from flask import Flask, request, abort, jsonify
+from flask import Flask, request, abort, jsonify, render_template
 from typing import Dict, Any
 
 # 核心模組
 from .core.config import load_config
 from .core.logger import logger
-from .core.security import init_security
-from .core.auth import init_test_auth_with_config, get_auth_status_info
+from .core.security import init_security, InputValidator, require_json_input
+from .core.security_config import security_config
+from .core.auth import init_test_auth_with_config, get_auth_status_info, require_test_auth, init_test_auth
 from .core.error_handler import ErrorHandler
 
 # 模型和服務
@@ -37,7 +38,7 @@ class MultiPlatformChatBot:
     
     def __init__(self, config_path: str = None):
         # 載入配置
-        self.config = load_config(config_path)
+        self.config = load_config(config_path or "config/config.yml")
         
         # 初始化核心組件
         self.error_handler = ErrorHandler()
@@ -50,8 +51,15 @@ class MultiPlatformChatBot:
         self.platform_manager = get_platform_manager()
         self.config_validator = get_config_validator()
         
-        # Flask 應用程式
-        self.app = Flask(__name__)
+        # Flask 應用程式 - 設定模板和靜態文件路徑
+        import os
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        template_folder = os.path.join(project_root, 'templates')
+        static_folder = os.path.join(project_root, 'static') if os.path.exists(os.path.join(project_root, 'static')) else None
+        
+        self.app = Flask(__name__, 
+                        template_folder=template_folder,
+                        static_folder=static_folder)
         
         # 初始化應用程式
         self._initialize_app()
@@ -65,6 +73,7 @@ class MultiPlatformChatBot:
             # 2. 初始化安全性
             init_security(self.app)
             init_test_auth_with_config(self.config)
+            init_test_auth(self.app)
             
             # 3. 初始化資料庫
             self._initialize_database()
@@ -189,6 +198,131 @@ class MultiPlatformChatBot:
         def metrics():
             return self._get_metrics()
         
+        # 聊天介面 - 僅支援 JSON
+        @self.app.route('/chat', methods=['GET', 'POST'])
+        def chat_interface():
+            """聊天介面 - GET 顯示頁面，POST 處理 JSON 登入"""
+            app_name = self.config.get('app', {}).get('name', '聊天機器人')
+            
+            if request.method == 'GET':
+                # GET 請求檢查是否已登入
+                if 'test_authenticated' in __import__('flask').session and __import__('flask').session['test_authenticated']:
+                    return render_template('chat.html', app_name=app_name)
+                else:
+                    # 未登入時重定向到 /login，而不是直接顯示登入頁面
+                    from flask import redirect, url_for
+                    return redirect(url_for('login_api'))
+            
+            elif request.method == 'POST':
+                # POST 請求僅接受 JSON 格式登入
+                if not request.is_json:
+                    return jsonify({'success': False, 'error': '請使用 JSON 格式提交'}), 400
+                
+                data = request.get_json()
+                if not data or 'password' not in data:
+                    return jsonify({'success': False, 'error': '缺少密碼欄位'}), 400
+                
+                password = data.get('password', '')
+                
+                # 驗證密碼
+                from .core.auth import test_auth
+                if test_auth and test_auth.verify_password(password):
+                    __import__('flask').session['test_authenticated'] = True
+                    __import__('flask').session.permanent = True
+                    return jsonify({'success': True, 'message': '登入成功'})
+                else:
+                    return jsonify({'success': False, 'error': '密碼錯誤'}), 401
+        
+        # JSON 登入端點
+        @self.app.route('/login', methods=['GET', 'POST'])
+        def login_api():
+            """JSON 登入 API - GET 顯示登入頁面，POST 處理登入"""
+            app_name = self.config.get('app', {}).get('name', '聊天機器人')
+            
+            if request.method == 'GET':
+                # GET 請求顯示登入頁面
+                return render_template('login.html', app_name=app_name)
+            
+            elif request.method == 'POST':
+                # POST 請求處理 JSON 登入
+                if not request.is_json:
+                    return jsonify({'success': False, 'error': '請使用 JSON 格式提交'}), 400
+                
+                data = request.get_json()
+                if not data or 'password' not in data:
+                    return jsonify({'success': False, 'error': '缺少密碼欄位'}), 400
+                
+                password = data.get('password', '')
+                
+                from .core.auth import test_auth
+                if test_auth and test_auth.verify_password(password):
+                    __import__('flask').session['test_authenticated'] = True
+                    __import__('flask').session.permanent = True
+                    return jsonify({'success': True, 'message': '登入成功'})
+                else:
+                    return jsonify({'success': False, 'error': '密碼錯誤'}), 401
+        
+        # 登出端點
+        @self.app.route('/logout', methods=['POST'])
+        def logout():
+            """登出功能 - 清除 session"""
+            __import__('flask').session.pop('test_authenticated', None)
+            __import__('flask').session.clear()
+            return jsonify({'success': True, 'message': '已成功登出'})
+        
+        # 測試用聊天端點 - 僅用於開發測試
+        @self.app.route('/ask', methods=['POST'])
+        @require_json_input(['message'])
+        def ask_endpoint():
+            """測試用聊天端點 - 僅用於開發測試"""
+            # 檢查認證
+            if 'test_authenticated' not in __import__('flask').session or not __import__('flask').session['test_authenticated']:
+                return jsonify({'error': '需要先登入'}), 401
+            
+            try:
+                # 獲取清理後的輸入
+                user_message = request.validated_json['message']
+                
+                # 長度檢查 - 在生產環境中限制更嚴格以防止濫用
+                max_length = security_config.get_max_message_length(is_test=True)
+                if len(user_message) > max_length:
+                    return jsonify({'error': f'測試訊息長度不能超過 {max_length} 字符'}), 400
+                
+                # 使用固定的測試用戶 ID
+                test_user_id = "U" + "0" * 32  # 固定的測試用戶 ID
+                
+                # 創建測試訊息對象
+                from .platforms.base import PlatformMessage, PlatformUser, PlatformType
+                
+                test_user = PlatformUser(
+                    user_id=test_user_id,
+                    display_name="測試用戶",
+                    platform=PlatformType.LINE
+                )
+                
+                test_message = PlatformMessage(
+                    message_id="test_msg_" + str(int(__import__('time').time())),
+                    user=test_user,
+                    content=user_message,
+                    message_type="text",
+                    reply_token="test_reply_token"
+                )
+                
+                # 使用核心聊天服務處理訊息
+                response = self.core_chat_service.process_message(test_message)
+                
+                # 清理回應內容以防止 XSS
+                if hasattr(response, 'content'):
+                    clean_response = InputValidator.sanitize_text(response.content)
+                else:
+                    clean_response = InputValidator.sanitize_text(str(response))
+                
+                return jsonify({'message': clean_response})
+                
+            except Exception as e:
+                logger.error(f"Error in ask endpoint: {e}")
+                return jsonify({'error': '處理訊息時發生錯誤，請稍後再試'}), 500
+        
         logger.info("Routes registered successfully")
     
     def _handle_webhook(self, platform_name: str):
@@ -253,8 +387,9 @@ class MultiPlatformChatBot:
         try:
             # 檢查資料庫連線
             try:
+                from sqlalchemy import text
                 with self.database.get_session() as session:
-                    session.execute('SELECT 1')
+                    session.execute(text('SELECT 1'))
                 health_status['checks']['database'] = {'status': 'healthy'}
             except Exception as e:
                 health_status['checks']['database'] = {
@@ -355,7 +490,7 @@ def create_app(config_path: str = None) -> Flask:
     工廠函數 - 創建 Flask 應用程式實例
     用於生產部署 (如 Gunicorn)
     """
-    bot = MultiPlatformChatBot(config_path)
+    bot = MultiPlatformChatBot(config_path or "config/config.yml")
     return bot.get_flask_app()
 
 

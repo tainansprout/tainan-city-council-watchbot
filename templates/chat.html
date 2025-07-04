@@ -44,12 +44,37 @@
             font-size: 1.8rem;
         }
 
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
         .status {
             display: flex;
             align-items: center;
             gap: 0.5rem;
             color: #27ae60;
             font-size: 0.9rem;
+        }
+
+        .logout-button {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logout-button:hover {
+            background: #c82333;
+            transform: translateY(-1px);
         }
 
         .chat-container {
@@ -278,6 +303,11 @@
                 font-size: 1.2rem;
             }
 
+            .logout-button {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.8rem;
+            }
+
             .chat-container {
                 margin: 1rem;
                 border-radius: 15px;
@@ -309,8 +339,21 @@
                 font-size: 1rem;
             }
 
+            .header-actions {
+                gap: 0.5rem;
+            }
+
             .status {
                 font-size: 0.8rem;
+            }
+
+            .logout-button {
+                padding: 0.3rem 0.6rem;
+                font-size: 0.7rem;
+            }
+
+            .logout-button i {
+                display: none; /* 在小螢幕上隱藏圖標，只顯示文字 */
             }
 
             .chat-messages {
@@ -335,9 +378,15 @@
             <i class="fas fa-robot logo"></i>
             {{ app_name }}
         </h1>
-        <div class="status">
-            <i class="fas fa-circle"></i>
-            線上服務中
+        <div class="header-actions">
+            <div class="status">
+                <i class="fas fa-circle"></i>
+                線上服務中
+            </div>
+            <button class="logout-button" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+                登出
+            </button>
         </div>
     </div>
 
@@ -508,6 +557,32 @@
 
         // 移除Enter鍵送出功能，避免與注音輸入法衝突
         // 使用者只能通過點擊按鈕送出訊息
+
+        // 登出功能
+        async function logout() {
+            try {
+                const response = await fetch('/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                
+                if (response.ok) {
+                    // 登出成功，跳轉到登入頁面
+                    window.location.href = '/login';
+                } else {
+                    console.error('登出失敗');
+                    // 即使登出失敗，也嘗試跳轉到登入頁面
+                    window.location.href = '/login';
+                }
+            } catch (error) {
+                console.error('登出錯誤:', error);
+                // 發生錯誤時也跳轉到登入頁面
+                window.location.href = '/login';
+            }
+        }
 
         // 初始化
         autoResize();

@@ -397,8 +397,8 @@ export GEMINI_API_KEY="AIza-xxxxxxxx"
 # 平台設定（啟用所需平台）
 export LINE_CHANNEL_ACCESS_TOKEN="your_line_token"
 export LINE_CHANNEL_SECRET="your_line_secret"
-export DISCORD_BOT_TOKEN="your_discord_token"
-export TELEGRAM_BOT_TOKEN="your_telegram_token"
+export DISCORD_BOT_TOKEN="your_discord_token"      # 可選：啟用 Discord 平台
+export TELEGRAM_BOT_TOKEN="your_telegram_token"    # 可選：啟用 Telegram 平台
 
 # 資料庫設定
 export DB_HOST="your_db_host"
@@ -406,8 +406,8 @@ export DB_USER="your_db_user"
 export DB_PASSWORD="your_db_password"
 export DB_NAME="your_db_name"
 
-# 運行應用（使用新的多平台應用）
-python -m src.app
+# 運行應用（使用統一入口點）
+python main.py
 ```
 
 ### ☁️ 生產環境配置
@@ -418,8 +418,8 @@ python -m src.app
 
 | 配置項目 | config.yml 路徑 | 環境變數 |
 |----------|----------------|----------|
-| Line Access Token | `line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` |
-| Line Secret | `line.channel_secret` | `LINE_CHANNEL_SECRET` |
+| Line Access Token | `platforms.line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` |
+| Line Secret | `platforms.line.channel_secret` | `LINE_CHANNEL_SECRET` |
 | OpenAI API Key | `openai.api_key` | `OPENAI_API_KEY` |
 | OpenAI Assistant ID | `openai.assistant_id` | `OPENAI_ASSISTANT_ID` |
 | 資料庫主機 | `db.host` | `DB_HOST` |
@@ -429,17 +429,50 @@ python -m src.app
 | 認證方式 | `auth.method` | `TEST_AUTH_METHOD` |
 | 日誌級別 | `log_level` | `LOG_LEVEL` |
 
+### 🚀 **統一啟動方式 (v2.0)**
+
+新版本提供統一的入口點，自動根據環境切換運行模式：
+
+#### 開發環境
+```bash
+# 自動檢測為開發環境，使用 Flask 開發伺服器
+python main.py
+
+# 或明確指定開發環境
+FLASK_ENV=development python main.py
+```
+
+#### 生產環境
+```bash
+# 自動啟動 Gunicorn 生產伺服器
+FLASK_ENV=production python main.py
+
+# 或使用傳統方式
+gunicorn -c gunicorn.conf.py main:application
+```
+
+#### 向後兼容
+```bash
+# 舊版兼容部署方式（已整合到 main.py）
+gunicorn -c gunicorn.conf.py main:application
+```
+
 ### 🔍 配置驗證
 
 ```bash
 # 檢查應用程式配置
 python src/core/config.py
 
+# 檢查健康狀態
+curl http://localhost:8080/health
+
 # 檢查部署配置  
 ./scripts/deploy/deploy-to-cloudrun.sh --dry-run
 ```
 
-詳細的配置說明請參考：[配置管理指南](docs/CONFIGURATION.md)
+詳細的配置說明請參考：
+- [配置管理指南](docs/CONFIGURATION.md)
+- [部署指南](DEPLOYMENT_GUIDE.md)
 
 ## 部署到 Google Cloud Run
 
@@ -503,17 +536,59 @@ cp config/deploy/.env.example config/deploy/.env
 
 ## 測試程式運作
 
-1. **訪問 Chat 端點**
+### 🔐 Web 測試介面 (v2.0)
 
-   - 前往 Service URL，如 `https://{your-cloud-run-url}/chat`，確認應用程式是否運行正常。
+1. **訪問登入頁面**
+   - 前往 `https://{your-cloud-run-url}/login`
+   - 輸入在 `config.yml` 中設定的測試密碼
+   - 登入成功後會自動跳轉到聊天介面
 
-2. **透過 Line 測試**
+2. **使用聊天介面**
+   - 登入後訪問 `https://{your-cloud-run-url}/chat`
+   - 在聊天介面中直接測試機器人功能
+   - 支援文字訊息和完整的對話歷史
+   - 點選「登出」按鈕可安全登出
 
-   - 向您的 Line Bot 發送訊息，測試完整功能。
+3. **API 端點測試**
+   ```bash
+   # 健康檢查
+   curl https://{your-cloud-run-url}/health
+   
+   # 應用資訊
+   curl https://{your-cloud-run-url}/
+   ```
 
-3. **檢查 Log**
+### 📱 透過 LINE 測試
 
-   - 如果出現問題，使用 `gcloud` 或 Google Cloud Console 來檢查Log
+4. **LINE Bot 功能測試**
+   - 向您的 LINE Bot 發送訊息，測試完整功能
+   - 支援文字和語音訊息
+   - 測試對話歷史和多輪對話
+
+### 🔍 故障排除
+
+5. **檢查系統日誌**
+   - 如果出現問題，使用 `gcloud` 或 Google Cloud Console 來檢查日誌
+   ```bash
+   # 查看即時日誌
+   gcloud logs tail --project={your-project-id}
+   ```
+
+### ⚙️ 測試密碼配置
+
+**生產環境**：
+```bash
+# 設定環境變數（推薦）
+export TEST_PASSWORD="your_secure_password_here"
+```
+
+**開發環境**：
+```yaml
+# 在 config/config.yml 中設定
+auth:
+  method: "simple_password"
+  password: "your_test_password"
+```
 
 ## 開發與測試
 
@@ -552,8 +627,8 @@ cp config/deploy/.env.example config/deploy/.env
    # 開發模式（會顯示警告，這是正常現象）
    python main.py
    
-   # 生產模式（使用 Gunicorn）
-   python wsgi.py
+   # 生產模式（自動啟動 Gunicorn）
+   FLASK_ENV=production python main.py
    ```
 
 ## 系統架構
@@ -658,6 +733,25 @@ flake8 src/ tests/
 
 # 型別檢查
 mypy src/
+```
+
+### 測試故障排除
+
+如果遇到導入錯誤或快取問題：
+```bash
+# 清理 Python 快取檔案
+find . -name "*.pyc" -delete
+find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+rm -rf .pytest_cache
+
+# 重新運行測試
+pytest
+```
+
+**CI/CD 整合測試：**
+```bash
+# 運行完整的 CI/CD 模擬測試流程
+./scripts/ci-test.sh
 ```
 
 ### 測試架構

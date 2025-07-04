@@ -5,12 +5,10 @@ from flask import Flask
 
 # 需要先設定環境變數避免 import 錯誤
 import os
-os.environ.setdefault('LINE_CHANNEL_ACCESS_TOKEN', 'test_token')
-os.environ.setdefault('LINE_CHANNEL_SECRET', 'test_secret')
+os.environ.setdefault('FLASK_ENV', 'testing')
 
-from main import app
-from src.services.chat_service import ChatService
-from src.services.audio_service import AudioService
+from main import create_app
+from src.services.core_chat_service import CoreChatService
 
 
 class TestHealthEndpoint:
@@ -18,14 +16,22 @@ class TestHealthEndpoint:
     
     @pytest.fixture
     def client(self):
-        app.config['TESTING'] = True
-        with app.test_client() as client:
-            yield client
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
+            app = create_app()
+            app.config['TESTING'] = True
+            with app.test_client() as client:
+                yield client
     
     def test_health_check_success(self, client):
         """測試健康檢查成功"""
-        with patch('main.database') as mock_database, \
-             patch('main.model') as mock_model:
+        with patch('src.app.MultiPlatformChatBot.database') as mock_database, \
+             patch('src.app.MultiPlatformChatBot.model') as mock_model:
             
             # 設定模擬回應
             mock_database.get_connection_info.return_value = {
@@ -42,10 +48,12 @@ class TestHealthEndpoint:
             assert response.status_code == 200
             data = json.loads(response.data)
             assert data['status'] == 'healthy'
-            assert 'database' in data
-            assert 'model' in data
-            assert data['database']['status'] == 'connected'
-            assert data['model']['status'] == 'connected'
+            assert 'checks' in data
+            assert 'database' in data['checks']
+            assert 'model' in data['checks']
+            assert 'platforms' in data['checks']
+            assert data['checks']['database']['status'] == 'healthy'
+            assert data['checks']['model']['status'] == 'healthy'
     
     def test_health_check_database_error(self, client):
         """測試資料庫連線錯誤"""

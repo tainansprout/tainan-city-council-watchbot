@@ -137,6 +137,41 @@ git filter-branch --force --index-filter \
 git push origin --force --all
 ```
 
+## 🔐 Web 測試介面安全性 (v2.0)
+
+### 認證配置
+
+新版本包含 Web 測試介面，需要妥善配置認證：
+
+**生產環境設定**：
+```bash
+# 使用強密碼
+export TEST_PASSWORD="$(openssl rand -base64 32)"
+
+# 在 Secret Manager 中儲存
+echo -n "$TEST_PASSWORD" | gcloud secrets create test-password --data-file=-
+```
+
+**安全最佳實踐**：
+- ✅ 使用長度至少 16 字元的強密碼
+- ✅ 定期更新測試密碼
+- ✅ 考慮使用 IP 白名單限制存取
+- ✅ 監控測試介面的使用情況
+- ❌ 不要在配置檔案中明文儲存密碼
+
+**Cloud Run 環境變數配置**：
+```bash
+gcloud run services update chatgpt-line-bot \
+    --region=asia-east1 \
+    --set-env-vars TEST_PASSWORD="$TEST_PASSWORD"
+```
+
+### Session 安全
+
+- **Session 金鑰**: 使用隨機生成的強金鑰
+- **過期時間**: 合理設定 session 過期時間
+- **安全標頭**: 啟用 CSRF 保護和安全標頭
+
 ## 🔍 安全性檢查清單
 
 在部署前請確認：
@@ -147,6 +182,9 @@ git push origin --force --all
 - [ ] 服務帳號權限最小化
 - [ ] 啟用 HTTPS 和 SSL 憑證
 - [ ] 定期輪換 API 金鑰
+- [ ] 設定強密碼用於 Web 測試介面
+- [ ] 配置測試介面認證環境變數
+- [ ] 檢查 Session 安全配置
 - [ ] 監控存取日誌
 
 ## 📊 安全性監控

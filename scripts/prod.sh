@@ -31,8 +31,8 @@ fi
 
 # 使用 Gunicorn 配置文件啟動
 echo "🔧 配置: gunicorn.conf.py"
-echo "📱 應用: wsgi:application"
+echo "📱 應用: main:application"
 
 # 切換到項目根目錄並啟動 Gunicorn
 cd "$PROJECT_ROOT"
-gunicorn -c gunicorn.conf.py wsgi:application
+gunicorn -c gunicorn.conf.py main:application

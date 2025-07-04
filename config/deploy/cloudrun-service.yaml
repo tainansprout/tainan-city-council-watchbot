@@ -80,6 +80,12 @@ spec:
             secretKeyRef:
               name: openai-assistant-id
               key: latest
+        # 測試介面認證密碼
+        - name: TEST_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: test-password
+              key: latest
         resources:
           limits:
             memory: "2Gi"

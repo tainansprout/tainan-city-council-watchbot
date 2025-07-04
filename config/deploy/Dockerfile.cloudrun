@@ -51,4 +51,4 @@ CMD exec gunicorn \
     --access-logfile - \
     --error-logfile - \
     --log-level info \
-    wsgi:application
+    main:application
