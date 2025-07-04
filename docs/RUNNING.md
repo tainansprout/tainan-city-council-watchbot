@@ -7,7 +7,6 @@
 ```
 ChatGPT-Line-Bot/
 ├── main.py                 # 統一入口點（v2.0）- 自動環境偵測
-├── wsgi.py                 # 向後兼容的 WSGI 入口點
 ├── gunicorn.conf.py        # Gunicorn 配置文件
 ├── .env.local.example      # 本地開發環境變量模板
 ├── scripts/                # 啟動腳本

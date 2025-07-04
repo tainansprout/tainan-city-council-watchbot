@@ -50,12 +50,13 @@ class LineHandler(BasePlatformHandler):
         self.channel_access_token = self.get_config('channel_access_token')
         self.channel_secret = self.get_config('channel_secret')
         
-        # 初始化 LINE SDK
-        if self.validate_config():
+        # 初始化 LINE SDK (只在配置有效且平台啟用時)
+        if self.is_enabled() and self.validate_config():
             self.configuration = Configuration(access_token=self.channel_access_token)
             self.handler = WebhookHandler(self.channel_secret)
             logger.info("LINE handler initialized successfully")
-        else:
+        elif self.is_enabled():
+            # 只有在平台啟用時才記錄配置錯誤
             logger.error("LINE handler initialization failed due to invalid config")
     
     def get_platform_type(self) -> PlatformType:
@@ -127,7 +128,9 @@ class LineHandler(BasePlatformHandler):
                 return None
                 
         except Exception as e:
-            logger.error(f"Error parsing LINE message: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error parsing LINE message: {type(e).__name__}: {e}")
+            logger.error(f"LINE parse error details - Event type: {type(raw_event).__name__}")
             return None
     
     def send_response(self, response: PlatformResponse, message: PlatformMessage) -> bool:
@@ -159,7 +162,9 @@ class LineHandler(BasePlatformHandler):
             return True
             
         except Exception as e:
-            logger.error(f"Error sending LINE response: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error sending LINE response: {type(e).__name__}: {e}")
+            logger.error(f"LINE send error details - User: {message.user.user_id}, Response type: {response.response_type}")
             return False
     
     def handle_webhook(self, request_body: str, signature: str) -> List[PlatformMessage]:
@@ -184,14 +189,18 @@ class LineHandler(BasePlatformHandler):
                         if message:
                             messages.append(message)
                 except Exception as e:
-                    logger.error(f"Error processing LINE event: {e}")
+                    # 記錄詳細的錯誤 log
+                    logger.error(f"Error processing LINE event: {type(e).__name__}: {e}")
+                    logger.error(f"LINE event error details - Event data: {str(event_data)[:200]}...")
                     continue
             
             logger.info(f"Processed {len(messages)} valid messages from LINE webhook")
             return messages
             
         except Exception as e:
-            logger.error(f"Error handling LINE webhook: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error handling LINE webhook: {type(e).__name__}: {e}")
+            logger.error(f"LINE webhook error details - Request body size: {len(request_body)}")
             return []
     
     def _dict_to_line_event(self, event_data: Dict[str, Any]) -> Optional[MessageEvent]:
@@ -238,7 +247,9 @@ class LineHandler(BasePlatformHandler):
             )
             
         except Exception as e:
-            logger.error(f"Error converting dict to LINE event: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error converting dict to LINE event: {type(e).__name__}: {e}")
+            logger.error(f"LINE event conversion error details - Event data: {str(event_data)[:200]}...")
             return None
 
 
@@ -260,7 +271,9 @@ class LineHandlerFactory:
                 logger.warning("LINE handler not enabled or invalid config")
                 return None
         except Exception as e:
-            logger.error(f"Error creating LINE handler: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error creating LINE handler: {type(e).__name__}: {e}")
+            logger.error(f"LINE handler creation error details - Config keys: {list(config.keys()) if config else 'None'}")
             return None
     
     @staticmethod

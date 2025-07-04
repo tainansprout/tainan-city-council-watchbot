@@ -84,7 +84,6 @@ curl https://{service-url}/health
 #### Application Layer
 - **main.py**: Unified entry point with automatic environment detection (v2.0)
 - **src/app.py**: Multi-platform Flask application with unified webhook handlers and web interface
-- **wsgi.py**: Legacy WSGI wrapper (functionality integrated into main.py)
 
 #### Platform Layer (Strategy Pattern)
 - **src/platforms/base.py**: Platform abstraction interfaces and data classes
@@ -95,8 +94,8 @@ curl https://{service-url}/health
 - **src/services/core_chat_service.py**: Platform-agnostic core conversation logic
 - **src/services/conversation_manager_orm.py**: Conversation history management
 - **src/services/response_formatter.py**: Unified response formatting
-- **backup/old_architecture/chat_service.py**: Legacy service (archived)
-- **backup/old_architecture/audio_service.py**: Legacy audio service (archived)
+- **src/services/chat_service.py**: Legacy chat service (maintained for compatibility)
+- **src/services/audio_service.py**: Audio processing service
 
 #### Configuration Management (v2.0)
 - **src/core/config.py**: ConfigManager singleton with thread-safe configuration caching
@@ -313,13 +312,47 @@ The ResponseFormatter ensures consistent citation formatting across all models.
 
 ### 🔧 **Configuration Changes**
 - **New Format**: Platform configs moved to `platforms.{platform}` structure  
-- **Backward Compatible**: Environment variables work as before
+- **Environment Override**: Environment variables use new structure (e.g., `platforms.line.channel_access_token`)
 - **Auto-Detection**: Missing `FLASK_ENV` defaults to development
 
-### 🧪 **Testing**
-- **New Structure**: Tests organized by component type (unit, integration, api)
-- **Mock Configs**: Use new multi-platform format in test fixtures
-- **Import Paths**: Use `from main import create_app` instead of `from main import app`
+### 🧪 **Testing Framework Architecture**
+
+The testing framework is organized by component type with comprehensive coverage:
+
+#### Test Structure
+```
+tests/
+├── unit/                       # 單元測試
+│   ├── test_models.py         # AI 模型測試
+│   ├── test_platforms.py      # 平台處理器測試
+│   ├── test_core_chat_service.py  # 核心聊天服務測試
+│   ├── test_services.py       # 服務層測試
+│   └── test_utils.py          # 工具函數測試
+├── integration/                # 整合測試
+│   ├── test_platform_integration.py  # 平台整合測試
+│   ├── test_chat_flow.py      # 完整對話流程測試
+│   └── test_database_integration.py  # 資料庫整合測試
+├── api/                        # API 端點測試
+│   ├── test_web_interface.py  # Web 介面測試
+│   ├── test_health_endpoints.py  # 健康檢查端點測試
+│   └── test_auth.py           # 認證系統測試
+└── mocks/                      # 模擬測試
+    ├── mock_external_services.py  # 外部服務模擬
+    └── test_fixtures.py       # 測試固件
+```
+
+#### Testing Patterns
+- **Factory Pattern Testing**: 模型和平台工廠的創建測試
+- **Strategy Pattern Testing**: 不同 AI 模型策略的行為測試
+- **Integration Testing**: 跨模組的整合測試
+- **Mock Services**: 外部 API 的模擬測試
+
+#### Key Testing Features
+- **Multi-Platform Support**: 測試 LINE、Discord、Telegram 平台
+- **Multi-Model Testing**: 測試 OpenAI、Anthropic、Gemini、Ollama 模型
+- **Configuration Testing**: 測試新舊配置格式的兼容性
+- **Error Handling Testing**: 測試錯誤處理機制和訊息格式
+- **Authentication Testing**: 測試 Web 介面認證系統
 
 ### 🔐 **Authentication System (v2.0)**
 - **Session-Based Auth**: Web interface uses Flask sessions for authentication
@@ -334,14 +367,86 @@ The ResponseFormatter ensures consistent citation formatting across all models.
 - **Auto-Initialization**: Lazy loading with double-checked locking pattern
 - **Memory Efficient**: Single instance shared across all threads
 
+### 🏗️ **Platform Architecture & File Structure**
+
+The system is built with clear separation of concerns and modular design:
+
+#### Platform Layer Structure
+```
+src/platforms/
+├── base.py                     # 平台抽象接口
+│   ├── PlatformType           # 平台類型枚舉
+│   ├── PlatformMessage        # 統一訊息格式
+│   ├── PlatformResponse       # 統一回應格式
+│   ├── PlatformUser           # 統一用戶格式
+│   └── BasePlatformHandler    # 平台處理器基類
+├── factory.py                  # 平台工廠和註冊
+│   ├── PlatformFactory        # 工廠模式創建處理器
+│   ├── PlatformRegistry       # 註冊模式管理平台
+│   └── ConfigValidator        # 配置驗證器
+├── line_handler.py            # LINE 平台實作
+├── discord_handler.py         # Discord 平台實作 (規劃中)
+└── telegram_handler.py        # Telegram 平台實作 (規劃中)
+```
+
+#### Model Layer Structure
+```
+src/models/
+├── base.py                     # AI 模型抽象接口
+│   ├── ModelProvider          # 模型提供商枚舉
+│   ├── FullLLMInterface       # 完整語言模型接口
+│   ├── ChatMessage            # 聊天訊息格式
+│   ├── ChatResponse           # 聊天回應格式
+│   ├── RAGResponse            # RAG 查詢回應格式
+│   └── FileInfo               # 檔案資訊格式
+├── factory.py                  # 模型工廠
+│   └── ModelFactory           # 根據配置創建模型實例
+├── openai_model.py            # OpenAI Assistant API 實作
+├── anthropic_model.py         # Anthropic Claude API 實作
+├── gemini_model.py            # Google Gemini API 實作
+└── ollama_model.py            # Ollama 本地模型實作
+```
+
+#### Service Layer Structure
+```
+src/services/
+├── core_chat_service.py       # 核心聊天服務
+│   └── CoreChatService        # 平台無關的聊天邏輯
+├── response_formatter.py      # 統一回應格式化
+│   └── ResponseFormatter      # 跨模型的引用處理
+├── conversation_manager_orm.py # 對話歷史管理
+└── audio_service.py           # 音訊處理服務
+```
+
+#### Unified Interface Design
+
+**統一平台接口**:
+```python
+class BasePlatformHandler:
+    def validate_config(self, config: Dict) -> Tuple[bool, List[str]]
+    def parse_webhook(self, body: str, signature: str) -> List[PlatformMessage]
+    def send_response(self, response: PlatformResponse, original_message: PlatformMessage) -> bool
+```
+
+**統一模型接口**:
+```python
+class FullLLMInterface:
+    def chat_with_user(self, user_id: str, message: str, platform: str) -> Tuple[bool, RAGResponse, str]
+    def clear_user_history(self, user_id: str, platform: str) -> Tuple[bool, str]
+    def transcribe_audio(self, audio_file_path: str) -> Tuple[bool, str, str]
+```
+
 ### 📝 **Key Changes for Developers**
 1. `main.py` is now the primary entry point for all environments
-2. Platform configurations use new nested structure
-3. Health endpoints return enhanced information  
+2. Platform configurations use new nested structure (`platforms.{platform}`)
+3. Health endpoints return enhanced information with platform status
 4. All webhook routes follow `/webhooks/{platform}` pattern
 5. Backward compatibility maintained for existing deployments
 6. **ConfigManager replaces direct config loading** - use `ConfigManager().get_config()`
 7. **JSON-only authentication** - all login/logout flows use JSON format
+8. **Unified Interfaces** - All platforms and models implement consistent interfaces
+9. **Factory Pattern** - Use factories for creating platform handlers and models
+10. **Error Handling** - Dual-layer error messages (detailed for testing, simplified for users)
 
 ## Dependencies
 

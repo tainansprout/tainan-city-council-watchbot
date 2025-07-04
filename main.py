@@ -5,7 +5,15 @@
 支援開發和生產環境的自動切換
 """
 
+# 在生產環境中提前進行 gevent monkey patching 以避免 SSL 警告
 import os
+if os.getenv('FLASK_ENV') == 'production':
+    try:
+        import gevent.monkey
+        gevent.monkey.patch_all()
+    except ImportError:
+        pass
+
 import sys
 import atexit
 from flask import Flask
@@ -26,7 +34,10 @@ def create_app(config_path: str = None) -> Flask:
         
         # 驗證 API token (保持向後兼容)
         if hasattr(bot, 'model') and bot.model:
-            check_token_valid(bot.model)
+            try:
+                check_token_valid(bot.model)
+            except ValueError as e:
+                logger.warning(f"API token validation skipped: {e}")
         
         return bot.get_flask_app()
         

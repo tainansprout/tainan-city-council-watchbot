@@ -43,7 +43,17 @@ secure_scheme_headers = {
 
 # 性能調優
 max_worker_connections = 1000
-worker_tmp_dir = "/dev/shm"
+
+# Worker 臨時目錄設定 - 跨平台兼容
+import os
+import platform
+
+if platform.system() == "Linux" and os.path.exists("/dev/shm"):
+    # Linux 系統使用共享記憶體以提升性能
+    worker_tmp_dir = "/dev/shm"
+else:
+    # macOS 和其他系統使用系統臨時目錄
+    worker_tmp_dir = os.environ.get('TMPDIR', '/tmp')
 
 # 重啟設置
 max_worker_lifetime = 3600  # 1 hour

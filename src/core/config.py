@@ -31,8 +31,10 @@ def _merge_env_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """將環境變數覆蓋配置文件設定"""
     
     # 確保必要的配置節點存在
-    if 'line' not in config:
-        config['line'] = {}
+    if 'platforms' not in config:
+        config['platforms'] = {}
+    if 'line' not in config['platforms']:
+        config['platforms']['line'] = {}
     if 'openai' not in config:
         config['openai'] = {}
     if 'db' not in config:
@@ -40,14 +42,18 @@ def _merge_env_config(config: Dict[str, Any]) -> Dict[str, Any]:
     if 'auth' not in config:
         config['auth'] = {}
     
-    # Line 配置
-    config['line']['channel_access_token'] = _get_env_value(
+    # Line 平台配置 (新結構)
+    config['platforms']['line']['channel_access_token'] = _get_env_value(
         'LINE_CHANNEL_ACCESS_TOKEN', 
-        config['line'].get('channel_access_token')
+        config['platforms']['line'].get('channel_access_token')
     )
-    config['line']['channel_secret'] = _get_env_value(
+    config['platforms']['line']['channel_secret'] = _get_env_value(
         'LINE_CHANNEL_SECRET', 
-        config['line'].get('channel_secret')
+        config['platforms']['line'].get('channel_secret')
+    )
+    config['platforms']['line']['enabled'] = _get_env_value(
+        'LINE_ENABLED', 
+        config['platforms']['line'].get('enabled', True)
     )
     
     # OpenAI 配置
@@ -275,7 +281,7 @@ def reload_config(file_path: str = None) -> Dict[str, Any]:
 if __name__ == "__main__":
     config = load_config()
     print("=== 配置載入結果 ===")
-    print(f"LINE Token: {'✅ 已設定' if config.get('line', {}).get('channel_access_token') else '❌ 未設定'}")
+    print(f"LINE Token: {'✅ 已設定' if config.get('platforms', {}).get('line', {}).get('channel_access_token') else '❌ 未設定'}")
     print(f"OpenAI Key: {'✅ 已設定' if config.get('openai', {}).get('api_key') else '❌ 未設定'}")
     print(f"Database: {'✅ 已設定' if config.get('db', {}).get('host') else '❌ 未設定'}")
     print(f"Auth Method: {config.get('auth', {}).get('method', '未設定')}")
@@ -284,5 +290,6 @@ if __name__ == "__main__":
     # 測試 ConfigManager
     print("\n=== ConfigManager 測試 ===")
     print(f"使用 get_value: OpenAI API Key: {'✅ 已設定' if get_value('openai.api_key') else '❌ 未設定'}")
+    print(f"使用 get_value: LINE Token: {'✅ 已設定' if get_value('platforms.line.channel_access_token') else '❌ 未設定'}")
     print(f"使用 get_value: DB Host: {get_value('db.host', '未設定')}")
     print(f"使用 get_value: Auth Method: {get_value('auth.method', '未設定')}")

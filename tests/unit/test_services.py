@@ -63,14 +63,10 @@ class TestChatService:
     
     def test_handle_chat_message_with_database_error(self, chat_service, mock_database, mock_openai_model):
         # 模擬資料庫錯誤
-        # 模擬 chat_with_user 拋出資料庫錯誤
         mock_openai_model.chat_with_user.side_effect = DatabaseError("Database connection failed")
-
-        response = chat_service.handle_message('test_user', 'Hello')
-
-        assert isinstance(response, TextMessage)
-        # 目前會將 DatabaseError 包裝為 OpenAIError
-        assert 'OpenAI API Token' in response.text
+        # 應丟出例外
+        with pytest.raises(OpenAIError):
+            chat_service.handle_message('test_user', 'Hello')
     
     def test_response_formatter_initialization(self, chat_service):
         """測試 ResponseFormatter 是否正確初始化"""

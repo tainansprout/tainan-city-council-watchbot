@@ -23,17 +23,10 @@ class ChatService:
     
     def handle_message(self, user_id: str, text: str, platform: str = 'line') -> TextMessage:
         """主要訊息處理入口"""
-        try:
-            logger.info(f'{user_id}: {text}')
-            
-            if text.startswith('/'):
-                return self._handle_command(user_id, text, platform)
-            else:
-                return self._handle_chat_message(user_id, text, platform)
-                
-        except Exception as e:
-            logger.error(f"Error handling message for user {user_id}: {e}")
-            return self.error_handler.handle_error(e)
+        logger.info(f'{user_id}: {text}')
+        if text.startswith('/'):
+            return self._handle_command(user_id, text, platform)
+        return self._handle_chat_message(user_id, text, platform)
     
     def _handle_command(self, user_id: str, text: str, platform: str = 'line') -> TextMessage:
         """處理指令"""

@@ -377,8 +377,9 @@ class TestWebInterfaceErrorHandling:
             
             assert response.status_code == 500
             data = response.get_json()
-            assert 'error' in data
-            assert '處理訊息時發生錯誤' in data['error']
+            assert data.get('success') is False
+            assert data.get('error_type') == 'INTERNAL_ERROR'
+            assert data.get('message') == '伺服器內部錯誤，請稍後再試'
     
     def test_template_rendering_error(self, client):
         """測試模板渲染錯誤"""

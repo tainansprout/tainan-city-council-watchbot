@@ -1,8 +1,8 @@
-# Tainan City Council WatchBot
+# Multi-Platform ChatGPT Line Bot
 
 [中文](README.md) | English
 
-This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram and other platforms, integrated with multiple AI model providers (OpenAI, Anthropic Claude, Google Gemini, Ollama). The bot uses modular architecture design, deployed on Google Cloud Run, and uses Google Cloud SQL for conversation history management.
+This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram and other platforms, integrated with multiple AI model providers (OpenAI, Anthropic Claude, Google Gemini, Ollama). The bot features modular architecture design, deployed on Google Cloud Run with Google Cloud SQL for conversation history management, and supports both text and audio message processing.
 
 ## Core Features
 
@@ -53,12 +53,64 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
 
 ## AI Model Setup
 
-## Obtaining OpenAI API Token
+### Obtaining OpenAI API Token
 
 1. Register/Login at [OpenAI Platform](https://platform.openai.com/)
 2. Create a new Project from the avatar menu in the upper left corner.
 3. Once inside the Project, navigate to Project → API Key.
 4. Click `+ Create` in the upper right corner to generate an OpenAI API Token.
+
+### Setting Up Anthropic Claude
+
+1. **Get Claude API Key**
+   - Go to [Anthropic Console](https://console.anthropic.com/)
+   - Register and log in to your account
+   - Create a new API Key in the API Keys page
+
+2. **Choose Model**
+   - Recommended to use `claude-3-sonnet-20240229` or `claude-3-haiku-20240307`
+   - Choose models that balance performance and cost based on your needs
+
+### Setting Up Google Gemini
+
+1. **Get Gemini API Key**
+   - Go to [Google AI Studio](https://aistudio.google.com/)
+   - Log in with your Google account
+   - Create a new API Key in the API Keys page
+
+2. **Choose Model**
+   - Recommended to use `gemini-1.5-pro-latest` or `gemini-1.5-flash-latest`
+   - Gemini supports long context and multimodal functionality
+
+### Setting Up Ollama Local Models
+
+1. **Install Ollama**
+   ```bash
+   # macOS
+   brew install ollama
+   
+   # Linux
+   curl -fsSL https://ollama.ai/install.sh | sh
+   
+   # Windows - Download installer
+   # https://ollama.ai/download
+   ```
+
+2. **Download Models**
+   ```bash
+   # Download Llama 3.1 8B model (recommended)
+   ollama pull llama3.1:8b
+   
+   # Or download other models
+   ollama pull mistral:7b
+   ollama pull codellama:13b
+   ```
+
+3. **Start Service**
+   ```bash
+   ollama serve
+   # Default runs on http://localhost:11434
+   ```
 
 ## Setting Up OpenAI Assistant API
 
@@ -70,12 +122,14 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
    - Go to Tools → File Search, click `+ Files` to upload files you want as the database.
 
 3. **Testing in Playground**
-   - Go to [OpenAI Playground](https://platform.openai.com/playground) and test the Assistant’s functionality.
+   - Go to [OpenAI Playground](https://platform.openai.com/playground) and test the Assistant's functionality.
 
 4. **Record assistant_id**
-   - Under the Assistant name, there’s a text string representing the `assistant_id`. Note it down for later use.
+   - Under the Assistant name, there's a text string representing the `assistant_id`. Note it down for later use.
 
-## Configuring the Line Bot
+## Platform Setup
+
+### Configuring the Line Bot
 
 1. **Create a Line Bot**
    - Log into the [Line Developers Console](https://developers.line.biz/console/)
@@ -83,12 +137,47 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
 
 2. **Get Channel Information**
    - In the Channel settings, obtain the `Channel Access Token` and `Channel Secret`.
-   - Under `Basic Settings`, there’s a `Channel Secret`. Click `Issue` to generate your `channel_secret`.
-   - Under `Messaging API`, there’s a `Channel Access Token`. Click `Issue` to generate your `channel_access_token`.
+   - Under `Basic Settings`, there's a `Channel Secret`. Click `Issue` to generate your `channel_secret`.
+   - Under `Messaging API`, there's a `Channel Access Token`. Click `Issue` to generate your `channel_access_token`.
 
 3. **Set Webhook URL**
-   - Set the Webhook URL to the address of the Google Cloud Run deployment (this can be updated post-deployment).
-   - Enable the Webhook by toggling the "Use Webhook" switch to on.
+   - Set the Webhook URL to the Google Cloud Run deployment address (can be updated after deployment)
+   - Enable Webhook by toggling the "Use Webhook" switch to on
+
+### Setting Up Discord Bot
+
+1. **Create Discord Application**
+   - Go to [Discord Developer Portal](https://discord.com/developers/applications)
+   - Click "New Application" to create a new application
+   - Name your application
+
+2. **Create Bot**
+   - Select "Bot" from the left menu
+   - Click "Add Bot" to create a bot
+   - Copy the Bot Token (keep it secret)
+
+3. **Set Permissions**
+   - In "OAuth2" → "URL Generator", select appropriate permissions
+   - Generate invite link and add the bot to your server
+
+### Setting Up Telegram Bot
+
+1. **Chat with BotFather**
+   - Search for @BotFather in Telegram
+   - Send `/newbot` command to create a new bot
+   - Follow instructions to set bot name and username
+
+2. **Get Bot Token**
+   - BotFather will provide a Bot Token
+   - Save this token for configuration
+
+3. **Set Webhook**
+   - After deployment, use the following API to set webhook:
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+        -H "Content-Type: application/json" \
+        -d '{"url": "https://your-app.run.app/webhooks/telegram"}'
+   ```
 
 ## Configuring Google Cloud SQL
 
@@ -99,14 +188,45 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
 2. **Instance Configuration**
    - Set up the instance name and password.
    - Create an account for connection operations, noting down the username and password.
-   - Create the database and use Cloud SQL Studio to run the following SQL command to create the table:
-
+   - Create the database
+   - Use Alembic to create multi-platform database schema:
+    ```bash
+    # Initialize Alembic (if not already done)
+    alembic init alembic
+    
+    # Create initial migration
+    alembic revision --autogenerate -m "Initial multi-platform schema"
+    
+    # Execute migration
+    alembic upgrade head
+    ```
+    
+   - Or manually create multi-platform tables:
     ```sql
+    -- OpenAI thread management (multi-platform support)
     CREATE TABLE user_thread_table (
-        user_id VARCHAR(255) PRIMARY KEY,
-        thread_id VARCHAR(255),
+        user_id VARCHAR(255) NOT NULL,
+        platform VARCHAR(50) NOT NULL DEFAULT 'line',
+        thread_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, platform)
+    );
+    
+    -- Conversation history for other models (multi-platform support)
+    CREATE TABLE simple_conversation_history (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        platform VARCHAR(50) NOT NULL DEFAULT 'line',
+        model_provider VARCHAR(50) NOT NULL,
+        role VARCHAR(20) NOT NULL,
+        content TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    
+    -- Create performance indexes
+    CREATE INDEX idx_thread_user_platform ON user_thread_table(user_id, platform);
+    CREATE INDEX idx_conversation_user_platform ON simple_conversation_history(user_id, platform);
+    CREATE INDEX idx_conversation_user_platform_provider ON simple_conversation_history(user_id, platform, model_provider);
     ```
 
 3. **Get Connection Information**
@@ -132,7 +252,6 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
     openssl x509 -in server-ca.pem -out ca-cert.crt # Client Certificate
     openssl rsa -in client-key.pem -out ssl-key.key # Client Key
     ```
-
    - Copy `ssl-cert.crt`, `ca-cert.crt`, and `ssl-key.key` to `config/ssl/`.
 
 ## Configuration Management
@@ -183,40 +302,95 @@ vim config/config.yml
 ```
 
 ```yaml
-line:
-  channel_access_token: YOUR_CHANNEL_ACCESS_TOKEN
-  channel_secret: YOUR_CHANNEL_SECRET
+# Application information
+app:
+  name: "Multi-Platform Chat Bot"
+  version: "2.0.0"
 
+# AI model settings (choose one as primary provider)
+llm:
+  provider: "openai"  # openai, anthropic, gemini, ollama
+
+# AI model provider settings
 openai:
   api_key: YOUR_OPENAI_API_KEY
   assistant_id: YOUR_ASSISTANT_ID
 
+anthropic:
+  api_key: YOUR_ANTHROPIC_API_KEY
+  model: "claude-3-sonnet-20240229"
+
+gemini:
+  api_key: YOUR_GEMINI_API_KEY
+  model: "gemini-1.5-pro-latest"
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3.1:8b"
+
+# Database settings
 db:
   host: YOUR_DB_HOST
   port: 5432
-  db_name: YOUR_DB_NAME
-  user: YOUR_DB_USER
+  database: YOUR_DB_NAME
+  username: YOUR_DB_USER
   password: YOUR_DB_PASSWORD
   sslmode: verify-ca
   sslrootcert: config/ssl/ca-cert.crt
   sslcert: config/ssl/client.crt
   sslkey: config/ssl/client.key
+
+# Platform settings
+platforms:
+  line:
+    enabled: true
+    channel_access_token: YOUR_LINE_CHANNEL_ACCESS_TOKEN
+    channel_secret: YOUR_LINE_CHANNEL_SECRET
+  
+  discord:
+    enabled: false  # Set to true to enable
+    bot_token: YOUR_DISCORD_BOT_TOKEN
+  
+  telegram:
+    enabled: false  # Set to true to enable
+    bot_token: YOUR_TELEGRAM_BOT_TOKEN
+
+# Text processing settings
+text_processing:
+  preprocessors: []
+  post_replacements: []
+
+# Command settings
+commands:
+  help: "Provide system instructions and available commands"
+  reset: "Reset conversation history"
 ```
 
 **Method 2: Using Environment Variables**
 
 ```bash
-# Set environment variables
-export LINE_CHANNEL_ACCESS_TOKEN="your_token"
-export LINE_CHANNEL_SECRET="your_secret"
+# Basic settings
+export LLM_PROVIDER="openai"  # or anthropic, gemini, ollama
+
+# AI model API keys (set according to chosen provider)
 export OPENAI_API_KEY="sk-proj-xxxxxxxx"
 export OPENAI_ASSISTANT_ID="asst_xxxxxxxx"
+export ANTHROPIC_API_KEY="sk-ant-xxxxxxxx"
+export GEMINI_API_KEY="AIza-xxxxxxxx"
+
+# Platform settings (enable required platforms)
+export LINE_CHANNEL_ACCESS_TOKEN="your_line_token"
+export LINE_CHANNEL_SECRET="your_line_secret"
+export DISCORD_BOT_TOKEN="your_discord_token"      # Optional: Enable Discord platform
+export TELEGRAM_BOT_TOKEN="your_telegram_token"    # Optional: Enable Telegram platform
+
+# Database settings
 export DB_HOST="your_db_host"
 export DB_USER="your_db_user"
 export DB_PASSWORD="your_db_password"
 export DB_NAME="your_db_name"
 
-# Run application
+# Run application (using unified entry point)
 python main.py
 ```
 
@@ -228,8 +402,8 @@ Production environment uses Google Secret Manager to manage sensitive informatio
 
 | Configuration Item | config.yml Path | Environment Variable |
 |--------------------|-----------------|---------------------|
-| Line Access Token | `line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` |
-| Line Secret | `line.channel_secret` | `LINE_CHANNEL_SECRET` |
+| Line Access Token | `platforms.line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` |
+| Line Secret | `platforms.line.channel_secret` | `LINE_CHANNEL_SECRET` |
 | OpenAI API Key | `openai.api_key` | `OPENAI_API_KEY` |
 | OpenAI Assistant ID | `openai.assistant_id` | `OPENAI_ASSISTANT_ID` |
 | Database Host | `db.host` | `DB_HOST` |
@@ -239,17 +413,50 @@ Production environment uses Google Secret Manager to manage sensitive informatio
 | Auth Method | `auth.method` | `TEST_AUTH_METHOD` |
 | Log Level | `log_level` | `LOG_LEVEL` |
 
+### 🚀 **Unified Startup Method (v2.0)**
+
+The new version provides a unified entry point that automatically switches run modes based on the environment:
+
+#### Development Environment
+```bash
+# Auto-detects as development environment, uses Flask development server
+python main.py
+
+# Or explicitly specify development environment
+FLASK_ENV=development python main.py
+```
+
+#### Production Environment
+```bash
+# Auto-starts Gunicorn production server
+FLASK_ENV=production python main.py
+
+# Or use traditional method
+gunicorn -c gunicorn.conf.py main:application
+```
+
+#### Backward Compatibility
+```bash
+# Legacy compatible deployment method (integrated into main.py)
+gunicorn -c gunicorn.conf.py main:application
+```
+
 ### 🔍 Configuration Validation
 
 ```bash
 # Check application configuration
 python src/core/config.py
 
+# Check health status
+curl http://localhost:8080/health
+
 # Check deployment configuration
 ./scripts/deploy/deploy-to-cloudrun.sh --dry-run
 ```
 
-For detailed configuration instructions, please refer to: [Configuration Management Guide](docs/CONFIGURATION.md)
+For detailed configuration instructions, please refer to:
+- [Configuration Management Guide](docs/CONFIGURATION.md)
+- [Deployment Guide](DEPLOYMENT_GUIDE.md)
 
 ## Deploying to Google Cloud Run
 
@@ -290,13 +497,13 @@ If you want to manually control each step:
 2. **Build Container Image**
 
    ```bash
-   gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name} -f deploy/Dockerfile.cloudrun .
+   gcloud builds submit --tag gcr.io/{your-project-id}/{your-image-name} -f config/deploy/Dockerfile.cloudrun .
    ```
 
 3. **Deploy to Cloud Run**
 
    ```bash
-   gcloud run services replace deploy/cloudrun-service.yaml --region {your-region}
+   gcloud run services replace config/deploy/cloudrun-service.yaml --region {your-region}
    ```
 
    - Replace placeholders with your actual information.
@@ -313,14 +520,59 @@ If you want to manually control each step:
 
 ## Testing the Application
 
-1. **Access Chat Endpoint**
-   - Go to the Service URL, e.g., `https://{your-cloud-run-url}/chat`, to ensure the app is running smoothly.
+### 🔐 Web Test Interface (v2.0)
 
-2. **Test with Line**
-   - Send a message to your Line Bot to test its full functionality.
+1. **Access Login Page**
+   - Go to `https://{your-cloud-run-url}/login`
+   - Enter the test password set in `config.yml`
+   - After successful login, you'll be automatically redirected to the chat interface
 
-3. **Check Logs**
-   - If issues arise, use `gcloud` or Google Cloud Console to inspect logs.
+2. **Use Chat Interface**
+   - After login, visit `https://{your-cloud-run-url}/chat`
+   - Test bot functionality directly in the chat interface
+   - Supports text messages and complete conversation history
+   - Click "Logout" button to safely logout
+
+3. **API Endpoint Testing**
+   ```bash
+   # Health check
+   curl https://{your-cloud-run-url}/health
+   
+   # Application information
+   curl https://{your-cloud-run-url}/
+   ```
+
+### 📱 Testing via LINE
+
+4. **LINE Bot Functionality Test**
+   - Send messages to your LINE Bot to test complete functionality
+   - Supports text and voice messages
+   - Test conversation history and multi-turn conversations
+
+### 🔍 Troubleshooting
+
+5. **Check System Logs**
+   - If issues arise, use `gcloud` or Google Cloud Console to check logs
+   ```bash
+   # View real-time logs
+   gcloud logs tail --project={your-project-id}
+   ```
+
+### ⚙️ Test Password Configuration
+
+**Production Environment**:
+```bash
+# Set environment variable (recommended)
+export TEST_PASSWORD="your_secure_password_here"
+```
+
+**Development Environment**:
+```yaml
+# Set in config/config.yml
+auth:
+  method: "simple_password"
+  password: "your_test_password"
+```
 
 ## Development & Testing
 
@@ -446,26 +698,60 @@ pytest tests/mocks/
 pytest --cov=src --cov-report=html
 ```
 
-**Type checking:**
+**Detailed test output:**
 ```bash
+pytest -v
+```
+
+**Specify test file:**
+```bash
+pytest tests/unit/test_models.py
+pytest tests/integration/test_chat_flow.py
+```
+
+### Code Quality Checks
+
+```bash
+# Check code style
+flake8 src/ tests/
+
+# Type checking
 mypy src/
 ```
 
-**Code linting:**
+### Test Troubleshooting
+
+If you encounter import errors or cache issues:
 ```bash
-flake8 src/
+# Clean Python cache files
+find . -name "*.pyc" -delete
+find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+rm -rf .pytest_cache
+
+# Re-run tests
+pytest
 ```
 
-### Development Features
+**CI/CD Integration Testing:**
+```bash
+# Run complete CI/CD simulation test flow
+./scripts/ci-test.sh
+```
 
-- **Multi-LLM Support**: OpenAI, Anthropic Claude, Google Gemini, Ollama
-- **RAG Implementation**: File search and retrieval across all model providers
-- **Modular Architecture**: Clean separation of concerns with factory patterns
-- **Comprehensive Testing**: Unit, integration, and API test suites
-- **Type Safety**: Full type annotations with mypy validation
-- **Error Handling**: Robust error handling with structured logging
-- **Security**: Secret management with Google Secret Manager
-- **Monitoring**: Cloud monitoring and alerting integration
+### Test Architecture
+
+- **Unit Tests** (`tests/unit/`): Test individual modules and functions
+- **Integration Tests** (`tests/integration/`): Test service integration
+- **API Tests** (`tests/api/`): Test Flask endpoints
+- **Mock Tests** (`tests/mocks/`): Test external service mocks
+
+### Configuration Files
+
+Test configuration files are located in `pytest.ini`, including the following settings:
+- Test paths
+- Coverage settings
+- Test markers
+- Output format
 
 ## Notes
 

@@ -162,9 +162,17 @@ class PlatformFactory:
         if not handler_class:
             return {}
         
-        # 創建臨時實例取得需求 (使用空配置)
+        # 創建臨時實例取得需求 (使用最小化配置避免驗證失敗)
         try:
-            temp_handler = handler_class({})
+            # 創建一個最小化的配置，避免觸發驗證錯誤
+            temp_config = {
+                'platforms': {
+                    platform_type.value: {
+                        'enabled': False  # 設為 False 避免觸發驗證
+                    }
+                }
+            }
+            temp_handler = handler_class(temp_config)
             return {
                 field: f"Required configuration for {platform_type.value}"
                 for field in temp_handler.get_required_config_fields()

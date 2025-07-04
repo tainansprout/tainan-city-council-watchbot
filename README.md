@@ -1,4 +1,5 @@
-https://onlinelibrary.wiley.com/doi/10.1002/poi3.263
+# 多平台聊天機器人 ChatGPT Line Bot
+
 中文 | [English](README.en.md)
 
 本專案是一個**多平台聊天機器人**，支援 LINE、Discord、Telegram 等多個平台，整合了多種 AI 模型提供商（OpenAI、Anthropic Claude、Google Gemini、Ollama）。機器人採用模組化架構設計，部署在 Google Cloud Run 上，並使用 Google Cloud SQL 進行對話歷史管理。

@@ -47,27 +47,18 @@ class CoreChatService:
         Returns:
             PlatformResponse: 統一格式的回應
         """
-        try:
-            user = message.user
-            platform = user.platform.value
-            logger.info(f'Processing message from {user.user_id} on {platform}: {message.content}')
-            
-            # 處理不同類型的訊息
-            if message.message_type == "text":
-                return self._handle_text_message(user, message.content, platform)
-            elif message.message_type == "audio":
-                return self._handle_audio_message(user, message.raw_data, platform)
-            else:
-                return PlatformResponse(
-                    content="抱歉，暫不支援此類型的訊息。",
-                    response_type="text"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error processing message for user {message.user.user_id}: {e}")
-            error_response = self.error_handler.handle_error(e)
+        user = message.user
+        platform = user.platform.value
+        logger.info(f'Processing message from {user.user_id} on {platform}: {message.content}')
+
+        # 處理不同類型的訊息
+        if message.message_type == "text":
+            return self._handle_text_message(user, message.content, platform)
+        elif message.message_type == "audio":
+            return self._handle_audio_message(user, message.raw_data, platform)
+        else:
             return PlatformResponse(
-                content=error_response.text,
+                content="抱歉，暫不支援此類型的訊息。",
                 response_type="text"
             )
     
@@ -80,10 +71,14 @@ class CoreChatService:
                 return self._handle_chat_message(user, text, platform)
                 
         except Exception as e:
-            logger.error(f"Error handling text message for user {user.user_id}: {e}")
-            error_response = self.error_handler.handle_error(e)
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error handling text message for user {user.user_id}: {type(e).__name__}: {e}")
+            logger.error(f"Error details - Platform: {platform}, Message: {text[:100]}...")
+            
+            # 對於 LINE 平台使用簡化錯誤訊息，其他平台也使用簡化訊息
+            error_message = self.error_handler.get_error_message(e, use_detailed=False)
             return PlatformResponse(
-                content=error_response.text,
+                content=error_message,
                 response_type="text"
             )
     
@@ -107,10 +102,14 @@ class CoreChatService:
             return self._handle_chat_message(user, text, platform)
             
         except Exception as e:
-            logger.error(f"Error processing audio for user {user.user_id}: {e}")
-            error_response = self.error_handler.handle_error(e)
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error processing audio for user {user.user_id}: {type(e).__name__}: {e}")
+            logger.error(f"Error details - Platform: {platform}, Audio size: {len(audio_data) if audio_data else 0} bytes")
+            
+            # 對於音訊錯誤使用簡化訊息
+            error_message = self.error_handler.get_error_message(e, use_detailed=False)
             return PlatformResponse(
-                content=error_response.text,
+                content=error_message,
                 response_type="text"
             )
         
@@ -173,7 +172,9 @@ class CoreChatService:
             )
             
         except Exception as e:
-            logger.error(f"Error processing chat message for user {user.user_id}: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error processing chat message for user {user.user_id}: {type(e).__name__}: {e}")
+            logger.error(f"Error details - Platform: {platform}, Processed text: {text[:100]}...")
             raise
     
     def _process_conversation(self, user: PlatformUser, text: str, platform: str) -> str:

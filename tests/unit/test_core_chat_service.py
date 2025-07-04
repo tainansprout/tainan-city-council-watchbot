@@ -185,14 +185,13 @@ class TestErrorHandling:
         """測試處理模型錯誤"""
         # Mock 模型錯誤
         chat_service.model.chat_with_user.side_effect = OpenAIError("Model error")
-        
+
         response = chat_service.process_message(sample_text_message)
-        
+
         # 應該返回錯誤回應
         assert isinstance(response, PlatformResponse)
         assert response.response_type == "text"
-        # 錯誤處理的具體內容取決於 ErrorHandler 的實作
-    
+
     def test_handle_database_error(self, chat_service, sample_text_message):
         """測試處理資料庫錯誤"""
         # 模擬 chat_with_user 拋出資料庫錯誤
@@ -202,14 +201,14 @@ class TestErrorHandling:
 
         assert isinstance(response, PlatformResponse)
         assert response.response_type == "text"
-    
+
     def test_handle_unexpected_error(self, chat_service, sample_text_message):
         """測試處理意外錯誤"""
         # Mock 意外錯誤
         chat_service.model.chat_with_user.side_effect = Exception("Unexpected error")
-        
+
         response = chat_service.process_message(sample_text_message)
-        
+
         # 應該返回錯誤回應
         assert isinstance(response, PlatformResponse)
         assert response.response_type == "text"

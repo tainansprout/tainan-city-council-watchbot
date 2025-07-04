@@ -320,8 +320,14 @@ class MultiPlatformChatBot:
                 return jsonify({'message': clean_response})
                 
             except Exception as e:
-                logger.error(f"Error in ask endpoint: {e}")
-                return jsonify({'error': '處理訊息時發生錯誤，請稍後再試'}), 500
+                # 記錄詳細的錯誤 log
+                logger.error(f"Error in ask endpoint: {type(e).__name__}: {e}")
+                logger.error(f"Error details - User: {test_user_id}, Message: {user_message[:100]}...")
+                
+                # 使用錯誤處理器取得詳細的錯誤訊息（用於測試介面）
+                detailed_error = self.error_handler.get_error_message(e, use_detailed=True)
+                
+                return jsonify({'error': detailed_error}), 500
         
         logger.info("Routes registered successfully")
     
@@ -364,13 +370,17 @@ class MultiPlatformChatBot:
                             logger.error(f"Failed to send response via {platform_name}")
                     
                 except Exception as e:
-                    logger.error(f"Error processing message from {platform_name}: {e}")
+                    # 記錄詳細的錯誤 log
+                    logger.error(f"Error processing message from {platform_name}: {type(e).__name__}: {e}")
+                    logger.error(f"Error details - Platform: {platform_name}, Message ID: {getattr(message, 'message_id', 'unknown')}")
                     continue
             
             return 'OK'
             
         except Exception as e:
-            logger.error(f"Error handling {platform_name} webhook: {e}")
+            # 記錄詳細的錯誤 log
+            logger.error(f"Error handling {platform_name} webhook: {type(e).__name__}: {e}")
+            logger.error(f"Webhook error details - Platform: {platform_name}, Request size: {len(request.get_data())}")
             abort(500)
     
     def _health_check(self):
