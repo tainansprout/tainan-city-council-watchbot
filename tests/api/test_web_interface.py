@@ -177,13 +177,13 @@ class TestWebInterfaceLoginLogout:
             
             from main import create_app
             app = create_app()
-                app.config['TESTING'] = True
-                
-                # Setup bot instance
-                bot_mock = Mock()
-                bot_mock.chat_service = Mock()
-                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
-                app.extensions['bot'] = bot_mock
+            app.config['TESTING'] = True
+
+            # Setup bot instance
+            bot_mock = Mock()
+            bot_mock.chat_service = Mock()
+            bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+            app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -323,13 +323,13 @@ class TestWebInterfaceAuthentication:
             
             from main import create_app
             app = create_app()
-                app.config['TESTING'] = True
-                
-                # Setup bot instance
-                bot_mock = Mock()
-                bot_mock.chat_service = Mock()
-                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
-                app.extensions['bot'] = bot_mock
+            app.config['TESTING'] = True
+
+            # Setup bot instance
+            bot_mock = Mock()
+            bot_mock.chat_service = Mock()
+            bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+            app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -379,13 +379,13 @@ class TestWebInterfaceErrorHandling:
             
             from main import create_app
             app = create_app()
-                app.config['TESTING'] = True
-                
-                # Setup bot instance
-                bot_mock = Mock()
-                bot_mock.chat_service = Mock()
-                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
-                app.extensions['bot'] = bot_mock
+            app.config['TESTING'] = True
+            
+            # Setup bot instance
+            bot_mock = Mock()
+            bot_mock.chat_service = Mock()
+            bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+            app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -445,13 +445,13 @@ class TestWebInterfaceSecurityFeatures:
             
             from main import create_app
             app = create_app()
-                app.config['TESTING'] = True
-                
-                # Setup bot instance
-                bot_mock = Mock()
-                bot_mock.chat_service = Mock()
-                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
-                app.extensions['bot'] = bot_mock
+            app.config['TESTING'] = True
+            
+            # Setup bot instance
+            bot_mock = Mock()
+            bot_mock.chat_service = Mock()
+            bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+            app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
