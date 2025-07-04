@@ -100,22 +100,24 @@ source config/deploy/.env
 
 # 建立 Secret Manager 密鑰（從 .env 文件讀取）
 echo -n "$OPENAI_API_KEY_SECRET" | gcloud secrets create openai-api-key --data-file=-
+echo -n "$OPENAI_ASSISTANT_ID_SECRET" | gcloud secrets create openai-assistant-id --data-file=-
 echo -n "$LINE_CHANNEL_ACCESS_TOKEN_SECRET" | gcloud secrets create line-channel-access-token --data-file=-
 echo -n "$LINE_CHANNEL_SECRET_SECRET" | gcloud secrets create line-channel-secret --data-file=-
 echo -n "$DB_HOST_SECRET" | gcloud secrets create db-host --data-file=-
 echo -n "$DB_USER_SECRET" | gcloud secrets create db-user --data-file=-
 echo -n "$DB_PASSWORD_SECRET" | gcloud secrets create db-password --data-file=-
 echo -n "$DB_NAME_SECRET" | gcloud secrets create db-name --data-file=-
+echo -n "$TEST_PASSWORD" | gcloud secrets create test-password --data-file=-
 ```
 
 ### 步驟 4: 部署應用程式
 
 ```bash
 # 建立 Docker 映像
-gcloud builds submit --tag gcr.io/$PROJECT_ID/chatgpt-line-bot -f config/deploy/Dockerfile.cloudrun .
+gcloud builds submit --tag asia.gcr.io/$PROJECT_ID/chatgpt-line-bot
 
 # 部署到 Cloud Run
-gcloud run services replace config/deploy/cloudrun-service.yaml --region=asia-east1
+gcloud run deploy chatgpt-line-bot --image asia.gcr.io/$PROJECT_ID/chatgpt-line-bot --platform managed --port 8080 --memory 2G --timeout=3m
 ```
 
 ### 步驟 5: 設定 Load Balancer（可選但推薦）

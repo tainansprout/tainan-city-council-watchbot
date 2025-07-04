@@ -1,9 +1,0 @@
-# ORM and Database Migration Dependencies
-SQLAlchemy==2.0.23
-alembic==1.13.1
-psycopg2-binary==2.9.7
-python-dotenv==1.0.0
-
-# Optional: Enhanced PostgreSQL features
-asyncpg==0.29.0  # For async support if needed
-sqlalchemy[postgresql]==2.0.23

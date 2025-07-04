@@ -25,7 +25,7 @@ spec:
       # 請求超時
       timeoutSeconds: 300
       containers:
-      - image: gcr.io/YOUR_PROJECT_ID/chatgpt-line-bot:latest
+      - image: asia.gcr.io/YOUR_PROJECT_ID/chatgpt-line-bot:latest
         ports:
         - name: http1
           containerPort: 8080

@@ -10,7 +10,7 @@
 
 ```bash
 # 安裝 ORM 相關依賴
-pip install -r requirements-orm.txt
+pip install -r requirements.txt
 
 # 首次資料庫設置（包含遷移初始化）
 ./scripts/db.sh setup
@@ -220,7 +220,7 @@ print(f"Cleaned up {deleted_count} old records")
 
 現有專案遷移步驟：
 
-1. 安裝依賴: `pip install -r requirements-orm.txt`
+1. 安裝依賴: `pip install -r requirements.txt`
 2. 備份現有資料庫
 3. 執行設置: `./scripts/db.sh setup`
 4. 測試新功能

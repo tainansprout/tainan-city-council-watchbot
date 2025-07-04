@@ -5,14 +5,8 @@
 支援開發和生產環境的自動切換
 """
 
-# 在生產環境中提前進行 gevent monkey patching 以避免 SSL 警告
+# 移除 gevent monkey patching，使用 sync worker
 import os
-if os.getenv('FLASK_ENV') == 'production':
-    try:
-        import gevent.monkey
-        gevent.monkey.patch_all()
-    except ImportError:
-        pass
 
 import sys
 import atexit
@@ -124,44 +118,27 @@ def main():
         raise
 
 # 為 WSGI 服務器創建應用實例 (生產環境使用)
-# 只在非直接執行時創建 WSGI 應用實例，避免重複初始化
-application = None
-
-def get_wsgi_application():
-    """獲取 WSGI 應用實例，延遲創建避免重複初始化"""
-    global application
-    if application is None:
-        try:
-            # 創建應用實例 (不修改環境變數，保持原始設定)
-            application = create_app()
-            
-            # 記錄當前環境
-            current_env = os.getenv('FLASK_ENV', 'development')
-            logger.info(f"WSGI application created for environment: {current_env}")
-            
-            # 在生產環境中進行額外的初始化
-            if current_env == 'production':
-                with application.app_context():
-                    # 這裡可以添加額外的生產環境初始化邏輯
-                    logger.info("Production application instance initialized successfully")
-                    
-        except Exception as e:
-            logger.error(f"Failed to create WSGI application: {e}")
-            # 在生產環境中，我們仍然需要一個有效的 application 對象
-            # 創建一個基本的錯誤應用
-            from flask import Flask
-            application = Flask(__name__)
-            
-            @application.route('/health')
-            def error_health():
-                return {'status': 'error', 'message': str(e)}, 503
+# 確保在所有情況下都能正確創建 application 實例
+try:
+    # 直接創建 application 實例，供 Gunicorn 使用
+    application = create_app()
+    logger.info("WSGI application created successfully")
+except Exception as e:
+    logger.error(f"Failed to create WSGI application: {e}")
+    import traceback
+    logger.error(f"Full traceback: {traceback.format_exc()}")
     
-    return application
-
-# 為了兼容性，提供 application 變數
-# 但只在被 import 為模組且非直接執行時創建
-if __name__ != "__main__":
-    application = get_wsgi_application()
+    # 創建一個基本的錯誤應用
+    from flask import Flask
+    application = Flask(__name__)
+    
+    @application.route('/health')
+    def error_health():
+        return {'status': 'error', 'message': str(e)}, 503
+    
+    @application.route('/')
+    def error_index():
+        return {'status': 'error', 'message': f'Application failed to start: {str(e)}'}, 503
 
 
 if __name__ == "__main__":

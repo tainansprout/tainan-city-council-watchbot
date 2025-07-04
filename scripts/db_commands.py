@@ -49,7 +49,7 @@ def db_setup():
     print("🛠️ Setting up database for the first time...\n")
     
     # Install dependencies
-    if not run_command("pip install -r requirements-orm.txt", "Installing ORM dependencies"):
+    if not run_command("pip install -r requirements.txt", "Installing main dependencies"):
         return False
     
     # Initialize Alembic (if not already done)

@@ -38,17 +38,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:$PORT/health || exit 1
 
 # 使用 Gunicorn 啟動，配置適合 Cloud Run
-CMD exec gunicorn \
-    --bind 0.0.0.0:$PORT \
-    --workers 2 \
-    --worker-class gevent \
-    --worker-connections 1000 \
-    --timeout 120 \
-    --keep-alive 2 \
-    --max-requests 1000 \
-    --max-requests-jitter 100 \
-    --preload \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info \
-    main:application
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "main:application"]

@@ -1,13 +1,46 @@
-FROM python:3.12
+# 使用較小的 Python 基礎映像
+FROM python:3.11-slim
 
-ENV PYTHONUNBUFFERED True
+# 設定環境變數
+ENV PYTHONUNBUFFERED=True \
+    PYTHONDONTWRITEBYTECODE=True \
+    PIP_NO_CACHE_DIR=True \
+    PIP_DISABLE_PIP_VERSION_CHECK=True
 
-COPY ./ /ChatGPT-Line-Bot
-WORKDIR /ChatGPT-Line-Bot
-RUN find . -name "*.ipynb" -exec rm {} +
-RUN apt-get install libpq-dev
-RUN pip3 install --upgrade pip
-RUN pip3 install -r requirements.txt
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# 使用新的統一入口點
+# 建立應用程式目錄
+WORKDIR /app
+
+# 先複製依賴檔案，利用 Docker 快取
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 建立非 root 使用者
+RUN useradd --create-home --shell /bin/bash app
+
+# 複製應用程式代碼
+COPY . .
+
+# 移除不必要的檔案
+RUN find . -name "*.ipynb" -exec rm {} + && \
+    find . -name "*.pyc" -exec rm {} + && \
+    find . -name "__pycache__" -type d -exec rm -rf {} + || true
+
+# 修改文件所有權給 app 用戶
+RUN chown -R app:app /app
+
+# 切換到非 root 使用者
+USER app
+
+# 健康檢查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
+
+# 使用 Gunicorn 啟動，配置適合 Cloud Run
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "main:application"]

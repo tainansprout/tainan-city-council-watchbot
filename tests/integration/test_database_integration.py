@@ -201,8 +201,8 @@ class TestDatabaseScripts:
     
     def test_requirements_orm_exists(self):
         """測試 ORM 需求檔案存在"""
-        req_path = project_root / "requirements-orm.txt"
-        assert req_path.exists(), "requirements-orm.txt 檔案不存在"
+        req_path = project_root / "requirements.txt"
+        assert req_path.exists(), "requirements.txt 檔案不存在"
         
         # 檢查檔案內容包含必要的套件
         content = req_path.read_text()
