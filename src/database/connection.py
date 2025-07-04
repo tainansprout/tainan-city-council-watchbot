@@ -29,7 +29,13 @@ class Database:
         self.config = config
         self.engine = self._create_engine()
         self.SessionLocal = sessionmaker(bind=self.engine)
-        logger.debug('create SQLAlchemy ORM engine')
+        try:
+
+            logger.debug('create SQLAlchemy ORM engine')
+
+        except ValueError:
+
+            pass
 
     def _create_engine(self):
         """建立資料庫引擎with最佳化設定"""
@@ -80,7 +86,13 @@ class Database:
             session.commit()
         except Exception as e:
             session.rollback()
-            logger.error(f"Database error: {e}")
+            try:
+
+                logger.error(f"Database error: {e}")
+
+            except ValueError:
+
+                pass
             raise DatabaseError(f"Database operation failed: {e}")
         finally:
             session.close()
@@ -125,7 +137,17 @@ class Database:
     def close_engine(self):
         """關閉資料庫引擎"""
         self.engine.dispose()
-        logger.debug('close SQLAlchemy engine.')
+        try:
+            try:
+
+                logger.debug('close SQLAlchemy engine.')
+
+            except ValueError:
+
+                pass
+        except (ValueError, OSError):
+            # Logger may be closed already during cleanup
+            pass
     
     def get_connection_info(self) -> dict:
         """取得連線池資訊（用於監控）"""

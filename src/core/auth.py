@@ -163,7 +163,7 @@ def require_test_auth(f):
 def _handle_simple_password_auth(f, *args, **kwargs):
     """處理簡單密碼認證"""
     # 在測試環境中跳過認證
-    if request.environ.get('FLASK_ENV') == 'testing':
+    if (request.environ.get('FLASK_ENV') == 'testing' or current_app.config.get('TESTING', False)):
         return f(*args, **kwargs)
         
     # 檢查是否已登入（session）
@@ -187,7 +187,7 @@ def _handle_simple_password_auth(f, *args, **kwargs):
 def _handle_basic_auth(f, *args, **kwargs):
     """處理 HTTP Basic 認證"""
     # 在測試環境中跳過認證
-    if request.environ.get('FLASK_ENV') == 'testing':
+    if (request.environ.get('FLASK_ENV') == 'testing' or current_app.config.get('TESTING', False)):
         return f(*args, **kwargs)
         
     auth = request.authorization
@@ -201,7 +201,7 @@ def _handle_basic_auth(f, *args, **kwargs):
 def _handle_token_auth(f, *args, **kwargs):
     """處理 Token 認證"""
     # 在測試環境中跳過認證
-    if request.environ.get('FLASK_ENV') == 'testing':
+    if (request.environ.get('FLASK_ENV') == 'testing' or current_app.config.get('TESTING', False)):
         return f(*args, **kwargs)
         
     auth_header = request.headers.get('Authorization', '')

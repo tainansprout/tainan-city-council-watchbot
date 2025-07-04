@@ -33,6 +33,13 @@ class TestWebInterface:
             app = create_app()
             app.config['TESTING'] = True
             
+            # Setup bot instance
+            bot_mock = Mock()
+            bot_mock.chat_service = Mock()
+            bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+            app.extensions['bot'] = bot_mock
+            app.config['TESTING'] = True
+            
             return app.test_client()
     
     def test_chat_interface_requires_auth(self, client):
@@ -47,7 +54,7 @@ class TestWebInterface:
     
     def test_chat_interface_successful_login(self, client):
         """測試聊天介面成功登入"""
-        response = client.post('/chat', data={'password': 'test123'})
+        response = client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         assert response.status_code == 200
         response_text = response.get_data(as_text=True)
@@ -76,7 +83,7 @@ class TestWebInterface:
     def test_ask_api_successful_request(self, client):
         """測試 Ask API 成功請求"""
         # 先登入
-        login_response = client.post('/chat', data={'password': 'test123'})
+        login_response = client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         assert login_response.status_code == 200
         
         # 模擬成功的聊天服務回應
@@ -97,7 +104,7 @@ class TestWebInterface:
     def test_ask_api_invalid_message(self, client):
         """測試 Ask API 無效訊息"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 測試空訊息
         response = client.post('/ask', 
@@ -110,7 +117,7 @@ class TestWebInterface:
     def test_ask_api_message_too_long(self, client):
         """測試 Ask API 訊息過長"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 測試過長訊息
         long_message = 'a' * 2000  # 超過限制的長度
@@ -126,7 +133,7 @@ class TestWebInterface:
     def test_ask_api_missing_json(self, client):
         """測試 Ask API 缺少 JSON 資料"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 測試無 JSON 資料
         response = client.post('/ask')
@@ -136,7 +143,7 @@ class TestWebInterface:
     def test_ask_api_invalid_json(self, client):
         """測試 Ask API 無效 JSON 格式"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 測試無效 JSON
         response = client.post('/ask', 
@@ -170,6 +177,13 @@ class TestWebInterfaceLoginLogout:
             
             from main import create_app
             app = create_app()
+                app.config['TESTING'] = True
+                
+                # Setup bot instance
+                bot_mock = Mock()
+                bot_mock.chat_service = Mock()
+                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+                app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -222,7 +236,7 @@ class TestWebInterfaceLoginLogout:
     
     def test_login_non_json_request(self, client):
         """測試非 JSON 格式的登入請求"""
-        response = client.post('/login', data={'password': 'test123'})
+        response = client.post('/login', json={'password': 'test123'}, content_type='application/json')
         assert response.status_code == 400
     
     def test_chat_interface_after_login(self, client):
@@ -309,6 +323,13 @@ class TestWebInterfaceAuthentication:
             
             from main import create_app
             app = create_app()
+                app.config['TESTING'] = True
+                
+                # Setup bot instance
+                bot_mock = Mock()
+                bot_mock.chat_service = Mock()
+                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+                app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -316,7 +337,7 @@ class TestWebInterfaceAuthentication:
     def test_session_persistence(self, client):
         """測試 session 持續性"""
         # 先登入
-        login_response = client.post('/chat', data={'password': 'test123'})
+        login_response = client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         assert login_response.status_code == 200
         
         # 再次訪問聊天介面，應該不需要重新登入
@@ -358,6 +379,13 @@ class TestWebInterfaceErrorHandling:
             
             from main import create_app
             app = create_app()
+                app.config['TESTING'] = True
+                
+                # Setup bot instance
+                bot_mock = Mock()
+                bot_mock.chat_service = Mock()
+                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+                app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -365,7 +393,7 @@ class TestWebInterfaceErrorHandling:
     def test_ask_api_chat_service_error(self, client):
         """測試 Ask API 聊天服務錯誤"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 模擬聊天服務錯誤
         with patch('src.services.chat.CoreChatService.process_message') as mock_process:
@@ -417,6 +445,13 @@ class TestWebInterfaceSecurityFeatures:
             
             from main import create_app
             app = create_app()
+                app.config['TESTING'] = True
+                
+                # Setup bot instance
+                bot_mock = Mock()
+                bot_mock.chat_service = Mock()
+                bot_mock.chat_service.handle_message.return_value = Mock(text="Test response")
+                app.extensions['bot'] = bot_mock
             app.config['TESTING'] = True
             
             return app.test_client()
@@ -424,7 +459,7 @@ class TestWebInterfaceSecurityFeatures:
     def test_xss_protection_in_ask_api(self, client):
         """測試 Ask API 的 XSS 防護"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 模擬惡意輸入
         malicious_input = '<script>alert("xss")</script>'
@@ -447,7 +482,7 @@ class TestWebInterfaceSecurityFeatures:
     def test_input_validation_in_ask_api(self, client):
         """測試 Ask API 的輸入驗證"""
         # 先登入
-        client.post('/chat', data={'password': 'test123'})
+        client.post('/chat', json={'password': 'test123'}, content_type='application/json')
         
         # 測試各種無效輸入
         invalid_inputs = [

@@ -220,3 +220,113 @@ def pytest_collection_modifyitems(config, items):
         # 為資料庫測試添加標記
         if "database" in item.nodeid.lower() or "db" in item.nodeid.lower():
             item.add_marker(pytest.mark.database)
+
+
+# === 新增的 fixtures ===
+"""
+測試用的 fixtures 和 mocks
+"""
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from flask import Flask
+
+
+@pytest.fixture
+def mock_config():
+    """標準測試配置"""
+    return {
+        'app': {
+            'name': 'Test Bot',
+            'version': '2.0.0'
+        },
+        'platforms': {
+            'line': {
+                'enabled': True,
+                'channel_access_token': 'test_token',
+                'channel_secret': 'test_secret'
+            }
+        },
+        'llm': {'provider': 'openai'},
+        'openai': {
+            'api_key': 'test_key',
+            'assistant_id': 'test_assistant'
+        },
+        'db': {
+            'host': 'localhost',
+            'port': 5432,
+            'user': 'test',
+            'password': 'test',
+            'db_name': 'test'
+        },
+        'auth': {
+            'method': 'simple_password',
+            'password': 'test123'
+        }
+    }
+
+
+@pytest.fixture
+def mock_app(mock_config):
+    """創建 mock 應用"""
+    with patch('src.core.config.load_config', return_value=mock_config):
+        # 創建基本的 Flask 應用
+        app = Flask(__name__)
+        app.config['TESTING'] = True
+        
+        # 添加基本路由
+        @app.route('/health')
+        def health():
+            return {'status': 'healthy'}
+        
+        @app.route('/')
+        def root():
+            return {'name': 'Test Bot', 'version': '2.0.0'}
+        
+        return app
+
+
+@pytest.fixture
+def mock_database():
+    """Mock 資料庫"""
+    db = Mock()
+    db.get_session = Mock()
+    db.get_connection_info = Mock(return_value={
+        'pool_size': 10,
+        'checked_out': 1
+    })
+    return db
+
+
+@pytest.fixture
+def mock_model():
+    """Mock AI 模型"""
+    model = Mock()
+    model.check_connection.return_value = (True, None)
+    model.get_provider.return_value = Mock(value='openai')
+    model.chat_with_user.return_value = (True, Mock(answer='Test response'), None)
+    return model
+
+
+@pytest.fixture
+def patched_app(mock_config):
+    """完全 patched 的應用"""
+    with patch('src.core.config.load_config', return_value=mock_config), \
+         patch('src.database.connection.Database') as MockDB, \
+         patch('src.models.factory.ModelFactory.create_from_config') as mock_factory:
+        
+        # 設定 mock
+        MockDB.return_value = Mock()
+        mock_factory.return_value = Mock()
+        
+        # 只 patch 初始化方法
+        with patch('src.app.MultiPlatformChatBot._initialize_database'), \
+             patch('src.app.MultiPlatformChatBot._initialize_model'), \
+             patch('src.app.MultiPlatformChatBot._initialize_core_service'), \
+             patch('src.app.MultiPlatformChatBot._initialize_platforms'), \
+             patch('src.app.MultiPlatformChatBot._register_cleanup'):
+            
+            from main import create_app
+            app = create_app()
+            app.config['TESTING'] = True
+            
+            yield app

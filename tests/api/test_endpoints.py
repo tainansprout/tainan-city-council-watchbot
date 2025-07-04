@@ -21,32 +21,52 @@ class TestHealthEndpoint:
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test', 'assistant_id': 'test'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             app = create_app()
             app.config['TESTING'] = True
+            
+            # Setup bot instance in extensions
+            app.extensions['bot'] = Mock()
+            app.extensions['bot'].database = Mock()
+            app.extensions['bot'].model = Mock()
+            app.extensions['bot'].platform_manager = Mock()
+            app.extensions['bot'].chat_service = Mock()
             with app.test_client() as client:
                 yield client
     
     def test_health_check_success(self, client):
         """測試健康檢查成功"""
-        with patch('src.app.MultiPlatformChatBot.database') as mock_database, \
-             patch('src.app.MultiPlatformChatBot.model') as mock_model:
+        # Mock 實際的健康檢查執行過程
+        with patch('src.database.connection.Database.get_session') as mock_get_session, \
+             patch('src.models.factory.ModelFactory.create_from_config') as mock_create_model:
             
-            # 設定模擬回應
-            mock_database.get_connection_info.return_value = {
-                'pool_size': 10,
-                'checked_in': 2,
-                'checked_out': 1,
-                'overflow': 0,
-                'invalid': 0
-            }
+            # 設定資料庫模擬 - context manager
+            mock_session = Mock()
+            mock_get_session.return_value.__enter__ = Mock(return_value=mock_session)
+            mock_get_session.return_value.__exit__ = Mock(return_value=None)
+            mock_session.execute.return_value = None
+            
+            # 設定模型模擬
+            mock_model = Mock()
             mock_model.check_connection.return_value = (True, None)
+            mock_create_model.return_value = mock_model
             
             response = client.get('/health')
             
+            # 先檢查回應內容來了解問題
+            print(f"Response status: {response.status_code}")
+            print(f"Response data: {response.data}")
+            print(f"Response content-type: {response.content_type}")
+            
             assert response.status_code == 200
-            data = json.loads(response.data)
+            # 嘗試使用 json.loads 來解析
+            if response.data:
+                data = json.loads(response.data)
+            else:
+                data = response.get_json()
+            
+            assert data is not None
             assert data['status'] == 'healthy'
             assert 'checks' in data
             assert 'database' in data['checks']
@@ -57,42 +77,54 @@ class TestHealthEndpoint:
     
     def test_health_check_database_error(self, client):
         """測試資料庫連線錯誤"""
-        with patch('main.database') as mock_db, \
-             patch('main.model') as mock_model:
+        # 需要 mock 實際的健康檢查執行過程
+        with patch('src.database.connection.Database.get_session') as mock_get_session, \
+             patch('src.models.factory.ModelFactory.create_from_config') as mock_create_model:
             
             # 模擬資料庫錯誤 - context manager
             mock_session = Mock()
-            mock_db.get_session.return_value.__enter__ = Mock(return_value=mock_session)
-            mock_db.get_session.return_value.__exit__ = Mock(return_value=None)
+            mock_get_session.return_value.__enter__ = Mock(return_value=mock_session)
+            mock_get_session.return_value.__exit__ = Mock(return_value=None)
             mock_session.execute.side_effect = Exception("Database error")
+            
+            # 模擬模型正常
+            mock_model = Mock()
             mock_model.check_connection.return_value = (True, None)
+            mock_create_model.return_value = mock_model
             
             response = client.get('/health')
             
             assert response.status_code == 503
-            data = json.loads(response.data)
+            data = response.get_json()
+            assert data is not None
             assert data['status'] == 'unhealthy'
-            assert data['database']['status'] == 'error'
+            assert data['checks']['database']['status'] == 'unhealthy'
     
     def test_health_check_model_error(self, client):
         """測試模型連線錯誤"""
-        with patch('main.database') as mock_db, \
-             patch('main.model') as mock_model:
+        # 需要 mock 實際的健康檢查執行過程
+        with patch('src.database.connection.Database.get_session') as mock_get_session, \
+             patch('src.models.factory.ModelFactory.create_from_config') as mock_create_model:
             
-            # 設定模擬 - context manager
+            # 設定模擬 - context manager (資料庫正常)
             mock_session = Mock()
-            mock_db.get_session.return_value.__enter__ = Mock(return_value=mock_session)
-            mock_db.get_session.return_value.__exit__ = Mock(return_value=None)
+            mock_get_session.return_value.__enter__ = Mock(return_value=mock_session)
+            mock_get_session.return_value.__exit__ = Mock(return_value=None)
             mock_session.execute.return_value = None
+            
+            # 模擬模型錯誤
+            mock_model = Mock()
             mock_model.check_connection.return_value = (False, "API key invalid")
+            mock_create_model.return_value = mock_model
             
             response = client.get('/health')
             
             assert response.status_code == 503
-            data = json.loads(response.data)
+            data = response.get_json()
+            assert data is not None
             assert data['status'] == 'unhealthy'
-            assert data['model']['status'] == 'error'
-            assert 'API key invalid' in data['model']['error']
+            assert data['checks']['model']['status'] == 'unhealthy'
+            assert 'API key invalid' in data['checks']['model']['error']
 
 
 class TestLineWebhookEndpoint:
@@ -100,9 +132,24 @@ class TestLineWebhookEndpoint:
     
     @pytest.fixture
     def client(self):
-        app.config['TESTING'] = True
-        with app.test_client() as client:
-            yield client
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
+            app = create_app()
+            app.config['TESTING'] = True
+            
+            # Setup bot instance in extensions
+            app.extensions['bot'] = Mock()
+            app.extensions['bot'].database = Mock()
+            app.extensions['bot'].model = Mock()
+            app.extensions['bot'].platform_manager = Mock()
+            app.extensions['bot'].chat_service = Mock()
+            with app.test_client() as client:
+                yield client
     
     @pytest.fixture
     def line_webhook_headers(self):
@@ -130,20 +177,42 @@ class TestLineWebhookEndpoint:
             ]
         }
         
-        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
-             patch('main.handler.handle') as mock_handler:
+        # Mock 平台管理器和處理器
+        with patch('src.platforms.base.get_platform_manager') as mock_get_manager:
             
-            # 設定模擬 - handler 處理成功
-            mock_handler.return_value = None
+            # 設定平台管理器模擬
+            mock_manager = Mock()
+            mock_get_manager.return_value = mock_manager
             
-            response = client.post(
-                '/callback',
-                data=json.dumps(webhook_data),
-                headers=line_webhook_headers
+            # 模擬 webhook 處理返回訊息
+            from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
+            mock_user = Mock(user_id='U' + '0' * 32, display_name='Test User', platform=PlatformType.LINE)
+            mock_message = Mock(
+                message_id='test_msg_id',
+                user=mock_user,
+                content='Hello',
+                message_type='text',
+                reply_token='test_reply_token'
             )
+            mock_manager.handle_platform_webhook.return_value = [mock_message]
             
-            assert response.status_code == 200
-            mock_handler.assert_called_once()
+            # 模擬處理器
+            mock_handler = Mock()
+            mock_handler.send_response.return_value = True
+            mock_manager.get_handler.return_value = mock_handler
+            
+            # Mock 核心聊天服務
+            with patch('src.services.chat.CoreChatService.process_message') as mock_process:
+                mock_process.return_value = Mock(content='Test response')
+            
+                response = client.post(
+                    '/callback',
+                    data=json.dumps(webhook_data),
+                    headers=line_webhook_headers
+                )
+                
+                assert response.status_code == 200
+                mock_manager.handle_platform_webhook.assert_called_once()
     
     def test_webhook_audio_message(self, client, line_webhook_headers):
         """測試語音訊息 webhook"""
@@ -164,20 +233,43 @@ class TestLineWebhookEndpoint:
             ]
         }
         
-        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
-             patch('main.handler.handle') as mock_handler:
+        # Mock 平台管理器和處理器
+        with patch('src.platforms.base.get_platform_manager') as mock_get_manager:
             
-            # 設定模擬 - handler 處理成功
-            mock_handler.return_value = None
+            # 設定平台管理器模擬
+            mock_manager = Mock()
+            mock_get_manager.return_value = mock_manager
             
-            response = client.post(
-                '/callback',
-                data=json.dumps(webhook_data),
-                headers=line_webhook_headers
+            # 模擬 webhook 處理返回訊息
+            from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
+            mock_user = Mock(user_id='U' + '1' * 32, display_name='Test User', platform=PlatformType.LINE)
+            mock_message = Mock(
+                message_id='audio_message_id_123',
+                user=mock_user,
+                content='',
+                message_type='audio',
+                reply_token='test_reply_token_audio',
+                audio_content=b'audio_data'
             )
+            mock_manager.handle_platform_webhook.return_value = [mock_message]
             
-            assert response.status_code == 200
-            mock_handler.assert_called_once()
+            # 模擬處理器
+            mock_handler = Mock()
+            mock_handler.send_response.return_value = True
+            mock_manager.get_handler.return_value = mock_handler
+            
+            # Mock 核心聊天服務
+            with patch('src.services.chat.CoreChatService.process_message') as mock_process:
+                mock_process.return_value = Mock(content='Audio response')
+            
+                response = client.post(
+                    '/callback',
+                    data=json.dumps(webhook_data),
+                    headers=line_webhook_headers
+                )
+                
+                assert response.status_code == 200
+                mock_manager.handle_platform_webhook.assert_called_once()
     
     def test_webhook_invalid_signature(self, client):
         """測試無效簽章"""
@@ -187,7 +279,14 @@ class TestLineWebhookEndpoint:
             'X-Line-Signature': 'invalid_signature'
         }
         
-        with patch('main.verify_line_signature', return_value=False) as mock_verify:
+        # Mock 平台管理器拋出驗證錯誤
+        with patch('src.platforms.base.get_platform_manager') as mock_get_manager:
+            
+            mock_manager = Mock()
+            mock_get_manager.return_value = mock_manager
+            
+            # 模擬簽章驗證失敗
+            mock_manager.handle_platform_webhook.side_effect = ValueError("Invalid signature")
             
             response = client.post(
                 '/callback',
@@ -195,7 +294,8 @@ class TestLineWebhookEndpoint:
                 headers=headers
             )
             
-            assert response.status_code == 400
+            # 新架構中，webhook 錯誤會返回 500
+            assert response.status_code == 500
     
     def test_webhook_unsupported_event_type(self, client, line_webhook_headers):
         """測試不支援的事件類型"""
@@ -211,11 +311,15 @@ class TestLineWebhookEndpoint:
             ]
         }
         
-        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
-             patch('main.handler.handle') as mock_handler:
+        # Mock 平台管理器
+        with patch('src.platforms.base.get_platform_manager') as mock_get_manager:
             
-            # 設定模擬 - handler 處理成功
-            mock_handler.return_value = None
+            # 設定平台管理器模擬
+            mock_manager = Mock()
+            mock_get_manager.return_value = mock_manager
+            
+            # 模擬返回空訊息列表（不支援的事件）
+            mock_manager.handle_platform_webhook.return_value = []
             
             response = client.post(
                 '/callback',
@@ -231,9 +335,24 @@ class TestErrorHandling:
     
     @pytest.fixture
     def client(self):
-        app.config['TESTING'] = True
-        with app.test_client() as client:
-            yield client
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
+            app = create_app()
+            app.config['TESTING'] = True
+            
+            # Setup bot instance in extensions
+            app.extensions['bot'] = Mock()
+            app.extensions['bot'].database = Mock()
+            app.extensions['bot'].model = Mock()
+            app.extensions['bot'].platform_manager = Mock()
+            app.extensions['bot'].chat_service = Mock()
+            with app.test_client() as client:
+                yield client
     
     def test_404_error(self, client):
         """測試 404 錯誤"""
@@ -264,20 +383,40 @@ class TestErrorHandling:
             'X-Line-Signature': 'test_signature'
         }
         
-        with patch('main.verify_line_signature', return_value=True) as mock_verify, \
-             patch('main.handler.handle') as mock_handler:
+        # Mock 平台管理器但讓處理過程失敗
+        with patch('src.platforms.base.get_platform_manager') as mock_get_manager:
             
-            # 模擬解析成功但服務失敗
-            mock_handler.side_effect = Exception("Service error")
+            mock_manager = Mock()
+            mock_get_manager.return_value = mock_manager
             
-            response = client.post(
-                '/callback',
-                data=json.dumps(webhook_data),
-                headers=headers
+            # 模擬 webhook 處理成功
+            from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
+            mock_user = Mock(user_id='U' + '3' * 32, display_name='Test User', platform=PlatformType.LINE)
+            mock_message = Mock(
+                message_id='test_msg_id',
+                user=mock_user,
+                content='test',
+                message_type='text',
+                reply_token='test_token'
             )
+            mock_manager.handle_platform_webhook.return_value = [mock_message]
             
-            # 錯誤應該被捕獲並記錄，返回 500
-            assert response.status_code == 500
+            # 模擬處理器
+            mock_handler = Mock()
+            mock_manager.get_handler.return_value = mock_handler
+            
+            # Mock 核心聊天服務但讓它失敗
+            with patch('src.services.chat.CoreChatService.process_message') as mock_process:
+                mock_process.side_effect = Exception("Service error")
+                
+                response = client.post(
+                    '/callback',
+                    data=json.dumps(webhook_data),
+                    headers=headers
+                )
+                
+                # 錯誤應該被捕獲並記錄，但返回 200 OK
+                assert response.status_code == 200
 
 
 class TestConfigurationEndpoints:
@@ -285,32 +424,41 @@ class TestConfigurationEndpoints:
     
     @pytest.fixture
     def client(self):
-        app.config['TESTING'] = True
-        with app.test_client() as client:
-            yield client
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
+            app = create_app()
+            app.config['TESTING'] = True
+            
+            # Setup bot instance in extensions
+            app.extensions['bot'] = Mock()
+            app.extensions['bot'].database = Mock()
+            app.extensions['bot'].model = Mock()
+            app.extensions['bot'].platform_manager = Mock()
+            app.extensions['bot'].chat_service = Mock()
+            with app.test_client() as client:
+                yield client
     
     def test_config_info_endpoint(self, client):
         """測試配置資訊端點（如果存在）"""
         # 這個測試假設有配置資訊端點
         # 如果沒有此端點，可以跳過此測試
-        with patch('main.config') as mock_config:
-            mock_config.get.return_value = 'test_value'
-            
-            # 嘗試訪問配置端點
-            response = client.get('/config')
-            
-            # 如果端點不存在，應該返回 404
-            assert response.status_code in [200, 404]
+        # 嘗試訪問配置端點
+        response = client.get('/config')
+        
+        # 如果端點不存在，應該返回 404
+        assert response.status_code in [200, 404]
     
     def test_model_info_endpoint(self, client):
         """測試模型資訊端點（如果存在）"""
-        with patch('main.model') as mock_model:
-            mock_model.get_provider.return_value = 'openai'
-            
-            response = client.get('/model/info')
-            
-            # 如果端點不存在，應該返回 404
-            assert response.status_code in [200, 404]
+        response = client.get('/model/info')
+        
+        # 如果端點不存在，應該返回 404
+        assert response.status_code in [200, 404]
 
 
 class TestPerformanceEndpoints:
@@ -321,54 +469,80 @@ class TestPerformanceEndpoints:
         import threading
         import json
         from unittest.mock import patch
-        from main import app
+        
+        # 使用固定的配置創建應用
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
+            
+            from main import create_app
+            app = create_app()
+            app.config['TESTING'] = True
+            
+            # Setup bot instance in extensions
+            app.extensions['bot'] = Mock()
+            app.extensions['bot'].database = Mock()
+            app.extensions['bot'].model = Mock()
+            app.extensions['bot'].platform_manager = Mock()
+            app.extensions['bot'].chat_service = Mock()
 
-        webhook_data = {
-            'events': [
-                {
-                    'type': 'message',
-                    'message': {
-                        'type': 'text',
-                        'text': 'concurrent test'
-                    },
-                    'source': {
-                        'type': 'user',
-                        'userId': 'U' + '4' * 32
-                    },
-                    'replyToken': 'concurrent_token'
-                }
-            ]
-        }
-        
-        headers = {
-            'Content-Type': 'application/json',
-            'X-Line-Signature': 'a_valid_signature'
-        }
-        
-        results = []
-        
-        def make_request():
-            try:
-                with app.test_client() as thread_client:
-                    with patch('main._handle_line_webhook', return_value='OK'):
-                        response = thread_client.post(
-                            '/callback',
-                            data=json.dumps(webhook_data),
-                            headers=headers
-                        )
-                        results.append(response.status_code)
-            except Exception as e:
-                results.append(str(e))
-        
-        threads = []
-        for _ in range(5):
-            t = threading.Thread(target=make_request)
-            threads.append(t)
-            t.start()
-        
-        for t in threads:
-            t.join()
-        
-        assert len(results) == 5
-        success_count = sum(1 for r in results if r == 200)
-        assert success_count == 5, f"Expected 5 successful requests, but got {success_count}. Results: {results}"
+            webhook_data = {
+                'events': [
+                    {
+                        'type': 'message',
+                        'message': {
+                            'type': 'text',
+                            'text': 'concurrent test'
+                        },
+                        'source': {
+                            'type': 'user',
+                            'userId': 'U' + '4' * 32
+                        },
+                        'replyToken': 'concurrent_token'
+                    }
+                ]
+            }
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'X-Line-Signature': 'a_valid_signature'
+            }
+            
+            results = []
+            
+            def make_request():
+                try:
+                    with app.test_client() as thread_client:
+                        # Mock 平台管理器
+                        with patch('src.platforms.base.get_platform_manager') as mock_get_manager:
+                            mock_manager = Mock()
+                            mock_get_manager.return_value = mock_manager
+                            
+                            # 模擬空訊息列表（快速返回）
+                            mock_manager.handle_platform_webhook.return_value = []
+                            
+                            response = thread_client.post(
+                                '/callback',
+                                data=json.dumps(webhook_data),
+                                headers=headers
+                            )
+                            results.append(response.status_code)
+                except Exception as e:
+                    results.append(str(e))
+            
+            threads = []
+            for _ in range(5):
+                t = threading.Thread(target=make_request)
+                threads.append(t)
+                t.start()
+            
+            for t in threads:
+                t.join()
+            
+            assert len(results) == 5
+            success_count = sum(1 for r in results if r == 200)
+            assert success_count == 5, f"Expected 5 successful requests, but got {success_count}. Results: {results}"

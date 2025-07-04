@@ -22,7 +22,7 @@ class TestMainApplication:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             from main import create_app
@@ -44,7 +44,7 @@ class TestMainApplication:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             from main import application
@@ -66,7 +66,7 @@ class TestMainApplication:
                     'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                     'llm': {'provider': 'openai'},
                     'openai': {'api_key': 'test', 'assistant_id': 'test'},
-                    'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                    'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
                 }
                 
                 from main import application
@@ -91,7 +91,7 @@ class TestMainApplication:
                     'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                     'llm': {'provider': 'openai'},
                     'openai': {'api_key': 'test', 'assistant_id': 'test'},
-                    'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                    'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
                 }
                 
                 # 重新導入以測試生產環境
@@ -119,7 +119,7 @@ class TestWSGICompatibility:
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test', 'assistant_id': 'test'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             # 測試主要的導入路徑
@@ -138,7 +138,7 @@ class TestWSGICompatibility:
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test', 'assistant_id': 'test'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             # 測試主要導入方式
@@ -195,14 +195,23 @@ class TestProductionMode:
         assert '--workers' in call_args
         assert 'main:application' in call_args
     
-    @patch('importlib.util.find_spec')
-    def test_production_server_missing_gunicorn(self, mock_find_spec):
+    @patch('subprocess.run')
+    def test_production_server_missing_gunicorn(self, mock_subprocess):
         """測試 Gunicorn 未安裝的情況"""
-        mock_find_spec.return_value = None  # 模擬 gunicorn 未安裝
-        
-        from main import start_production_server
-        
-        with pytest.raises(SystemExit) as exc_info:
-            start_production_server()
-        
-        assert exc_info.value.code == 1
+        # Mock gunicorn import to raise ImportError
+        with patch.dict('sys.modules', {'gunicorn': None}):
+            with patch('builtins.__import__', side_effect=lambda name, *args, **kwargs: 
+                      (_ for _ in ()).throw(ImportError("No module named 'gunicorn'")) 
+                      if name == 'gunicorn' else __import__(name, *args, **kwargs)):
+                
+                from main import start_production_server
+                
+                # 測試應該會呼叫 sys.exit(1)
+                with pytest.raises(SystemExit) as exc_info:
+                    start_production_server()
+                
+                # 驗證 exit code 是 1
+                assert exc_info.value.code == 1
+                
+                # 驗證 subprocess.run 沒有被呼叫
+                mock_subprocess.assert_not_called()

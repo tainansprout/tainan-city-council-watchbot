@@ -97,30 +97,43 @@ test:
         assert manager.get_value('test.nonexistent') is None
         assert manager.get_value('test.nonexistent', 'default') == 'default'
 
-    @patch('builtins.open', new_callable=mock_open, read_data="""
-original: value1
-""")
-    def test_force_reload(self, mock_file):
+    def test_force_reload(self):
         """測試強制重載配置"""
         # 清理任何現有的配置管理器狀態
         ConfigManager._instance = None
         
         manager = ConfigManager()
         
-        # 第一次載入
-        config1 = manager.get_config('test_config.yml')
-        assert config1['original'] == 'value1'
+        # 第一次載入的內容
+        first_content = """
+original: value1
+"""
         
-        # 模擬文件內容變更
-        mock_file.return_value.read.return_value = """
+        # 第二次載入的內容
+        second_content = """
 original: value2
 new: value3
 """
         
-        # 強制重載
-        config2 = manager.get_config('test_config.yml', force_reload=True)
-        assert config2['original'] == 'value2'
-        assert config2['new'] == 'value3'
+        # 創建一個可以改變返回值的 mock
+        call_count = 0
+        def mock_open_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_open(read_data=first_content)()
+            else:
+                return mock_open(read_data=second_content)()
+        
+        with patch('builtins.open', side_effect=mock_open_side_effect):
+            # 第一次載入
+            config1 = manager.get_config('test_config.yml')
+            assert config1['original'] == 'value1'
+            
+            # 強制重載
+            config2 = manager.get_config('test_config.yml', force_reload=True)
+            assert config2['original'] == 'value2'
+            assert config2['new'] == 'value3'
 
 
 class TestConfigFunctions:

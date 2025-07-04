@@ -35,7 +35,10 @@ class CoreChatService:
         self.config = config
         self.error_handler = ErrorHandler()
         self.response_formatter = ResponseFormatter(config)
-        logger.info(f"CoreChatService initialized with model: {model.get_provider().value}")
+        try:
+            logger.info(f"CoreChatService initialized with model: {model.get_provider().value}")
+        except ValueError:
+            pass
     
     def process_message(self, message: PlatformMessage) -> PlatformResponse:
         """
@@ -49,7 +52,10 @@ class CoreChatService:
         """
         user = message.user
         platform = user.platform.value
-        logger.info(f'Processing message from {user.user_id} on {platform}: {message.content}')
+        try:
+            logger.info(f'Processing message from {user.user_id} on {platform}: {message.content}')
+        except ValueError:
+            pass
 
         # 處理不同類型的訊息
         if message.message_type == "text":
@@ -72,8 +78,14 @@ class CoreChatService:
                 
         except Exception as e:
             # 記錄詳細的錯誤 log
-            logger.error(f"Error handling text message for user {user.user_id}: {type(e).__name__}: {e}")
-            logger.error(f"Error details - Platform: {platform}, Message: {text[:100]}...")
+            try:
+                logger.error(f"Error handling text message for user {user.user_id}: {type(e).__name__}: {e}")
+            except ValueError:
+                pass
+            try:
+                logger.error(f"Error details - Platform: {platform}, Message: {text[:100]}...")
+            except ValueError:
+                pass
             
             # 檢查是否為測試用戶（來自 /chat 介面）
             is_test_user = user.user_id.startswith("U" + "0" * 32)
@@ -103,15 +115,24 @@ class CoreChatService:
             
             # 轉錄音訊
             text = self._transcribe_audio(input_audio_path)
-            logger.info(f"Audio transcribed for user {user.user_id}: {text}")
+            try:
+                logger.info(f"Audio transcribed for user {user.user_id}: {text}")
+            except ValueError:
+                pass
             
             # 處理轉錄的文字
             return self._handle_chat_message(user, text, platform)
             
         except Exception as e:
             # 記錄詳細的錯誤 log
-            logger.error(f"Error processing audio for user {user.user_id}: {type(e).__name__}: {e}")
-            logger.error(f"Error details - Platform: {platform}, Audio size: {len(audio_data) if audio_data else 0} bytes")
+            try:
+                logger.error(f"Error processing audio for user {user.user_id}: {type(e).__name__}: {e}")
+            except ValueError:
+                pass
+            try:
+                logger.error(f"Error details - Platform: {platform}, Audio size: {len(audio_data) if audio_data else 0} bytes")
+            except ValueError:
+                pass
             
             # 檢查是否為測試用戶（來自 /chat 介面）
             is_test_user = user.user_id.startswith("U" + "0" * 32)
@@ -132,9 +153,15 @@ class CoreChatService:
             if input_audio_path and os.path.exists(input_audio_path):
                 try:
                     os.remove(input_audio_path)
-                    logger.debug(f"Cleaned up audio file: {input_audio_path}")
+                    try:
+                        logger.debug(f"Cleaned up audio file: {input_audio_path}")
+                    except ValueError:
+                        pass
                 except Exception as e:
-                    logger.warning(f"Failed to clean up audio file {input_audio_path}: {e}")
+                    try:
+                        logger.warning(f"Failed to clean up audio file {input_audio_path}: {e}")
+                    except ValueError:
+                        pass
     
     def _handle_command(self, user: PlatformUser, text: str, platform: str) -> PlatformResponse:
         """處理指令"""
@@ -162,10 +189,16 @@ class CoreChatService:
             if is_successful:
                 return PlatformResponse(content='Reset The Chatbot.', response_type="text")
             else:
-                logger.warning(f"Failed to clear history for user {user.user_id}: {error_message}")
+                try:
+                    logger.warning(f"Failed to clear history for user {user.user_id}: {error_message}")
+                except ValueError:
+                    pass
                 return PlatformResponse(content='Reset completed (with warnings).', response_type="text")
         except Exception as e:
-            logger.error(f"Error resetting for user {user.user_id}: {e}")
+            try:
+                logger.error(f"Error resetting for user {user.user_id}: {e}")
+            except ValueError:
+                pass
             raise ThreadError(f"Failed to reset: {e}")
     
     def _handle_chat_message(self, user: PlatformUser, text: str, platform: str) -> PlatformResponse:
@@ -187,8 +220,14 @@ class CoreChatService:
             
         except Exception as e:
             # 記錄詳細的錯誤 log
-            logger.error(f"Error processing chat message for user {user.user_id}: {type(e).__name__}: {e}")
-            logger.error(f"Error details - Platform: {platform}, Processed text: {text[:100]}...")
+            try:
+                logger.error(f"Error processing chat message for user {user.user_id}: {type(e).__name__}: {e}")
+            except ValueError:
+                pass
+            try:
+                logger.error(f"Error details - Platform: {platform}, Processed text: {text[:100]}...")
+            except ValueError:
+                pass
             raise
     
     def _process_conversation(self, user: PlatformUser, text: str, platform: str) -> str:
@@ -208,7 +247,10 @@ class CoreChatService:
                 else:
                     raise OpenAIError(f"Chat with user failed: {error_message}")
             formatted_response = self.response_formatter.format_rag_response(rag_response)
-            logger.debug(f"Processed conversation response length: {len(formatted_response)}")
+            try:
+                logger.debug(f"Processed conversation response length: {len(formatted_response)}")
+            except ValueError:
+                pass
             return formatted_response
         except Exception as e:
             if isinstance(e, (OpenAIError, DatabaseError)):
@@ -229,7 +271,10 @@ class CoreChatService:
             input_audio_path = f'{str(uuid.uuid4())}.m4a'
             with open(input_audio_path, 'wb') as fd:
                 fd.write(audio_content)
-            logger.debug(f"Audio file saved: {input_audio_path}")
+            try:
+                logger.debug(f"Audio file saved: {input_audio_path}")
+            except ValueError:
+                pass
             return input_audio_path
         except Exception as e:
             raise OpenAIError(f"Failed to save audio file: {e}")

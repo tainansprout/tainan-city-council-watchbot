@@ -134,7 +134,11 @@ class DatabaseManager:
     def close(self):
         """關閉資料庫連線"""
         self.engine.dispose()
-        logger.info("Database connection closed")
+        try:
+            logger.info("Database connection closed")
+        except (ValueError, OSError):
+            # Logger may be closed already during cleanup
+            pass
 
 # 全域資料庫管理器實例
 _db_manager: Optional[DatabaseManager] = None

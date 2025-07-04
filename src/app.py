@@ -465,7 +465,7 @@ class MultiPlatformChatBot:
             health_status['checks']['auth'] = get_auth_status_info()
             
             status_code = 200 if health_status['status'] == 'healthy' else 503
-            return health_status, status_code
+            return jsonify(health_status), status_code
             
         except Exception as e:
             return {
@@ -505,10 +505,19 @@ class MultiPlatformChatBot:
     def _register_cleanup(self):
         """註冊清理函數"""
         def cleanup():
-            logger.info("Shutting down application...")
-            if self.database:
-                self.database.close_engine()
-            logger.info("Application shutdown complete")
+            try:
+                logger.info("Shutting down application...")
+                if self.database:
+                    self.database.close_engine()
+                logger.info("Application shutdown complete")
+            except (ValueError, OSError) as e:
+                # Logger may be closed already during test cleanup
+                # ValueError: I/O operation on closed file
+                # OSError: file system errors
+                pass
+            except Exception:
+                # Silently ignore any other errors during cleanup
+                pass
         
         atexit.register(cleanup)
     

@@ -240,7 +240,10 @@ def setup_request_logging(app):
             if k.lower() not in ['authorization', 'x-line-signature']
         }
         
-        logger.info(
+        try:
+
+        
+            logger.info(
             "Incoming request",
             extra={
                 'request_id': request_id,
@@ -250,16 +253,28 @@ def setup_request_logging(app):
                 'headers': safe_headers
             }
         )
+
+        
+        except ValueError:
+
+        
+            pass
     
     @app.after_request
     def log_response_info(response):
-        logger.info(
+        try:
+
+            logger.info(
             "Response sent",
             extra={
                 'status_code': response.status_code,
                 'content_length': response.content_length
             }
         )
+
+        except ValueError:
+
+            pass
         return response
 
 

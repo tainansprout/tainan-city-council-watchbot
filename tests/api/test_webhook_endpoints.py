@@ -23,7 +23,7 @@ class TestWebhookEndpoints:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             from main import create_app
@@ -221,7 +221,7 @@ class TestWebhookErrorHandling:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             from main import create_app
@@ -356,7 +356,7 @@ class TestWebhookConcurrency:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'}
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
             from main import create_app

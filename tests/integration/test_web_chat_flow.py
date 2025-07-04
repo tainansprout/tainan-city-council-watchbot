@@ -25,7 +25,7 @@ class TestWebChatFlow:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'},
                 'auth': {'method': 'simple_password', 'password': 'test123'}
             }
             
@@ -169,7 +169,7 @@ class TestWebChatErrorRecovery:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'},
                 'auth': {'method': 'simple_password', 'password': 'test123'}
             }
             
@@ -245,7 +245,7 @@ class TestWebChatIntegrationWithDatabase:
                 },
                 'llm': {'provider': 'openai'},
                 'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
-                'db': {'host': 'localhost', 'user': 'test', 'password': 'test', 'db_name': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'},
                 'auth': {'method': 'simple_password', 'password': 'test123'}
             }
             

@@ -43,7 +43,7 @@ class TestDatabaseMigration:
     def test_database_models_import(self):
         """測試資料庫模型可以正確導入"""
         try:
-            from src.models.database import (
+            from src.database.models import (
                 DatabaseManager,
                 UserThreadTable,
                 SimpleConversationHistory,
@@ -56,7 +56,7 @@ class TestDatabaseMigration:
     @patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///test.db'})
     def test_database_manager_with_env_var(self):
         """測試使用環境變數的資料庫管理器"""
-        from src.models.database import DatabaseManager
+        from src.database.models import DatabaseManager
         
         manager = DatabaseManager()
         assert manager.engine is not None
@@ -64,7 +64,7 @@ class TestDatabaseMigration:
     
     def test_table_creation_script(self):
         """測試表格創建腳本"""
-        from src.models.database import DatabaseManager, Base
+        from src.database.models import DatabaseManager, Base
         
         # 使用記憶體資料庫
         manager = DatabaseManager("sqlite:///:memory:")
@@ -90,7 +90,7 @@ class TestConversationManagerIntegration:
     @pytest.fixture
     def test_database(self):
         """設置測試資料庫"""
-        from src.models.database import DatabaseManager, Base
+        from src.database.models import DatabaseManager, Base
         
         manager = DatabaseManager("sqlite:///:memory:")
         manager.create_all_tables()
@@ -241,7 +241,7 @@ class TestHighAvailabilityConfig:
     
     def test_connection_pool_config(self):
         """測試連線池配置"""
-        from src.models.database import DatabaseManager
+        from src.database.models import DatabaseManager
         
         manager = DatabaseManager("sqlite:///:memory:")
         
@@ -255,7 +255,7 @@ class TestHighAvailabilityConfig:
     
     def test_ssl_config_structure(self):
         """測試 SSL 配置結構"""
-        from src.models.database import DatabaseManager
+        from src.database.models import DatabaseManager
         
         # 測試 PostgreSQL URL 的 SSL 配置會被正確處理
         postgres_url = "postgresql://user:pass@localhost:5432/db"
@@ -272,7 +272,7 @@ class TestHighAvailabilityConfig:
     def test_environment_variable_priority(self):
         """測試環境變數優先級"""
         with patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///env_test.db'}):
-            from src.models.database import DatabaseManager
+            from src.database.models import DatabaseManager
             
             manager = DatabaseManager()
             # 應該使用環境變數的值
@@ -285,7 +285,7 @@ class TestFullDatabaseIntegration:
     
     def test_end_to_end_conversation_flow(self):
         """測試端到端對話流程"""
-        from src.models.database import DatabaseManager
+        from src.database.models import DatabaseManager
         from src.services.conversation import ORMConversationManager
         
         # 設置測試資料庫
