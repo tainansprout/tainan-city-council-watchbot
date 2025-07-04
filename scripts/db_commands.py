@@ -116,7 +116,7 @@ def db_check():
     print("🔍 Checking database connection...\n")
     
     try:
-        from src.models.database import get_database_manager
+        from src.database.models import get_database_manager
         
         db_manager = get_database_manager()
         if db_manager.check_connection():

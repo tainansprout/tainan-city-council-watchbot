@@ -15,7 +15,7 @@ class DatabaseOperations:
     """資料庫操作工具類"""
     
     def __init__(self):
-        self.db = Database()
+        # 使用 models 中的 DatabaseManager 而不是 connection 中的 Database
         self.session_factory = get_db_session
     
     def health_check(self) -> Dict[str, any]:

@@ -11,7 +11,7 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import your models
-from src.models.database import Base
+from src.database.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -35,17 +35,28 @@ def get_database_url():
     
     # Try to load from config file
     try:
-        from src.config import load_config
+        from src.core.config import load_config
         app_config = load_config()
         db_config = app_config.get('db', {})
         
         host = db_config.get('host', 'localhost')
         port = db_config.get('port', 5432)
-        database = db_config.get('database', 'chatbot')
-        username = db_config.get('username', 'postgres')
+        database = db_config.get('db_name', 'chatbot')
+        username = db_config.get('user', 'postgres')
         password = db_config.get('password', 'password')
         
-        return f"postgresql://{username}:{password}@{host}:{port}/{database}"
+        # SSL 配置
+        ssl_params = ""
+        if 'sslmode' in db_config:
+            ssl_params += f"?sslmode={db_config['sslmode']}"
+            if 'sslrootcert' in db_config:
+                ssl_params += f"&sslrootcert={db_config['sslrootcert']}"
+            if 'sslcert' in db_config:
+                ssl_params += f"&sslcert={db_config['sslcert']}"
+            if 'sslkey' in db_config:
+                ssl_params += f"&sslkey={db_config['sslkey']}"
+        
+        return f"postgresql://{username}:{password}@{host}:{port}/{database}{ssl_params}"
     except Exception as e:
         print(f"Warning: Could not load config, using default: {e}")
         return "postgresql://postgres:password@localhost:5432/chatbot"

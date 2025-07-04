@@ -100,11 +100,28 @@ class DatabaseManager:
             
             host = db_config.get('host', os.getenv('DB_HOST', 'localhost'))
             port = db_config.get('port', os.getenv('DB_PORT', '5432'))
-            database = db_config.get('database', os.getenv('DB_NAME', 'chatbot'))
-            username = db_config.get('username', os.getenv('DB_USER', 'postgres'))
+            database = db_config.get('db_name', os.getenv('DB_NAME', 'chatbot'))  # 修復: 使用 db_name
+            username = db_config.get('user', os.getenv('DB_USER', 'postgres'))    # 修復: 使用 user
             password = db_config.get('password', os.getenv('DB_PASSWORD', ''))
             
-            return f"postgresql://{username}:{password}@{host}:{port}/{database}"
+            # 建構基本連接字符串
+            base_url = f"postgresql://{username}:{password}@{host}:{port}/{database}"
+            
+            # 添加 SSL 參數
+            ssl_params = []
+            if 'sslmode' in db_config:
+                ssl_params.append(f"sslmode={db_config['sslmode']}")
+            if 'sslrootcert' in db_config:
+                ssl_params.append(f"sslrootcert={db_config['sslrootcert']}")
+            if 'sslcert' in db_config:
+                ssl_params.append(f"sslcert={db_config['sslcert']}")
+            if 'sslkey' in db_config:
+                ssl_params.append(f"sslkey={db_config['sslkey']}")
+            
+            if ssl_params:
+                base_url += "?" + "&".join(ssl_params)
+            
+            return base_url
             
         except Exception as e:
             logger.warning(f"Failed to load config, using environment variables: {e}")
