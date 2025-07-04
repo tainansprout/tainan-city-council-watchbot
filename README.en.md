@@ -359,8 +359,8 @@ If you want to manually control each step:
    # Development mode (warnings are normal)
    python main.py
    
-   # Production mode (using Gunicorn)
-   python wsgi.py
+   # Production mode (auto-starts Gunicorn)
+   FLASK_ENV=production python main.py
    ```
 
 ## System Architecture
