@@ -1,11 +1,11 @@
-import logging
+from ..core.logger import get_logger
 import json
 from typing import Dict, List, Any
 from flask import Response
 from ..models.base import RAGResponse
 from ..utils import s2t_converter
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ResponseFormatter:

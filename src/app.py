@@ -3,13 +3,13 @@
 使用新的平台架構和設計模式
 """
 import atexit
-import logging
 from flask import Flask, request, abort, jsonify, render_template
 from typing import Dict, Any
 
 # 核心模組
 from .core.config import load_config
-from .core.logger import logger
+from .core.logger import get_logger
+logger = get_logger(__name__)
 from .core.security import init_security, InputValidator, require_json_input
 from .core.security import security_config
 from .core.auth import init_test_auth_with_config, get_auth_status_info, require_test_auth, init_test_auth
@@ -537,14 +537,14 @@ class MultiPlatformChatBot:
         """註冊清理函數"""
         def cleanup():
             # Logger 不應該拋出 ValueError，如果出現請檢查 logging 配置
-            logger.info("Shutting down application...")
+            print("Shutting down application...")
             try:
                 if self.database:
                     self.database.close_engine()
             except Exception as e:
                 # 只捕獲資料庫關閉的錯誤，不影響 logging
-                logger.warning(f"Error during database cleanup: {e}")
-            logger.info("Application shutdown complete")
+                print(f"Error during database cleanup: {e}")
+            print("Application shutdown complete")
         
         atexit.register(cleanup)
     

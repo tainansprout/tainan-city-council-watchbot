@@ -1,9 +1,9 @@
 import requests
-import logging
+from ..core.logger import get_logger
 import re
 from typing import List, Dict, Tuple, Optional
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 from .base import (
     FullLLMInterface, 
     ModelProvider, 
@@ -15,7 +15,7 @@ from .base import (
     RAGResponse
 )
 from ..utils.retry import retry_with_backoff, retry_on_rate_limit, CircuitBreaker
-from ..utils import s2t_converter
+from ..utils import s2t_converter, dedup_citation_blocks
 
 
 class OpenAIModel(FullLLMInterface):
@@ -261,35 +261,6 @@ class OpenAIModel(FullLLMInterface):
             logger.error(f"Error getting file references: {e}")
             return {}
     
-    def _extract_sources_from_response(self, thread_messages: Dict) -> List[Dict[str, str]]:
-        """從 OpenAI Assistant 回應中提取來源資訊"""
-        sources = []
-        seen_files = set()  # 避免重複檔案
-        
-        try:
-            for message in thread_messages.get('data', []):
-                if message.get('role') == 'assistant':
-                    for content in message.get('content', []):
-                        if content.get('type') == 'text':
-                            annotations = content.get('text', {}).get('annotations', [])
-                            for annotation in annotations:
-                                if annotation.get('type') == 'file_citation':
-                                    citation = annotation.get('file_citation', {})
-                                    file_id = citation.get('file_id')
-                                    
-                                    # 避免重複添加相同檔案
-                                    if file_id and file_id not in seen_files:
-                                        seen_files.add(file_id)
-                                        sources.append({
-                                            'file_id': file_id,
-                                            'quote': citation.get('quote', ''),
-                                            'type': 'file_citation'
-                                        })
-        except Exception as e:
-            logger.error(f"Error extracting sources: {e}")
-        
-        return sources
-    
     def _process_openai_response(self, thread_messages: Dict) -> Tuple[str, List[Dict[str, str]]]:
         """
         處理 OpenAI Assistant API 的回應，包括引用格式化
@@ -301,7 +272,7 @@ class OpenAIModel(FullLLMInterface):
             if not data:
                 logger.debug("_process_openai_response: 沒有找到助理回應數據")
                 return '', []
-            
+            print(data)
             text = data['content'][0]['text']['value']
             annotations = data['content'][0]['text']['annotations']
             
@@ -319,35 +290,39 @@ class OpenAIModel(FullLLMInterface):
             file_dict = self.get_file_references()
             
             # 替換註釋文本和建立來源清單
-            sources = []
-            
-            for i, annotation in enumerate(annotations, 1):
-                logger.debug(f"_process_openai_response: 處理註解 {i}: {annotation}")
-                original_text = annotation['text']
-                # 對 annotation 文本也進行 s2t 轉換，確保與主文本一致
-                original_text = s2t_converter.convert(original_text)
-                file_id = annotation['file_citation']['file_id']
-                replacement_text = f"[{i}]"
-                
-                logger.debug(f"  替換 '{original_text}' → '{replacement_text}'")
+            citation_map: dict[str, int] = {}
+            sources: list[dict] = []
+            next_num = 1  # 下一個可用的引用編號
+
+            for annotation in annotations:
+                original_text = s2t_converter.convert(annotation["text"])
+                file_id = annotation["file_citation"]["file_id"]
+                filename = file_dict.get(file_id, "Unknown")
+
+                # 2) 取得（或產生）此檔案的編號
+                if filename in citation_map:
+                    ref_num = citation_map[filename]          # 已經有 → 直接重用
+                else:
+                    ref_num = next_num                        # 第一次看到 → 指派新號碼
+                    citation_map[filename] = ref_num
+                    next_num += 1
+
+                    # 只在第一次看到時，把它放進 sources，避免重複
+                    sources.append({
+                        "file_id": file_id,
+                        "filename": filename,
+                        "quote": annotation["file_citation"].get("quote", ""),
+                        "type": "file_citation",
+                    })
+
+                # 3) 取代正文中的引用標籤
+                replacement_text = f"[{ref_num}]"
                 text = text.replace(original_text, replacement_text)
-                
-                # 建立來源清單（供 ResponseFormatter 統一處理）
-                filename = file_dict.get(file_id, 'Unknown')
-                sources.append({
-                    'file_id': file_id,
-                    'filename': filename,
-                    'quote': annotation['file_citation'].get('quote', ''),
-                    'type': 'file_citation'
-                })
-            
-            # 檢查處理後是否還有複雜引用格式
-            remaining_complex = re.findall(r'【[^】]+】', text)
-            if remaining_complex:
-                logger.warning(f"_process_openai_response: 處理後仍有 {len(remaining_complex)} 個未處理的複雜引用")
             
             # 直接返回處理後的文本，讓 ResponseFormatter 統一處理 sources
-            final_text = text.strip()
+            final_text = dedup_citation_blocks(text.strip())
+            print(final_text)
+            print(sources)
             
             logger.debug(f"_process_openai_response: 最終文本長度={len(final_text)}, 生成了 {len(sources)} 個來源")
             
@@ -538,24 +513,10 @@ class OpenAIModel(FullLLMInterface):
             
             # 記錄完整的API回應用於除錯
             logger.debug(f"OpenAI Assistant API 完整回應: {response}")
-            
             # 取得最新的助理回應
             for message in response['data']:
                 if message['role'] == 'assistant' and message['content']:
                     content = message['content'][0]['text']['value']
-                    
-                    # 詳細記錄助理訊息結構
-                    logger.debug(f"助理訊息內容長度: {len(content)}")
-                    logger.debug(f"助理訊息註解數量: {len(message['content'][0]['text'].get('annotations', []))}")
-                    
-                    # 記錄每個註解的詳細信息
-                    annotations = message['content'][0]['text'].get('annotations', [])
-                    for i, annotation in enumerate(annotations):
-                        logger.debug(f"註解 {i+1}: 類型={annotation.get('type')}, 文本={annotation.get('text')}")
-                        if 'file_citation' in annotation:
-                            file_id = annotation['file_citation'].get('file_id')
-                            logger.debug(f"  檔案ID: {file_id}")
-                    
                     chat_response = ChatResponse(
                         content=content,
                         metadata={'thread_messages': response}

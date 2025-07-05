@@ -24,7 +24,9 @@ import os
 from typing import Dict, Any, Optional, List, Union
 from functools import wraps
 from flask import request, abort, current_app
-from src.core.logger import logger
+from .logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class SecurityConfig:

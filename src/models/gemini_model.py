@@ -15,9 +15,9 @@ from .base import (
 )
 from ..utils.retry import retry_on_rate_limit
 from ..services.conversation import get_conversation_manager
-import logging
+from ..core.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class GeminiModel(FullLLMInterface):

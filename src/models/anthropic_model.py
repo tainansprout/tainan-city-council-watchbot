@@ -3,7 +3,7 @@ import json
 import hashlib
 import time
 import uuid
-import logging
+from ..core.logger import get_logger
 from typing import List, Dict, Tuple, Optional
 from .base import (
     FullLLMInterface, 
@@ -18,7 +18,7 @@ from .base import (
 from ..utils.retry import retry_on_rate_limit
 from ..services.conversation import get_conversation_manager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AnthropicModel(FullLLMInterface):

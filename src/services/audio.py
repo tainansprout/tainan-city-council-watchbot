@@ -1,6 +1,6 @@
 import os
 import uuid
-import logging
+from ..core.logger import get_logger
 from typing import Any
 from linebot.v3.messaging import TextMessage
 
@@ -9,7 +9,7 @@ from ..core.exceptions import OpenAIError
 from ..core.error_handler import ErrorHandler
 from .chat import CoreChatService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AudioService:

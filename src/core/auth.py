@@ -227,7 +227,8 @@ def init_test_auth(app):
         SESSION_COOKIE_SAMESITE='Lax'  # CSRF 保護
     )
     
-    from src.core.logger import logger
+    from .logger import get_logger
+    logger = get_logger(__name__)
     logger.info(f"測試認證已初始化，方式: {test_auth.auth_method}")
 
 

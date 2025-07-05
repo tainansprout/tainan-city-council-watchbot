@@ -2,7 +2,7 @@
 LINE 平台處理器
 使用官方 LINE SDK v3 簡化簽名驗證與事件解析
 """
-import logging
+from ..core.logger import get_logger
 from typing import List, Optional, Any, Dict
 
 from linebot.v3.messaging import (
@@ -19,7 +19,7 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent, AudioMessageCo
 
 from .base import BasePlatformHandler, PlatformType, PlatformUser, PlatformMessage, PlatformResponse
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LineHandler(BasePlatformHandler):

@@ -1,10 +1,10 @@
 import time
-import logging
+from ..core.logger import get_logger
 import random
 from functools import wraps
 from typing import Callable, Any, Tuple, Type, Union
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def retry_with_backoff(

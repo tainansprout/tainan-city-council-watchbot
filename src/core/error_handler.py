@@ -1,4 +1,4 @@
-import logging
+from .logger import get_logger
 from typing import Dict, Optional
 from linebot.v3.messaging import TextMessage
 from .exceptions import (
@@ -7,7 +7,7 @@ from .exceptions import (
     AudioError, PlatformError, ValidationError, ConfigurationError
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ErrorHandler:

@@ -8,9 +8,9 @@ from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, B
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
-import logging
+from ..core.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 Base = declarative_base()
 

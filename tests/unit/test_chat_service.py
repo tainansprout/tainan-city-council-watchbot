@@ -98,6 +98,7 @@ class TestProcessMessage:
     def test_process_text_message(self, chat_service, mock_user):
         """測試處理文字訊息"""
         message = PlatformMessage(
+            message_id="msg_123",
             user=mock_user,
             content="Hello world",
             message_type="text"
@@ -118,6 +119,7 @@ class TestProcessMessage:
         """測試處理音訊訊息"""
         audio_data = b"fake_audio_data"
         message = PlatformMessage(
+            message_id="msg_124",
             user=mock_user,
             content="",
             message_type="audio",
@@ -138,6 +140,7 @@ class TestProcessMessage:
     def test_process_unsupported_message_type(self, chat_service, mock_user):
         """測試處理不支援的訊息類型"""
         message = PlatformMessage(
+            message_id="msg_125",
             user=mock_user,
             content="",
             message_type="video"
@@ -151,6 +154,7 @@ class TestProcessMessage:
     def test_process_message_logging(self, chat_service, mock_user):
         """測試訊息處理的日誌記錄"""
         message = PlatformMessage(
+            message_id="msg_126",
             user=mock_user,
             content="Test message",
             message_type="text"
@@ -168,6 +172,7 @@ class TestProcessMessage:
     def test_process_message_logging_value_error(self, chat_service, mock_user):
         """測試訊息處理日誌記錄時的 ValueError 處理"""
         message = PlatformMessage(
+            message_id="msg_126",
             user=mock_user,
             content="Test message",
             message_type="text"
@@ -241,14 +246,15 @@ class TestHandleTextMessage:
     
     def test_handle_text_message_error_for_real_user(self, chat_service, mock_user):
         """測試真實用戶的錯誤處理"""
-        with patch.object(chat_service, '_handle_chat_message', side_effect=Exception("Test error")), \
+        test_exception = Exception("Test error")
+        with patch.object(chat_service, '_handle_chat_message', side_effect=test_exception), \
              patch.object(chat_service.error_handler, 'get_error_message', return_value="簡化錯誤訊息") as mock_error:
             
             result = chat_service._handle_text_message(mock_user, "Hello", "line")
             
             assert result.content == "簡化錯誤訊息"
             assert result.response_type == "text"
-            mock_error.assert_called_once_with(Exception("Test error"), use_detailed=False)
+            mock_error.assert_called_once_with(test_exception, use_detailed=False)
     
     def test_handle_text_message_error_logging(self, chat_service, mock_user):
         """測試錯誤處理的日誌記錄"""
@@ -262,7 +268,7 @@ class TestHandleTextMessage:
                 "Error handling text message for user test_user_123: ValueError: Test error"
             )
             mock_logger.error.assert_any_call(
-                "Error details - Platform: line, Message: Hello"
+                "Error details - Platform: line, Message: Hello..."
             )
 
 
@@ -532,7 +538,7 @@ class TestHandleChatMessage:
                 "Error processing chat message for user test_user_123: Exception: Process error"
             )
             mock_logger.error.assert_any_call(
-                "Error details - Platform: line, Processed text: Hello"
+                "Error details - Platform: line, Processed text: Hello..."
             )
 
 
@@ -560,23 +566,23 @@ class TestProcessConversation:
     def test_process_conversation_success(self, chat_service, mock_user):
         """測試成功處理對話"""
         mock_rag_response = RAGResponse(
-            content="AI response",
+            answer="AI response",
             sources=[],
-            model_info={}
+            metadata={}
         )
         
         chat_service.model.chat_with_user.return_value = (True, mock_rag_response, None)
-        chat_service.response_formatter.format_rag_response.return_value = "formatted response"
         
-        result = chat_service._process_conversation(mock_user, "Hello", "line")
-        
-        assert result == "formatted response"
-        chat_service.model.chat_with_user.assert_called_once_with(
-            user_id=mock_user.user_id,
-            message="Hello",
-            platform="line"
-        )
-        chat_service.response_formatter.format_rag_response.assert_called_once_with(mock_rag_response)
+        with patch.object(chat_service.response_formatter, 'format_rag_response', return_value="formatted response") as mock_format:
+            result = chat_service._process_conversation(mock_user, "Hello", "line")
+            
+            assert result == "formatted response"
+            chat_service.model.chat_with_user.assert_called_once_with(
+                user_id=mock_user.user_id,
+                message="Hello",
+                platform="line"
+            )
+            mock_format.assert_called_once_with(mock_rag_response)
     
     def test_process_conversation_failure_database_error(self, chat_service, mock_user):
         """測試對話處理失敗 - 資料庫錯誤"""
@@ -615,11 +621,11 @@ class TestProcessConversation:
     
     def test_process_conversation_logging(self, chat_service, mock_user):
         """測試對話處理的日誌記錄"""
-        mock_rag_response = RAGResponse(content="AI response", sources=[], model_info={})
+        mock_rag_response = RAGResponse(answer="AI response", sources=[], metadata={})
         chat_service.model.chat_with_user.return_value = (True, mock_rag_response, None)
-        chat_service.response_formatter.format_rag_response.return_value = "formatted response"
         
-        with patch('src.services.chat.logger') as mock_logger:
+        with patch.object(chat_service.response_formatter, 'format_rag_response', return_value="formatted response"), \
+             patch('src.services.chat.logger') as mock_logger:
             chat_service._process_conversation(mock_user, "Hello", "line")
             
             mock_logger.debug.assert_called_once_with(
@@ -789,13 +795,16 @@ class TestWaitForCompletion:
         initial_response = {'id': 'run_123', 'status': 'in_progress'}
         final_response = {'id': 'run_123', 'status': 'completed'}
         
-        chat_service.model.retrieve_thread_run.return_value = (True, final_response, None)
+        # Mock the retrieve_thread_run method which is not part of the base interface
+        # Since the mock is created with spec=FullLLMInterface, we need to add the method manually
+        chat_service.model.retrieve_thread_run = Mock(return_value=(True, final_response, None))
         
         with patch('time.sleep') as mock_sleep:
             result = chat_service._wait_for_completion(thread_id, initial_response)
             
             assert result == final_response
             mock_sleep.assert_called_once_with(3)
+            chat_service.model.retrieve_thread_run.assert_called_once_with(thread_id, 'run_123')
     
     def test_wait_for_completion_timeout(self, chat_service):
         """測試等待完成超時"""
@@ -812,13 +821,16 @@ class TestWaitForCompletion:
         initial_response = {'id': 'run_123', 'status': 'queued'}
         final_response = {'id': 'run_123', 'status': 'completed'}
         
-        chat_service.model.retrieve_thread_run.return_value = (True, final_response, None)
+        # Mock the retrieve_thread_run method which is not part of the base interface
+        # Since the mock is created with spec=FullLLMInterface, we need to add the method manually
+        chat_service.model.retrieve_thread_run = Mock(return_value=(True, final_response, None))
         
         with patch('time.sleep') as mock_sleep:
             result = chat_service._wait_for_completion(thread_id, initial_response)
             
             assert result == final_response
             mock_sleep.assert_called_once_with(10)  # 排隊時等待 10 秒
+            chat_service.model.retrieve_thread_run.assert_called_once_with(thread_id, 'run_123')
     
     def test_wait_for_completion_failed_status(self, chat_service):
         """測試等待完成時失敗狀態"""
@@ -834,11 +846,15 @@ class TestWaitForCompletion:
         thread_id = "test_thread"
         response = {'id': 'run_123', 'status': 'in_progress'}
         
-        chat_service.model.retrieve_thread_run.return_value = (False, None, "Retrieve failed")
+        # Mock the retrieve_thread_run method which is not part of the base interface
+        # Since the mock is created with spec=FullLLMInterface, we need to add the method manually
+        chat_service.model.retrieve_thread_run = Mock(return_value=(False, None, "Retrieve failed"))
         
         with patch('time.sleep'):
             with pytest.raises(OpenAIError, match="Failed to retrieve run status: Retrieve failed"):
                 chat_service._wait_for_completion(thread_id, response)
+            
+            chat_service.model.retrieve_thread_run.assert_called_once_with(thread_id, 'run_123')
 
 
 class TestEdgeCases:
@@ -865,6 +881,7 @@ class TestEdgeCases:
     def test_empty_message_content(self, chat_service, mock_user):
         """測試空訊息內容"""
         message = PlatformMessage(
+            message_id="msg_empty",
             user=mock_user,
             content="",
             message_type="text"
@@ -879,6 +896,7 @@ class TestEdgeCases:
         """測試非常長的訊息內容"""
         long_content = "A" * 10000
         message = PlatformMessage(
+            message_id="msg_long",
             user=mock_user,
             content=long_content,
             message_type="text"
@@ -893,6 +911,7 @@ class TestEdgeCases:
         """測試訊息中的特殊字元"""
         special_content = "Hello! 你好 🎵 @#$%^&*()_+"
         message = PlatformMessage(
+            message_id="msg_special",
             user=mock_user,
             content=special_content,
             message_type="text"
@@ -913,6 +932,7 @@ class TestEdgeCases:
             )
             
             message = PlatformMessage(
+                message_id=f"msg_{platform_type.value}",
                 user=user,
                 content="Hello",
                 message_type="text"

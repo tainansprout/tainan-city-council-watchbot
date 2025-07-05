@@ -1,12 +1,12 @@
 import datetime
-import logging
+from ..core.logger import get_logger
 from contextlib import contextmanager
 from typing import Optional
 from sqlalchemy import create_engine, Column, String, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 from ..core.exceptions import DatabaseError
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # CREATE TABLE user_thread_table (
 #     user_id VARCHAR(255) PRIMARY KEY,
@@ -138,13 +138,7 @@ class Database:
         """關閉資料庫引擎"""
         self.engine.dispose()
         try:
-            try:
-
-                logger.debug('close SQLAlchemy engine.')
-
-            except ValueError:
-
-                pass
+            logger.debug('close SQLAlchemy engine.')
         except (ValueError, OSError):
             # Logger may be closed already during cleanup
             pass

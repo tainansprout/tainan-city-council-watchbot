@@ -4,7 +4,7 @@
 """
 import os
 import sys
-import logging
+from src.core.logger import get_logger
 from pathlib import Path
 
 # 添加專案根目錄到 Python 路徑
@@ -15,7 +15,7 @@ from alembic.config import Config
 from alembic import command
 from src.core.config import ConfigManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def init_database():

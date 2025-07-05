@@ -3,7 +3,7 @@
 """
 import time
 import os
-import logging
+from ..core.logger import get_logger
 from typing import Dict, Any, Optional, Tuple
 from ..models.base import FullLLMInterface, ModelProvider
 from ..database.connection import Database
@@ -13,7 +13,7 @@ from ..core.error_handler import ErrorHandler
 from .response import ResponseFormatter
 from ..platforms.base import PlatformMessage, PlatformResponse, PlatformUser
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CoreChatService:

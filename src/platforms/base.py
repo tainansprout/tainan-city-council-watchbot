@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Union, List
 from dataclasses import dataclass
 from enum import Enum
-import logging
+from ..core.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PlatformType(Enum):

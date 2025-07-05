@@ -1,9 +1,10 @@
 import opencc
 import re
-import logging
+from typing import Match
+from ..core.logger import get_logger
 from datetime import datetime, timedelta
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 s2t_converter = opencc.OpenCC('s2t')
 t2s_converter = opencc.OpenCC('t2s')
@@ -44,129 +45,34 @@ def get_role_and_content(response):
     # 預設回傳
     return 'assistant', str(response)
 
-def get_content_and_reference(response, file_dict) -> str:
-    import re
+def dedup_citation_blocks(text: str) -> str:
+    """
+    將正文中的連續引用標籤去重後回傳新字串。
     
-    data = get_response_data(response)
-    if not data:
-        logger.debug("get_content_and_reference: 沒有找到助理回應數據")
-        return ''
+    例：
+        '[1][1][1]'         -> '[1]'
+        '[1][2][1][3][2]'   -> '[1][2][3]'
+        其他文字不受影響
+    """
     
-    text = data['content'][0]['text']['value']
-    annotations = data['content'][0]['text']['annotations']
-    
-    logger.debug(f"get_content_and_reference: 註解數量={len(annotations)}")
-    
-    # 檢查是否有複雜引用格式在原始文本中
-    complex_citations = re.findall(r'【[^】]+】', text)
-    if complex_citations:
-        logger.debug(f"get_content_and_reference: 發現 {len(complex_citations)} 個複雜引用格式:")
-        for citation in complex_citations:
-            logger.debug(f"  - {citation}")
-    
-    text = s2t_converter.convert(text)
-    
-    # 替換註釋文本
-    ref_mapping = {}
-    for i, annotation in enumerate(annotations, 1):
-        logger.debug(f"get_content_and_reference: 處理註解 {i}: {annotation}")
-        original_text = annotation['text']
-        # 對annotation文本也進行s2t轉換，確保與主文本一致
-        original_text = s2t_converter.convert(original_text)
-        file_id = annotation['file_citation']['file_id']
-        replacement_text = f"[{i}]"
-        
-        logger.debug(f"  替換 '{original_text}' → '{replacement_text}'")
-        text = text.replace(original_text, replacement_text)
-        ref_mapping[replacement_text] = f"{replacement_text}: {file_dict.get(file_id)}"
+    def _dedup(match: Match[str]) -> str:
+        # 取出該連續區塊，例如 '[1][2][1]'
+        block = match.group(0)
+        # 抓出所有數字去重後轉 int
+        nums = {int(n) for n in re.findall(r'\d+', match.group(0))}
+        return ' ' + ''.join(f'[{n}]' for n in sorted(nums)) + ' '
 
-    # 檢查處理後是否還有複雜引用格式
-    remaining_complex = re.findall(r'【[^】]+】', text)
-    if remaining_complex:
-        logger.warning(f"get_content_and_reference: 處理後仍有 {len(remaining_complex)} 個未處理的複雜引用:")
-        for citation in remaining_complex:
-            logger.warning(f"  - {citation}")
-
-    # 添加文件識別碼引用
-    reference_text = '\n'.join(ref_mapping.values())
-    final_text = f"{text}\n\n{reference_text}".strip()
+    # 至少兩個連在一起的 [數字] 才視為一個「去重區塊」
+    citation_block_pattern = r'(?:\[\d+\]){2,}'
     
-    logger.debug(f"get_content_and_reference: 最終文本長度={len(final_text)}")
-    logger.debug(f"get_content_and_reference: 生成了 {len(ref_mapping)} 個引用")
-
-    return final_text
-
-def replace_file_name(content, file_dict) -> str:
-    sorted_file_dict = sorted(file_dict.items(), key=lambda x: -len(x[0]))
-
-    # 對每個鍵進行替換
-    for key, value in sorted_file_dict:
-        # 使用 re.escape 避免鍵中可能包含的任何正則表達式特殊字符影響匹配
-        content = re.sub(re.escape(key), value, content) 
-    return content
+    # 取代後回傳
+    return re.sub(citation_block_pattern, _dedup, text)
 
 def check_token_valid(model) -> bool:
     is_successful, _, _ = model.check_token_valid()
     if not is_successful:
         raise ValueError('Invalid API token')
     return is_successful
-
-def get_file_dict(model) -> dict:
-    try:
-        result = model.list_files()
-        if not result or len(result) != 3:
-            logger.warning(f"Unexpected result from list_files: {result}")
-            return {}
-        
-        is_successful, response, error_message = result
-        if not is_successful:
-            raise Exception(error_message)
-        
-        file_dict = {}
-        
-        # 處理不同的回應格式
-        if isinstance(response, dict) and 'data' in response:
-            # 舊格式：字典包含 'data' 鍵
-            data = response['data']
-            if not isinstance(data, list):
-                logger.warning(f"Expected list in response data, got: {type(data)}")
-                return {}
-            
-            for item in data:
-                if isinstance(item, dict) and 'id' in item and 'filename' in item:
-                    file_id = item['id']
-                    filename = item['filename'].replace('.txt', '').replace('.json', '')
-                    file_dict[file_id] = filename
-                    
-        elif isinstance(response, list):
-            # 新格式：直接是 FileInfo 物件列表
-            for item in response:
-                if hasattr(item, 'file_id') and hasattr(item, 'filename'):
-                    file_id = item.file_id
-                    filename = item.filename.replace('.txt', '').replace('.json', '')
-                    file_dict[file_id] = filename
-                elif isinstance(item, dict) and 'id' in item and 'filename' in item:
-                    file_id = item['id']
-                    filename = item['filename'].replace('.txt', '').replace('.json', '')
-                    file_dict[file_id] = filename
-                else:
-                    logger.warning(f"Unexpected file item format: {item}")
-        else:
-            logger.warning(f"Unexpected response format from list_files: {type(response)}")
-            return {}
-        
-        logger.debug(f"Successfully loaded {len(file_dict)} files")
-        return file_dict
-        
-    except Exception as e:
-        logger.error(f"Error in get_file_dict: {e}")
-        return {}
-
-def detect_none_references(text):
-    if re.search(r'\[\d+\]: None', text):
-        return True
-    else:
-        return False
 
 def get_date_string(day="today"):
     """

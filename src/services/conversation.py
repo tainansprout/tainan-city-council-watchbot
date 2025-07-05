@@ -8,9 +8,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime, timedelta
 from ..database.models import get_db_session, SimpleConversationHistory
-import logging
+from ..core.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ORMConversationManager:
     """基於 SQLAlchemy ORM 的對話管理器（完整版）"""

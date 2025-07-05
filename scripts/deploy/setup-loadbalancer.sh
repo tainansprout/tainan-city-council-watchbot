@@ -27,6 +27,17 @@ for var in "${required_vars[@]}"; do
     fi
 done
 
+# 列出所需環境變數及其值，並確認是否繼續
+echo "請確認以下環境變數設定："
+for var in "${required_vars[@]}"; do
+    echo "  $var=${!var}"
+done
+read -p "請確認是否繼續執行 (y/N): " confirm
+if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    echo "已取消腳本執行"
+    exit 1
+fi
+
 # 顏色代碼
 RED='\033[0;31m'
 GREEN='\033[0;32m'

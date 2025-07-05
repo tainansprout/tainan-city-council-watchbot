@@ -1,12 +1,12 @@
 """
 平台工廠 - 使用 Factory Pattern 和 Registry Pattern
 """
-import logging
+from ..core.logger import get_logger
 from typing import Dict, Any, Optional, Type, List, Tuple
 from .base import PlatformType, PlatformHandlerInterface, BasePlatformHandler
 from .line_handler import LineHandler
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PlatformRegistry:

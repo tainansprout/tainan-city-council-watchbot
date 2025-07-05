@@ -2,13 +2,13 @@
 資料庫操作工具
 提供常用的資料庫操作功能
 """
-import logging
+from ..core.logger import get_logger
 from typing import Dict, List, Optional
 from sqlalchemy import text, func
 from .connection import Database
 from .models import get_db_session, UserThreadTable, SimpleConversationHistory
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DatabaseOperations:
