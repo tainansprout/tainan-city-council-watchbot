@@ -11,7 +11,7 @@ from typing import Dict, Any
 from .core.config import load_config
 from .core.logger import logger
 from .core.security import init_security, InputValidator, require_json_input
-from .core.security_config import security_config
+from .core.security import security_config
 from .core.auth import init_test_auth_with_config, get_auth_status_info, require_test_auth, init_test_auth
 from .core.error_handler import ErrorHandler
 
@@ -361,53 +361,84 @@ class MultiPlatformChatBot:
     def _handle_webhook(self, platform_name: str):
         """統一的 webhook 處理器"""
         try:
+            # 記錄請求基本資訊
+            logger.info(f"[WEBHOOK] Received {platform_name} webhook request")
+            logger.debug(f"[WEBHOOK] Request method: {request.method}")
+            logger.debug(f"[WEBHOOK] Content-Type: {request.headers.get('Content-Type', 'None')}")
+            
             # 解析平台類型
             try:
                 platform_type = PlatformType(platform_name.lower())
+                logger.debug(f"[WEBHOOK] Platform type resolved: {platform_type.value}")
             except ValueError:
-                logger.error(f"Unknown platform: {platform_name}")
+                logger.error(f"[WEBHOOK] Unknown platform: {platform_name}")
                 abort(404)
             
             # 取得請求資料
             signature = request.headers.get('X-Line-Signature') or request.headers.get('X-Hub-Signature-256', '')
             body = request.get_data(as_text=True)
             
-            logger.info(f"Received {platform_name} webhook")
+            logger.debug(f"[WEBHOOK] Request body size: {len(body)} bytes")
+            logger.debug(f"[WEBHOOK] Signature header: {'Present' if signature else 'Missing'}")
+            logger.debug(f"[WEBHOOK] Request headers: {dict(request.headers)}")
+            logger.debug(f"[WEBHOOK] Request body preview: {body[:500]}..." if len(body) > 500 else f"[WEBHOOK] Request body: {body}")
+            
+            # 檢查平台管理器狀態
+            logger.debug(f"[WEBHOOK] Platform manager status - enabled platforms: {[p.value for p in self.platform_manager.get_enabled_platforms()]}")
             
             # 使用平台管理器處理 webhook
+            logger.debug(f"[WEBHOOK] Starting webhook processing with platform manager")
             messages = self.platform_manager.handle_platform_webhook(
                 platform_type, body, signature
             )
             
+            logger.debug(f"[WEBHOOK] Platform manager returned {len(messages) if messages else 0} messages")
+            
             if not messages:
-                logger.warning(f"No valid messages from {platform_name} webhook")
+                logger.warning(f"[WEBHOOK] No valid messages from {platform_name} webhook - returning OK")
                 return 'OK'
             
             # 處理每個訊息
-            for message in messages:
+            logger.debug(f"[WEBHOOK] Processing {len(messages)} messages")
+            for i, message in enumerate(messages):
                 try:
+                    logger.info(f"[WEBHOOK] Received - User: {getattr(message.user, 'user_id', 'unknown')}, Content: {str(message.content)[:100]}{'...' if len(str(message.content)) > 100 else ''}")
+                    logger.debug(f"[WEBHOOK] Processing message {i+1}/{len(messages)} - ID: {getattr(message, 'message_id', 'unknown')}, Type: {getattr(message, 'message_type', 'unknown')}")
+                    
                     # 使用核心聊天服務處理訊息
+                    logger.debug(f"[WEBHOOK] Processing with core chat service")
                     response = self.core_chat_service.process_message(message)
+                    logger.info(f"[WEBHOOK] Sending - Content: {str(getattr(response, 'content', 'No content'))[:100]}{'...' if hasattr(response, 'content') and len(str(response.content)) > 100 else ''}")
+                    logger.debug(f"[WEBHOOK] Response type: {getattr(response, 'response_type', 'unknown')}")
                     
                     # 發送回應
+                    logger.debug(f"[WEBHOOK] Getting platform handler for response")
                     handler = self.platform_manager.get_handler(platform_type)
                     if handler:
+                        logger.debug(f"[WEBHOOK] Platform handler found, sending response")
                         success = handler.send_response(response, message)
-                        if not success:
-                            logger.error(f"Failed to send response via {platform_name}")
+                        if success:
+                            logger.info(f"[WEBHOOK] Response sent successfully to user: {getattr(message.user, 'user_id', 'unknown')}")
+                        else:
+                            logger.error(f"[WEBHOOK] Failed to send response via {platform_name}")
+                    else:
+                        logger.error(f"[WEBHOOK] No platform handler found for {platform_name}")
                     
                 except Exception as e:
                     # 記錄詳細的錯誤 log
-                    logger.error(f"Error processing message from {platform_name}: {type(e).__name__}: {e}")
-                    logger.error(f"Error details - Platform: {platform_name}, Message ID: {getattr(message, 'message_id', 'unknown')}")
+                    logger.error(f"[WEBHOOK] Error processing message from {platform_name}: {type(e).__name__}: {e}")
+                    logger.error(f"[WEBHOOK] Error details - Platform: {platform_name}, Message ID: {getattr(message, 'message_id', 'unknown')}")
+                    logger.error(f"[WEBHOOK] Exception traceback:", exc_info=True)
                     continue
             
+            logger.debug(f"[WEBHOOK] Webhook processing completed successfully for {platform_name}")
             return 'OK'
             
         except Exception as e:
             # 記錄詳細的錯誤 log
-            logger.error(f"Error handling {platform_name} webhook: {type(e).__name__}: {e}")
-            logger.error(f"Webhook error details - Platform: {platform_name}, Request size: {len(request.get_data())}")
+            logger.error(f"[WEBHOOK] Error handling {platform_name} webhook: {type(e).__name__}: {e}")
+            logger.error(f"[WEBHOOK] Webhook error details - Platform: {platform_name}, Request size: {len(request.get_data())}")
+            logger.error(f"[WEBHOOK] Exception traceback:", exc_info=True)
             abort(500)
     
     def _health_check(self):
@@ -505,19 +536,15 @@ class MultiPlatformChatBot:
     def _register_cleanup(self):
         """註冊清理函數"""
         def cleanup():
+            # Logger 不應該拋出 ValueError，如果出現請檢查 logging 配置
+            logger.info("Shutting down application...")
             try:
-                logger.info("Shutting down application...")
                 if self.database:
                     self.database.close_engine()
-                logger.info("Application shutdown complete")
-            except (ValueError, OSError) as e:
-                # Logger may be closed already during test cleanup
-                # ValueError: I/O operation on closed file
-                # OSError: file system errors
-                pass
-            except Exception:
-                # Silently ignore any other errors during cleanup
-                pass
+            except Exception as e:
+                # 只捕獲資料庫關閉的錯誤，不影響 logging
+                logger.warning(f"Error during database cleanup: {e}")
+            logger.info("Application shutdown complete")
         
         atexit.register(cleanup)
     

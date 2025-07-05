@@ -54,8 +54,12 @@ class TestDatabaseMigration:
             pytest.fail(f"無法導入資料庫模型: {e}")
     
     @patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///test.db'})
-    def test_database_manager_with_env_var(self):
+    @patch('src.core.config.load_config')
+    def test_database_manager_with_env_var(self, mock_load_config):
         """測試使用環境變數的資料庫管理器"""
+        # Mock load_config to fail, forcing use of environment variable
+        mock_load_config.side_effect = Exception("Config load failed")
+        
         from src.database.models import DatabaseManager
         
         manager = DatabaseManager()
@@ -76,8 +80,9 @@ class TestDatabaseMigration:
         assert manager.check_connection() == True
         
         # 檢查表格是否存在
+        from sqlalchemy import text
         with manager.engine.connect() as conn:
-            result = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
             tables = [row[0] for row in result]
         
         assert 'user_thread_table' in tables
@@ -98,7 +103,7 @@ class TestConversationManagerIntegration:
         # Mock get_db_session to use our test database
         original_get_session = manager.get_session
         
-        with patch('src.services.conversation_manager.get_db_session') as mock_get_session:
+        with patch('src.services.conversation.get_db_session') as mock_get_session:
             mock_get_session.side_effect = original_get_session
             yield manager
     
@@ -269,14 +274,18 @@ class TestHighAvailabilityConfig:
             # 但配置錯誤會導致不同的異常
             assert "could not connect" in str(e).lower() or "connection" in str(e).lower()
     
-    def test_environment_variable_priority(self):
+    @patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///env_test.db'})
+    @patch('src.core.config.load_config')
+    def test_environment_variable_priority(self, mock_load_config):
         """測試環境變數優先級"""
-        with patch.dict(os.environ, {'DATABASE_URL': 'sqlite:///env_test.db'}):
-            from src.database.models import DatabaseManager
-            
-            manager = DatabaseManager()
-            # 應該使用環境變數的值
-            assert "env_test.db" in str(manager.engine.url)
+        # Mock load_config to fail, forcing use of environment variable
+        mock_load_config.side_effect = Exception("Config load failed")
+        
+        from src.database.models import DatabaseManager
+        
+        manager = DatabaseManager()
+        # 應該使用環境變數的值
+        assert "env_test.db" in str(manager.engine.url)
 
 
 @pytest.mark.integration
@@ -293,7 +302,7 @@ class TestFullDatabaseIntegration:
         manager.create_all_tables()
         
         # Mock 全域 session 取得函數
-        with patch('src.services.conversation_manager.get_db_session') as mock_get_session:
+        with patch('src.services.conversation.get_db_session') as mock_get_session:
             mock_get_session.side_effect = manager.get_session
             
             conv_manager = ORMConversationManager()

@@ -790,12 +790,34 @@ pytest
 ./scripts/ci-test.sh
 ```
 
-### 測試架構
+### 測試架構 (Updated 2025)
 
-- **單元測試** (`tests/unit/`): 測試個別模組和函數
-- **整合測試** (`tests/integration/`): 測試服務間的整合
-- **API 測試** (`tests/api/`): 測試 Flask 端點
-- **模擬測試** (`tests/mocks/`): 測試外部服務的模擬
+本專案採用分層測試架構，涵蓋所有關鍵功能：
+
+- **單元測試** (`tests/unit/`): 測試個別模組和核心功能
+  - AI 模型測試 (OpenAI、Anthropic、Gemini、Ollama)
+  - 平台處理器測試 (LINE、Discord、Telegram)
+  - 核心服務測試 (聊天、對話管理、回應格式化)
+  - 資料庫相關測試 (ORM、連接、操作)
+  - 認證和配置管理測試
+- **整合測試** (`tests/integration/`): 測試跨模組的端到端功能
+  - 資料庫與 ORM 整合測試
+  - 多平台工作流程測試
+- **API 測試** (`tests/api/`): 測試 Flask 端點和 Web 介面
+  - 健康檢查和系統狀態端點
+  - 多平台 Webhook 端點測試
+- **模擬測試** (`tests/mocks/`): 測試外部服務的模擬和整合
+  - AI 模型 API 模擬 (OpenAI、Anthropic、Gemini、Ollama)
+  - 平台 API 模擬 (LINE Bot、Discord、Telegram)
+  - 資料庫操作模擬
+- **主應用程式測試** (`test_main.py`): 測試應用程式入口點和 WSGI 兼容性
+
+#### 測試品質保證特色
+- ✅ **架構一致性**: 測試反映實際系統架構和責任分工
+- ✅ **平台感知**: 多平台統一介面的完整測試覆蓋
+- ✅ **引用處理**: AI 模型引用架構分離的正確測試
+- ✅ **錯誤處理**: 雙層錯誤訊息和異常處理測試
+- ✅ **配置管理**: 環境變數覆蓋和設定相容性測試
 
 ### 配置檔案
 

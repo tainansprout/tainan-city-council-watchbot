@@ -36,8 +36,10 @@ class CoreChatService:
         self.error_handler = ErrorHandler()
         self.response_formatter = ResponseFormatter(config)
         try:
-            logger.info(f"CoreChatService initialized with model: {model.get_provider().value}")
-        except ValueError:
+            provider = model.get_provider()
+            provider_name = provider.value if hasattr(provider, 'value') else str(provider)
+            logger.info(f"CoreChatService initialized with model: {provider_name}")
+        except (ValueError, AttributeError):
             pass
     
     def process_message(self, message: PlatformMessage) -> PlatformResponse:
@@ -149,19 +151,7 @@ class CoreChatService:
                 )
         
         finally:
-            # 清理臨時檔案
-            if input_audio_path and os.path.exists(input_audio_path):
-                try:
-                    os.remove(input_audio_path)
-                    try:
-                        logger.debug(f"Cleaned up audio file: {input_audio_path}")
-                    except ValueError:
-                        pass
-                except Exception as e:
-                    try:
-                        logger.warning(f"Failed to clean up audio file {input_audio_path}: {e}")
-                    except ValueError:
-                        pass
+            self._delete_audio_file(input_audio_path)
     
     def _handle_command(self, user: PlatformUser, text: str, platform: str) -> PlatformResponse:
         """處理指令"""
@@ -278,6 +268,23 @@ class CoreChatService:
             return input_audio_path
         except Exception as e:
             raise OpenAIError(f"Failed to save audio file: {e}")
+
+    def _delete_audio_file(self, file_path: Optional[str]) -> None:
+        """刪除臨時音訊檔案"""
+        if not file_path:
+            return
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                try:
+                    logger.debug(f"Cleaned up audio file: {file_path}")
+                except ValueError:
+                    pass
+        except Exception as e:
+            try:
+                logger.warning(f"Failed to clean up audio file {file_path}: {e}")
+            except ValueError:
+                pass
     
     def _transcribe_audio(self, input_audio_path: str) -> str:
         """轉錄音訊檔案 - 使用統一接口"""

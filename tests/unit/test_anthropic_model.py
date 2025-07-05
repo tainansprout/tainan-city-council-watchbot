@@ -459,7 +459,7 @@ class TestAnthropicModel:
         assert error == "RAG processing failed"
         
         # 驗證用戶訊息仍然被儲存
-        mock_conversation_manager.add_message.assert_called_once_with('test_user_456', 'anthropic', 'user', 'Test message')
+        mock_conversation_manager.add_message.assert_called_once_with('test_user_456', 'anthropic', 'user', 'Test message', 'line')
     
     def test_clear_user_history_success(self, anthropic_model):
         """測試清除用戶歷史成功"""
@@ -476,7 +476,7 @@ class TestAnthropicModel:
         assert error is None
         
         # 驗證方法調用
-        mock_conversation_manager.clear_user_history.assert_called_once_with('test_user_789', 'anthropic')
+        mock_conversation_manager.clear_user_history.assert_called_once_with('test_user_789', 'anthropic', 'line')
     
     def test_clear_user_history_failure(self, anthropic_model):
         """測試清除用戶歷史失敗"""

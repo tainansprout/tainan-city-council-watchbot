@@ -180,6 +180,20 @@ class TestResponseFormatter:
         
         # 即使轉換失敗，也應該返回原始內容
         assert '測試回應' in result or '回應處理失敗' in result
+    
+    @patch('src.services.response.s2t_converter')
+    def test_chinese_conversion_simple_to_traditional(self, mock_converter, formatter):
+        """測試簡體轉繁體中文轉換（來自 OpenAI 模型測試）"""
+        # 模擬簡體轉繁體的轉換
+        mock_converter.convert.side_effect = lambda x: x.replace('这是简体中文回应', '這是簡體中文回應')
+        
+        rag_response = RAGResponse(answer='这是简体中文回应', sources=[], metadata={})
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證轉換器被調用
+        mock_converter.convert.assert_called()
+        # 驗證轉換結果（簡體變繁體）
+        assert '這是簡體中文回應' in result
 
 
 class TestJSONResponse:

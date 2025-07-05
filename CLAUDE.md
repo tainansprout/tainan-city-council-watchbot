@@ -96,9 +96,14 @@ curl https://{service-url}/health
 - **src/services/response.py**: Unified response formatting (原 response_formatter.py)
 - **src/services/audio.py**: Audio processing service (原 audio_service.py)
 
-#### Configuration Management (v2.0)
+#### Core Infrastructure (v2.0)
 - **src/core/config.py**: ConfigManager singleton with thread-safe configuration caching
-- **src/core/security.py**: Security middleware with unified JSON API validation
+- **src/core/security.py**: Unified security module with configuration, validation, rate limiting, and middleware
+- **src/core/auth.py**: Authentication and authorization management
+- **src/core/memory.py**: In-memory conversation management
+- **src/core/error_handler.py**: Centralized error handling and user-friendly messages
+- **src/core/exceptions.py**: Custom exception hierarchy for different error types
+- **src/core/logger.py**: Comprehensive logging system with structured output
 
 #### Model Layer (Factory Pattern)
 - **src/models/base.py**: Abstract model interfaces and data structures
@@ -168,8 +173,8 @@ ollama:
 db:
   host: "${DB_HOST}"
   port: ${DB_PORT}
-  database: "${DB_NAME}"
-  username: "${DB_USER}"
+  db_name: "${DB_NAME}"
+  user: "${DB_USER}"
   password: "${DB_PASSWORD}"
 
 # Platform configurations
@@ -316,44 +321,64 @@ The ResponseFormatter ensures consistent citation formatting across all models.
 - **Environment Override**: Environment variables use new structure (e.g., `platforms.line.channel_access_token`)
 - **Auto-Detection**: Missing `FLASK_ENV` defaults to development
 
-### 🧪 **Testing Framework Architecture**
+### 🧪 **Testing Framework Architecture (Updated 2025)**
 
-The testing framework is organized by component type with comprehensive coverage:
+The testing framework is organized by component type with comprehensive coverage and unified mock patterns:
 
-#### Test Structure
+#### Test Structure (Optimized)
 ```
 tests/
-├── unit/                       # 單元測試
-│   ├── test_models.py         # AI 模型測試
-│   ├── test_platforms.py      # 平台處理器測試
-│   ├── test_core_chat_service.py  # 核心聊天服務測試
-│   ├── test_services.py       # 服務層測試
-│   └── test_utils.py          # 工具函數測試
-├── integration/                # 整合測試
-│   ├── test_platform_integration.py  # 平台整合測試
-│   ├── test_chat_flow.py      # 完整對話流程測試
-│   └── test_database_integration.py  # 資料庫整合測試
+├── unit/                       # 單元測試 (核心功能)
+│   ├── test_anthropic_model.py        # Anthropic Claude API 測試
+│   ├── test_chat_service.py           # 核心聊天服務測試 (原 test_core_chat_service.py)
+│   ├── test_config_manager.py         # 配置管理測試
+│   ├── test_conversation_service.py   # 對話歷史管理測試
+│   ├── test_database_connection.py    # 資料庫連接測試
+│   ├── test_database_models.py        # SQLAlchemy ORM 模型測試
+│   ├── test_database_operations.py    # 資料庫操作測試
+│   ├── test_error_handling.py         # 錯誤處理機制測試
+│   ├── test_gemini_model.py           # Google Gemini API 測試
+│   ├── test_models.py                 # AI 模型基礎介面測試
+│   ├── test_ollama_model.py           # Ollama 本地模型測試
+│   ├── test_openai_model.py           # OpenAI Assistant API 測試 (已整合 enhanced 版本)
+│   ├── test_platforms.py              # 平台抽象和處理器測試
+│   ├── test_response_service.py       # 統一回應格式化測試 (原 test_response_formatter.py)
+│   ├── test_utils.py                  # 工具函數測試
+│   └── test_web_auth.py               # Web 認證系統測試
+├── integration/                # 整合測試 (跨模組交互)
+│   └── test_database_integration.py   # 資料庫與ORM整合測試
 ├── api/                        # API 端點測試
-│   ├── test_web_interface.py  # Web 介面測試
-│   ├── test_health_endpoints.py  # 健康檢查端點測試
-│   └── test_auth.py           # 認證系統測試
-└── mocks/                      # 模擬測試
-    ├── mock_external_services.py  # 外部服務模擬
-    └── test_fixtures.py       # 測試固件
+│   ├── test_health_endpoints.py       # 健康檢查和系統狀態端點測試
+│   └── test_webhook_endpoints.py      # 多平台 Webhook 端點測試
+├── mocks/                      # 模擬測試 (外部服務)
+│   └── test_external_services.py      # 外部服務和API模擬測試
+└── test_main.py                # 主應用程式和WSGI測試
 ```
 
-#### Testing Patterns
-- **Factory Pattern Testing**: 模型和平台工廠的創建測試
-- **Strategy Pattern Testing**: 不同 AI 模型策略的行為測試
-- **Integration Testing**: 跨模組的整合測試
-- **Mock Services**: 外部 API 的模擬測試
+#### Testing Patterns (Enhanced)
+- **Factory Pattern Testing**: 模型和平台工廠的創建和註冊測試
+- **Strategy Pattern Testing**: 不同 AI 模型策略的行為和回應測試
+- **Integration Testing**: 跨模組的整合測試和端到端流程
+- **Mock Services**: 外部 API 的模擬測試，支援 OpenAI、Anthropic、Gemini、Ollama
+- **Platform-Aware Testing**: 多平台支援的統一測試模式
+- **Citation Processing Testing**: AI 模型引用處理的架構分離測試
 
-#### Key Testing Features
-- **Multi-Platform Support**: 測試 LINE、Discord、Telegram 平台
-- **Multi-Model Testing**: 測試 OpenAI、Anthropic、Gemini、Ollama 模型
-- **Configuration Testing**: 測試新舊配置格式的兼容性
-- **Error Handling Testing**: 測試錯誤處理機制和訊息格式
-- **Authentication Testing**: 測試 Web 介面認證系統
+#### Key Testing Features (Updated)
+- **Multi-Platform Support**: 測試 LINE、Discord、Telegram 平台的統一介面
+- **Multi-Model Testing**: 完整測試 OpenAI、Anthropic、Gemini、Ollama 模型
+- **Configuration Testing**: 測試新舊配置格式的兼容性和環境變數覆蓋
+- **Error Handling Testing**: 測試錯誤處理機制和雙層錯誤訊息
+- **Authentication Testing**: 測試 Web 介面認證系統的多種認證方式
+- **Citation Architecture Testing**: 測試引用處理的正確架構分工 (OpenAI vs ResponseFormatter)
+- **Database Consistency Testing**: 測試資料庫模型命名一致性 (UserThreadTable)
+- **Platform Parameter Testing**: 測試平台感知的對話管理
+
+#### Test Maintenance and Quality Assurance
+- **Naming Standardization**: 統一測試檔案命名規範 (test_openai_model.py vs test_openai_model_enhanced.py)
+- **Import Path Consistency**: 修復模組重構後的導入路徑問題
+- **Mock Pattern Unification**: 統一模擬對象的設定模式和參數傳遞
+- **Flask Context Management**: 正確處理 Flask 應用上下文和請求上下文
+- **Architectural Testing**: 確保測試反映實際的系統架構和責任分工
 
 ### 🔐 **Authentication System (v2.0)**
 - **Session-Based Auth**: Web interface uses Flask sessions for authentication
@@ -422,12 +447,14 @@ src/services/
 
 #### Unified Interface Design
 
-**統一平台接口**:
+**統一平台接口** (v2.1 - 簡化版):
 ```python
-class BasePlatformHandler:
-    def validate_config(self, config: Dict) -> Tuple[bool, List[str]]
-    def parse_webhook(self, body: str, signature: str) -> List[PlatformMessage]
-    def send_response(self, response: PlatformResponse, original_message: PlatformMessage) -> bool
+class PlatformHandlerInterface:
+    def get_platform_type(self) -> PlatformType
+    def parse_message(self, raw_event: Any) -> Optional[PlatformMessage]  
+    def send_response(self, response: PlatformResponse, message: PlatformMessage) -> bool
+    def handle_webhook(self, request_body: str, signature: str) -> List[PlatformMessage]
+    # 注意：移除了 validate_signature 抽象方法，簽名驗證現在是每個平台的內部實作細節
 ```
 
 **統一模型接口**:
@@ -438,7 +465,7 @@ class FullLLMInterface:
     def transcribe_audio(self, audio_file_path: str) -> Tuple[bool, str, str]
 ```
 
-### 📝 **Key Changes for Developers**
+### 📝 **Key Changes for Developers (Updated v2.1)**
 1. `main.py` is now the primary entry point for all environments
 2. Platform configurations use new nested structure (`platforms.{platform}`)
 3. Health endpoints return enhanced information with platform status
@@ -449,6 +476,8 @@ class FullLLMInterface:
 8. **Unified Interfaces** - All platforms and models implement consistent interfaces
 9. **Factory Pattern** - Use factories for creating platform handlers and models
 10. **Error Handling** - Dual-layer error messages (detailed for testing, simplified for users)
+11. **簡化平台接口** - 移除了 `validate_signature` 抽象方法，簽名驗證成為各平台的內部實作細節
+12. **最佳化 Logging** - INFO 級別只保留最必要的訊息（收到/發送內容），其餘改為 DEBUG
 
 ## Dependencies
 
@@ -541,18 +570,30 @@ python -m pytest tests/unit/test_platforms.py
 python -m pytest tests/unit/test_chat_service.py
 ```
 
-### Test Structure (重構後)
+### Test Structure (Updated 2025)
 - `tests/unit/`: Unit tests for individual components
-  - `test_platforms.py`: Platform abstraction tests
-  - `test_chat_service.py`: Core chat service tests (原 test_core_chat_service.py)
+  - `test_platforms.py`: Platform abstraction and handler registration tests
+  - `test_chat_service.py`: Core chat service tests (原 test_core_chat_service.py) 
   - `test_conversation_service.py`: Conversation management tests (重構版)
   - `test_response_service.py`: Response formatting tests (原 test_response_formatter.py)
-  - `test_database_models.py`: Database models tests (新增)
+  - `test_database_models.py`: SQLAlchemy ORM models tests (新增)
   - `test_database_operations.py`: Database operations tests (新增)
-  - `test_models.py`: AI model integration tests
+  - `test_database_connection.py`: Database connection and UserThreadTable tests (新增)
+  - `test_anthropic_model.py`: Anthropic Claude API integration tests (新增)
+  - `test_gemini_model.py`: Google Gemini API integration tests (新增)
+  - `test_ollama_model.py`: Ollama local model integration tests (新增)
+  - `test_openai_model.py`: OpenAI Assistant API tests (整合 enhanced 版本)
+  - `test_models.py`: AI model base interface tests
+  - `test_web_auth.py`: Web authentication system tests (新增)
+  - `test_config_manager.py`: Configuration management tests (新增)
 - `tests/integration/`: End-to-end integration tests
-  - `test_platform_integration.py`: Platform workflow tests
-  - `test_database_integration.py`: Database and ORM tests
+  - `test_database_integration.py`: Database and ORM integration tests
+- `tests/api/`: API endpoint testing
+  - `test_health_endpoints.py`: Health check and system status tests (重構版)
+  - `test_webhook_endpoints.py`: Multi-platform webhook tests (新增)
+- `tests/mocks/`: External service mocking
+  - `test_external_services.py`: External API mocking tests (新增)
+- `test_main.py`: Main application and WSGI compatibility tests (新增)
 
 ## Development Workflow
 

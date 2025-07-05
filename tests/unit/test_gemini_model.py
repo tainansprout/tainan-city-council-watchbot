@@ -199,7 +199,7 @@ class TestGeminiModel:
         assert rag_response.metadata['model_provider'] == 'gemini'
         
         # 驗證長上下文使用
-        mock_get_conversations.assert_called_once_with('test_user_123', limit=20)
+        mock_get_conversations.assert_called_once_with('test_user_123', 'line', limit=20)
         
         # 驗證 RAG 調用包含上下文
         mock_query_rag.assert_called_once()
@@ -251,7 +251,7 @@ class TestGeminiModel:
         assert is_successful == True
         assert error is None
         
-        mock_conversation_manager.clear_user_history.assert_called_once_with('test_user_789', 'gemini')
+        mock_conversation_manager.clear_user_history.assert_called_once_with('test_user_789', 'gemini', 'line')
     
     def test_build_long_conversation_context(self, gemini_model):
         """測試長上下文對話建構"""

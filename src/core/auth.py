@@ -9,7 +9,7 @@ import secrets
 import time
 from functools import wraps
 from typing import Optional, Dict, Any
-from flask import request, abort, session, jsonify, render_template
+from flask import request, abort, session, jsonify, render_template, current_app
 
 
 class TestAuth:

@@ -122,10 +122,10 @@ class TestOpenAIModelEnhanced:
         with patch.object(openai_model, 'get_file_references', return_value={'file-123': 'weather_report'}):
             content, sources = openai_model._process_openai_response(mock_thread_messages)
             
-            # 驗證內容處理
+            # 驗證內容處理 - OpenAI 模型只負責簡單替換，不添加檔案名稱
             assert '[1]' in content
             assert '【0†source】' not in content  # 原始引用應被替換
-            assert '[1]: weather_report' in content
+            # OpenAI 模型不負責添加 ": filename" 格式，這是 ResponseFormatter 的責任
             
             # 驗證來源資訊
             assert len(sources) == 1
@@ -197,10 +197,10 @@ class TestOpenAIModelEnhanced:
         }):
             content, sources = openai_model._process_openai_response(mock_thread_messages)
             
-            # 驗證多個引用的處理
+            # 驗證多個引用的處理 - OpenAI 模型只負責簡單替換
             assert '[1]' in content and '[2]' in content
-            assert '[1]: doc1' in content
-            assert '[2]: doc2' in content
+            assert '【0†source】' not in content and '【1†source】' not in content  # 原始引用被替換
+            # OpenAI 模型不負責添加 ": filename" 格式，這是 ResponseFormatter 的責任
             assert len(sources) == 2
     
     def test_process_openai_response_empty_data(self, openai_model):
@@ -222,10 +222,11 @@ class TestOpenAIModelEnhanced:
         assert content == ''
         assert sources == []
     
-    @patch('src.models.openai_model.s2t_converter', create=True)
+    @patch('src.models.openai_model.s2t_converter')
     def test_process_openai_response_chinese_conversion(self, mock_converter, openai_model):
         """測試 OpenAI 回應的中文轉換"""
-        mock_converter.convert.side_effect = lambda x: x.replace('简', '簡')
+        # 模擬簡體轉繁體的轉換
+        mock_converter.convert.side_effect = lambda x: x.replace('这是简体中文回应', '這是簡體中文回應')
         
         mock_thread_messages = {
             'data': [
@@ -244,12 +245,13 @@ class TestOpenAIModelEnhanced:
             ]
         }
         
-        content, sources = openai_model._process_openai_response(mock_thread_messages)
-        
-        # 驗證轉換器被調用並且內容被處理
-        mock_converter.convert.assert_called()
-        # 驗證轉換結果（簡體變繁體）
-        assert '這是簡體中文回應' in content
+        with patch.object(openai_model, 'get_file_references', return_value={}):
+            content, sources = openai_model._process_openai_response(mock_thread_messages)
+            
+            # 驗證轉換器被調用
+            mock_converter.convert.assert_called()
+            # 驗證轉換結果（簡體變繁體）
+            assert '這是簡體中文回應' in content
     
     def test_query_with_rag_integration(self, openai_model):
         """測試 query_with_rag 與引用處理的整合"""

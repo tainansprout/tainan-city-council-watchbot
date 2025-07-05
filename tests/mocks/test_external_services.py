@@ -455,8 +455,8 @@ class TestExternalServiceIntegration:
         
         with patch('requests.post') as mock_post, \
              patch('requests.get') as mock_get, \
-             patch('src.database.db.create_engine'), \
-             patch('src.database.db.sessionmaker') as mock_sessionmaker:
+             patch('src.database.connection.create_engine'), \
+             patch('src.database.connection.sessionmaker') as mock_sessionmaker:
             
             # 設定資料庫模擬
             mock_session = Mock()
@@ -479,7 +479,7 @@ class TestExternalServiceIntegration:
             
             # 執行完整流程測試
             from src.models.openai_model import OpenAIModel
-            from src.services.chat_service import ChatService
+            from src.services.chat import CoreChatService
             from src.database import Database
             
             db_config = {'host': 'localhost', 'port': 5432, 'db_name': 'test', 'user': 'test_user', 'password': 'test_password'}
@@ -500,10 +500,17 @@ class TestExternalServiceIntegration:
                 mock_get_session.return_value.__enter__.return_value = mock_session
                 mock_get_session.return_value.__exit__.return_value = None
                 
-                chat_service = ChatService(model, db, chat_config)
+                chat_service = CoreChatService(model, db, chat_config)
                 
-                # 測試服務鏈
-                response = chat_service.handle_message('test_user', 'Hello')
+                # 測試服務鏈 - use process_message instead of handle_message
+                from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
+                platform_message = PlatformMessage(
+                    message_id='test_msg_123',
+                    content='Hello',
+                    user=PlatformUser(user_id='test_user', platform=PlatformType.LINE, display_name='Test User'),
+                    message_type='text'
+                )
+                response = chat_service.process_message(platform_message)
                 
                 # 驗證整合結果
                 assert response is not None

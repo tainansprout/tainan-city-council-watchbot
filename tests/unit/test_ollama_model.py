@@ -187,8 +187,8 @@ class TestOllamaModel:
         
         # 驗證資料庫存儲被調用
         assert mock_conversation_manager.add_message.call_count == 2  # user + assistant
-        mock_conversation_manager.add_message.assert_any_call('test_user_456', 'ollama', 'user', 'Regular conversation')
-        mock_conversation_manager.add_message.assert_any_call('test_user_456', 'ollama', 'assistant', 'Database mode response')
+        mock_conversation_manager.add_message.assert_any_call('test_user_456', 'ollama', 'user', 'Regular conversation', 'line')
+        mock_conversation_manager.add_message.assert_any_call('test_user_456', 'ollama', 'assistant', 'Database mode response', 'line')
     
     def test_clear_user_history_local_and_db(self, ollama_model):
         """測試清除用戶歷史（本地快取 + 資料庫）"""
@@ -214,7 +214,7 @@ class TestOllamaModel:
         assert 'test_user_789' not in ollama_model.conversation_cache
         
         # 驗證資料庫清除被調用
-        mock_conversation_manager.clear_user_history.assert_called_once_with('test_user_789', 'ollama')
+        mock_conversation_manager.clear_user_history.assert_called_once_with('test_user_789', 'ollama', 'line')
     
     def test_local_cache_operations(self, ollama_model):
         """測試本地快取操作"""

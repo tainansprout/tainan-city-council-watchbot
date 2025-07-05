@@ -773,12 +773,34 @@ pytest
 ./scripts/ci-test.sh
 ```
 
-### Test Architecture
+### Test Architecture (Updated 2025)
 
-- **Unit Tests** (`tests/unit/`): Test individual modules and functions
-- **Integration Tests** (`tests/integration/`): Test service integration
-- **API Tests** (`tests/api/`): Test Flask endpoints
-- **Mock Tests** (`tests/mocks/`): Test external service mocks
+This project adopts a layered testing architecture covering all critical functionalities:
+
+- **Unit Tests** (`tests/unit/`): Test individual modules and core functionalities
+  - AI Model Tests (OpenAI, Anthropic, Gemini, Ollama)
+  - Platform Handler Tests (LINE, Discord, Telegram)
+  - Core Service Tests (Chat, Conversation Management, Response Formatting)
+  - Database-related Tests (ORM, Connection, Operations)
+  - Authentication and Configuration Management Tests
+- **Integration Tests** (`tests/integration/`): Test cross-module end-to-end functionality
+  - Database and ORM Integration Tests
+  - Multi-platform Workflow Tests
+- **API Tests** (`tests/api/`): Test Flask endpoints and Web interfaces
+  - Health Check and System Status Endpoints
+  - Multi-platform Webhook Endpoint Tests
+- **Mock Tests** (`tests/mocks/`): Test external service mocks and integrations
+  - AI Model API Mocks (OpenAI, Anthropic, Gemini, Ollama)
+  - Platform API Mocks (LINE Bot, Discord, Telegram)
+  - Database Operation Mocks
+- **Main Application Tests** (`test_main.py`): Test application entry points and WSGI compatibility
+
+#### Test Quality Assurance Features
+- ✅ **Architectural Consistency**: Tests reflect actual system architecture and responsibility separation
+- ✅ **Platform Awareness**: Complete test coverage for multi-platform unified interfaces
+- ✅ **Citation Processing**: Proper testing of AI model citation architecture separation
+- ✅ **Error Handling**: Dual-layer error messages and exception handling tests
+- ✅ **Configuration Management**: Environment variable override and configuration compatibility tests
 
 ### Configuration Files
 

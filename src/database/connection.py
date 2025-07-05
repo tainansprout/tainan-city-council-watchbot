@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
-class UserThread(Base):
+class UserThreadTable(Base):
     __tablename__ = 'user_thread_table'
 
     user_id = Column(String(255), primary_key=True)
@@ -100,25 +100,25 @@ class Database:
     def query_thread(self, user_id: str, platform: str = 'line') -> Optional[str]:
         """查詢用戶對話串"""
         with self.get_session() as session:
-            user_thread = session.query(UserThread).filter(
-                UserThread.user_id == user_id,
-                UserThread.platform == platform
+            user_thread = session.query(UserThreadTable).filter(
+                UserThreadTable.user_id == user_id,
+                UserThreadTable.platform == platform
             ).first()
             return user_thread.thread_id if user_thread else None
 
     def save_thread(self, user_id: str, thread_id: str, platform: str = 'line'):
         """儲存用戶對話串"""
         with self.get_session() as session:
-            user_thread = session.query(UserThread).filter(
-                UserThread.user_id == user_id,
-                UserThread.platform == platform
+            user_thread = session.query(UserThreadTable).filter(
+                UserThreadTable.user_id == user_id,
+                UserThreadTable.platform == platform
             ).first()
             
             if user_thread:
                 user_thread.thread_id = thread_id
                 user_thread.created_at = datetime.datetime.utcnow()
             else:
-                user_thread = UserThread(
+                user_thread = UserThreadTable(
                     user_id=user_id,
                     platform=platform,
                     thread_id=thread_id,
@@ -129,9 +129,9 @@ class Database:
     def delete_thread(self, user_id: str, platform: str = 'line'):
         """刪除用戶對話串"""
         with self.get_session() as session:
-            session.query(UserThread).filter(
-                UserThread.user_id == user_id,
-                UserThread.platform == platform
+            session.query(UserThreadTable).filter(
+                UserThreadTable.user_id == user_id,
+                UserThreadTable.platform == platform
             ).delete()
 
     def close_engine(self):

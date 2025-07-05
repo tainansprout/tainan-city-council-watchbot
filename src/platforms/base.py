@@ -86,20 +86,6 @@ class PlatformHandlerInterface(ABC):
         pass
     
     @abstractmethod
-    def validate_signature(self, request_data: bytes, signature: str) -> bool:
-        """
-        驗證請求簽名
-        
-        Args:
-            request_data: 請求資料
-            signature: 請求簽名
-            
-        Returns:
-            bool: 簽名是否有效
-        """
-        pass
-    
-    @abstractmethod
     def handle_webhook(self, request_body: str, signature: str) -> List[PlatformMessage]:
         """
         處理 webhook 請求
@@ -120,7 +106,8 @@ class BasePlatformHandler(PlatformHandlerInterface):
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.platform_config = config.get('platforms', {}).get(self.get_platform_type().value, {})
-        logger.info(f"Initialized {self.get_platform_type().value} platform handler")
+        logger.debug(f"[BASE] Initialized {self.get_platform_type().value} platform handler")
+        logger.debug(f"[BASE] Platform config: {self.platform_config}")
     
     def get_config(self, key: str, default: Any = None) -> Any:
         """取得平台特定設定"""
@@ -128,15 +115,24 @@ class BasePlatformHandler(PlatformHandlerInterface):
     
     def is_enabled(self) -> bool:
         """檢查平台是否啟用"""
-        return self.platform_config.get('enabled', False)
+        enabled = self.platform_config.get('enabled', False)
+        logger.debug(f"[BASE] Platform {self.get_platform_type().value} enabled status: {enabled}")
+        return enabled
     
     def validate_config(self) -> bool:
         """驗證平台設定是否完整"""
+        platform_name = self.get_platform_type().value
         required_fields = self.get_required_config_fields()
+        logger.debug(f"[BASE] Validating config for {platform_name}, required fields: {required_fields}")
+        
         for field in required_fields:
-            if not self.get_config(field):
-                logger.error(f"{self.get_platform_type().value} platform missing required config: {field}")
+            field_value = self.get_config(field)
+            logger.debug(f"[BASE] Checking field '{field}': {'Present' if field_value else 'Missing'}")
+            if not field_value:
+                logger.error(f"[BASE] {platform_name} platform missing required config: {field}")
                 return False
+        
+        logger.debug(f"[BASE] Config validation passed for {platform_name}")
         return True
     
     @abstractmethod
@@ -155,16 +151,29 @@ class PlatformManager:
     def register_handler(self, handler: PlatformHandlerInterface):
         """註冊平台處理器"""
         platform_type = handler.get_platform_type()
-        if not isinstance(handler, BasePlatformHandler) or not handler.validate_config():
-            logger.error(f"Failed to register {platform_type.value} handler: invalid config")
+        logger.debug(f"[MANAGER] Attempting to register {platform_type.value} handler")
+        
+        if not isinstance(handler, BasePlatformHandler):
+            logger.error(f"[MANAGER] Handler is not instance of BasePlatformHandler: {type(handler)}")
             return False
         
-        if not handler.is_enabled():
-            logger.info(f"{platform_type.value} platform is disabled, skipping registration")
+        is_valid = handler.validate_config()
+        logger.debug(f"[MANAGER] Handler config validation: {is_valid}")
+        
+        if not is_valid:
+            logger.error(f"[MANAGER] Failed to register {platform_type.value} handler: invalid config")
+            return False
+        
+        is_enabled = handler.is_enabled()
+        logger.debug(f"[MANAGER] Handler enabled status: {is_enabled}")
+        
+        if not is_enabled:
+            logger.debug(f"[MANAGER] {platform_type.value} platform is disabled, skipping registration")
             return False
         
         self._handlers[platform_type] = handler
-        logger.info(f"Registered {platform_type.value} platform handler")
+        logger.info(f"[MANAGER] Successfully registered {platform_type.value} platform handler")
+        logger.debug(f"[MANAGER] Total registered handlers: {len(self._handlers)}")
         return True
     
     def get_handler(self, platform_type: PlatformType) -> Optional[PlatformHandlerInterface]:

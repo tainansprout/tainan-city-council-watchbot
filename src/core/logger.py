@@ -240,10 +240,8 @@ def setup_request_logging(app):
             if k.lower() not in ['authorization', 'x-line-signature']
         }
         
-        try:
-
-        
-            logger.info(
+        # 記錄請求資訊（不應該捕獲 ValueError）
+        logger.info(
             "Incoming request",
             extra={
                 'request_id': request_id,
@@ -253,28 +251,17 @@ def setup_request_logging(app):
                 'headers': safe_headers
             }
         )
-
-        
-        except ValueError:
-
-        
-            pass
     
     @app.after_request
     def log_response_info(response):
-        try:
-
-            logger.info(
+        # 記錄回應資訊（不應該捕獲 ValueError）
+        logger.info(
             "Response sent",
             extra={
                 'status_code': response.status_code,
                 'content_length': response.content_length
             }
         )
-
-        except ValueError:
-
-            pass
         return response
 
 

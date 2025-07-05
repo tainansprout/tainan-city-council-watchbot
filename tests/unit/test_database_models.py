@@ -111,34 +111,32 @@ class TestSimpleConversationHistory:
 class TestDatabaseSession:
     """資料庫 Session 測試"""
     
-    @patch('src.database.models.SessionLocal')
-    def test_get_db_session(self, mock_session_local):
+    @patch('src.database.models.get_database_manager')
+    def test_get_db_session(self, mock_get_db_manager):
         """測試資料庫 session 取得"""
         mock_session = Mock()
-        mock_session_local.return_value = mock_session
+        mock_db_manager = Mock()
+        mock_db_manager.get_session.return_value = mock_session
+        mock_get_db_manager.return_value = mock_db_manager
         
-        # 測試 context manager
-        with get_db_session() as session:
-            assert session == mock_session
-        
-        # 驗證 session 被正確關閉
-        mock_session.close.assert_called_once()
+        # 測試 session 取得
+        session = get_db_session()
+        assert session == mock_session
+        mock_db_manager.get_session.assert_called_once()
     
-    @patch('src.database.models.SessionLocal')
-    def test_get_db_session_exception_handling(self, mock_session_local):
+    @patch('src.database.models.get_database_manager')
+    def test_get_db_session_exception_handling(self, mock_get_db_manager):
         """測試資料庫 session 異常處理"""
-        mock_session = Mock()
-        mock_session_local.return_value = mock_session
+        mock_db_manager = Mock()
+        mock_db_manager.get_session.side_effect = Exception("資料庫連線失敗")
+        mock_get_db_manager.return_value = mock_db_manager
         
-        # 模擬異常
+        # 測試異常處理
         try:
-            with get_db_session() as session:
-                raise Exception("測試異常")
-        except Exception:
-            pass
-        
-        # 即使發生異常，session 也應該被關閉
-        mock_session.close.assert_called_once()
+            get_db_session()
+            assert False, "Should have raised an exception"
+        except Exception as e:
+            assert str(e) == "資料庫連線失敗"
 
 
 class TestModelIntegration:

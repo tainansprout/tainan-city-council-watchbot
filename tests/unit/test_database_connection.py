@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.database import Database, UserThreadTable
+from src.database.connection import Database, UserThreadTable
 from src.core.exceptions import DatabaseError
 
 # 使用 pytest.fixture 來集中管理 mock
@@ -37,8 +37,8 @@ def mock_session():
 @pytest.fixture(autouse=True)
 def patch_db_dependencies(mock_engine, mock_session):
     """自動 patch 所有測試的資料庫依賴"""
-    with patch('src.database.db.create_engine', return_value=mock_engine) as mock_create_engine, \
-         patch('src.database.db.sessionmaker', return_value=lambda: mock_session) as mock_sessionmaker:
+    with patch('src.database.connection.create_engine', return_value=mock_engine) as mock_create_engine, \
+         patch('src.database.connection.sessionmaker', return_value=lambda: mock_session) as mock_sessionmaker:
         yield mock_create_engine, mock_sessionmaker
 
 class TestDatabase:
@@ -80,7 +80,7 @@ class TestDatabase:
         result = db.query_thread('user_123')
         
         assert result == 'thread_123'
-        mock_session.query.assert_called_once_with(UserThread)
+        mock_session.query.assert_called_once_with(UserThreadTable)
 
     def test_query_thread_not_exists(self, db_config, mock_session):
         mock_session.query.return_value.filter.return_value.first.return_value = None
@@ -142,12 +142,12 @@ class TestDatabase:
         mock_engine.dispose.assert_called_once()
 
 
-class TestUserThread:
-    """UserThread 模型測試"""
+class TestUserThreadTable:
+    """UserThreadTable 模型測試"""
 
     def test_user_thread_creation(self):
         import datetime
-        user_thread = UserThread(
+        user_thread = UserThreadTable(
             user_id='user_123',
             thread_id='thread_456',
             created_at=datetime.datetime.utcnow()
@@ -157,4 +157,4 @@ class TestUserThread:
         assert isinstance(user_thread.created_at, datetime.datetime)
 
     def test_user_thread_tablename(self):
-        assert UserThread.__tablename__ == 'user_thread_table'
+        assert UserThreadTable.__tablename__ == 'user_thread_table'

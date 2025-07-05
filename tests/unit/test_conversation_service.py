@@ -172,7 +172,7 @@ class TestORMConversationManager:
     
     def test_get_conversation_count(self, conversation_manager, mock_session):
         """測試取得對話數量"""
-        mock_session.query.return_value.filter.return_value.count.return_value = 10
+        mock_session.query.return_value.filter.return_value.filter.return_value.count.return_value = 10
         
         result = conversation_manager.get_conversation_count(
             user_id="test_user",

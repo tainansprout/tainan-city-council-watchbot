@@ -68,34 +68,52 @@ class PlatformFactory:
             PlatformHandlerInterface: 平台處理器實例，如果創建失敗則返回 None
         """
         try:
+            logger.debug(f"[FACTORY] Creating handler for platform: {platform_type.value}")
+            
             # 檢查平台是否支援
             if not self.registry.is_platform_supported(platform_type):
-                logger.error(f"Unsupported platform: {platform_type.value}")
+                logger.error(f"[FACTORY] Unsupported platform: {platform_type.value}")
                 return None
             
             # 取得處理器類別
             handler_class = self.registry.get_handler_class(platform_type)
             if not handler_class:
-                logger.error(f"No handler class found for platform: {platform_type.value}")
+                logger.error(f"[FACTORY] No handler class found for platform: {platform_type.value}")
                 return None
+            
+            logger.debug(f"[FACTORY] Found handler class: {handler_class.__name__}")
+            
+            # 檢查配置中是否有平台配置
+            platform_config = config.get('platforms', {}).get(platform_type.value, {})
+            logger.debug(f"[FACTORY] Platform config for {platform_type.value}: {platform_config}")
             
             # 創建處理器實例
+            logger.debug(f"[FACTORY] Creating handler instance")
             handler = handler_class(config)
             
+            logger.debug(f"[FACTORY] Handler instance created, validating config")
+            
             # 驗證設定和啟用狀態
-            if not handler.validate_config():
-                logger.error(f"Invalid config for platform: {platform_type.value}")
+            is_valid = handler.validate_config()
+            logger.debug(f"[FACTORY] Config validation result: {is_valid}")
+            
+            if not is_valid:
+                logger.error(f"[FACTORY] Invalid config for platform: {platform_type.value}")
                 return None
             
-            if not handler.is_enabled():
-                logger.info(f"Platform {platform_type.value} is disabled")
+            is_enabled = handler.is_enabled()
+            logger.debug(f"[FACTORY] Platform enabled status: {is_enabled}")
+            
+            if not is_enabled:
+                logger.debug(f"[FACTORY] Platform {platform_type.value} is disabled")
                 return None
             
-            logger.info(f"Successfully created handler for platform: {platform_type.value}")
+            logger.info(f"[FACTORY] Successfully created handler for platform: {platform_type.value}")
             return handler
             
         except Exception as e:
-            logger.error(f"Error creating handler for platform {platform_type.value}: {e}")
+            logger.error(f"[FACTORY] Error creating handler for platform {platform_type.value}: {type(e).__name__}: {e}")
+            logger.error(f"[FACTORY] Exception traceback:", exc_info=True)
             return None
     
     def create_all_handlers(self, config: Dict[str, Any]) -> Dict[PlatformType, PlatformHandlerInterface]:
@@ -116,7 +134,7 @@ class PlatformFactory:
             if handler:
                 handlers[platform_type] = handler
         
-        logger.info(f"Created {len(handlers)} platform handlers: {[p.value for p in handlers.keys()]}")
+        logger.debug(f"Created {len(handlers)} platform handlers: {[p.value for p in handlers.keys()]}")
         return handlers
     
     def create_enabled_handlers(self, config: Dict[str, Any]) -> Dict[PlatformType, PlatformHandlerInterface]:
@@ -145,7 +163,7 @@ class PlatformFactory:
                 logger.warning(f"Unknown platform in config: {platform_name}")
                 continue
         
-        logger.info(f"Created {len(handlers)} enabled platform handlers")
+        logger.debug(f"Created {len(handlers)} enabled platform handlers")
         return handlers
     
     def get_platform_requirements(self, platform_type: PlatformType) -> Dict[str, str]:
