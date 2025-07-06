@@ -287,7 +287,7 @@ fi
 execute_step "build-image" "cd '$PROJECT_ROOT' && gcloud builds submit --tag gcr.io/$PROJECT_ID/$IMAGE_NAME' ." "🐳 建立 Docker 映像"
 
 # 部署到 Cloud Run
-execute_step "deploy-service" "cd '$PROJECT_ROOT' && cp 'config/deploy/$SERVICE_CONFIG_PATH' 'config/deploy/$SERVICE_CONFIG_PATH.bak' && sed 's/YOUR_PROJECT_ID/$PROJECT_ID/g' 'config/deploy/$SERVICE_CONFIG_PATH.bak' > 'config/deploy/$SERVICE_CONFIG_PATH' && gcloud run services replace 'config/deploy/$SERVICE_CONFIG_PATH' --region=$REGION && mv 'config/deploy/$SERVICE_CONFIG_PATH.bak' 'config/deploy/$SERVICE_CONFIG_PATH'" "☁️ 部署到 Cloud Run"
+execute_step "deploy-service" "cd '$PROJECT_ROOT' && gcloud run deploy $SERVICE_NAME --image asia.gcr.io/$PROJECT_ID/$IMAGE_NAME --platform managed --port 8080 --memory 4G --timeout=3m" "☁️ 部署到 Cloud Run"
 
 # 設定 IAM 權限和取得服務 URL
 execute_step "setup-permissions" "gcloud run services add-iam-policy-binding $SERVICE_NAME --region=$REGION --member='allUsers' --role='roles/run.invoker'" "🔒 設定 IAM 權限（允許公開存取）"

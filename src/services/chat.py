@@ -291,10 +291,9 @@ class CoreChatService:
     def _transcribe_audio(self, input_audio_path: str) -> str:
         """轉錄音訊檔案 - 使用統一接口"""
         try:
-            # 使用統一的音訊轉錄接口
+            # 使用統一的音訊轉錄接口，不指定特定模型
             is_successful, transcribed_text, error_message = self.model.transcribe_audio(
-                input_audio_path, 
-                model='whisper-1'  # 各模型可以有不同的參數處理方式
+                input_audio_path
             )
             
             if not is_successful:
@@ -307,25 +306,4 @@ class CoreChatService:
                 raise
             raise OpenAIError(f"Audio transcription error: {e}")
     
-    def _wait_for_completion(self, thread_id: str, response: Dict[str, Any]) -> Dict[str, Any]:
-        """等待 OpenAI 回應完成"""
-        max_wait_time = 120  # 最大等待時間 2 分鐘
-        start_time = time.time()
-        
-        while response['status'] not in ['completed', 'failed', 'expired', 'cancelled']:
-            if time.time() - start_time > max_wait_time:
-                raise OpenAIError("Request timeout")
-            
-            run_id = response['id']
-            
-            # 根據狀態調整等待時間
-            if response['status'] == 'queued':
-                time.sleep(10)
-            else:
-                time.sleep(3)
-            
-            is_successful, response, error_message = self.model.retrieve_thread_run(thread_id, run_id)
-            if not is_successful:
-                raise OpenAIError(f"Failed to retrieve run status: {error_message}")
-        
-        return response
+    

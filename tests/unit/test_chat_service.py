@@ -745,7 +745,7 @@ class TestTranscribeAudio:
         result = chat_service._transcribe_audio(audio_path)
         
         assert result == expected_text
-        chat_service.model.transcribe_audio.assert_called_once_with(audio_path, model='whisper-1')
+        chat_service.model.transcribe_audio.assert_called_once_with(audio_path)
     
     def test_transcribe_audio_failure(self, chat_service):
         """測試轉錄音訊失敗"""
@@ -780,81 +780,9 @@ class TestTranscribeAudio:
 class TestWaitForCompletion:
     """測試等待完成功能"""
     
-    @pytest.fixture
-    def chat_service(self):
-        """創建聊天服務實例"""
-        mock_model = Mock(spec=FullLLMInterface)
-        mock_model.get_provider.return_value = ModelProvider.OPENAI
-        mock_database = Mock(spec=Database)
-        mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
-    
-    def test_wait_for_completion_success(self, chat_service):
-        """測試成功等待完成"""
-        thread_id = "test_thread"
-        initial_response = {'id': 'run_123', 'status': 'in_progress'}
-        final_response = {'id': 'run_123', 'status': 'completed'}
-        
-        # Mock the retrieve_thread_run method which is not part of the base interface
-        # Since the mock is created with spec=FullLLMInterface, we need to add the method manually
-        chat_service.model.retrieve_thread_run = Mock(return_value=(True, final_response, None))
-        
-        with patch('time.sleep') as mock_sleep:
-            result = chat_service._wait_for_completion(thread_id, initial_response)
-            
-            assert result == final_response
-            mock_sleep.assert_called_once_with(3)
-            chat_service.model.retrieve_thread_run.assert_called_once_with(thread_id, 'run_123')
-    
-    def test_wait_for_completion_timeout(self, chat_service):
-        """測試等待完成超時"""
-        thread_id = "test_thread"
-        response = {'id': 'run_123', 'status': 'in_progress'}
-        
-        with patch('time.time', side_effect=[0, 130]):  # 超過 120 秒
-            with pytest.raises(OpenAIError, match="Request timeout"):
-                chat_service._wait_for_completion(thread_id, response)
-    
-    def test_wait_for_completion_queued_status(self, chat_service):
-        """測試等待完成時排隊狀態"""
-        thread_id = "test_thread"
-        initial_response = {'id': 'run_123', 'status': 'queued'}
-        final_response = {'id': 'run_123', 'status': 'completed'}
-        
-        # Mock the retrieve_thread_run method which is not part of the base interface
-        # Since the mock is created with spec=FullLLMInterface, we need to add the method manually
-        chat_service.model.retrieve_thread_run = Mock(return_value=(True, final_response, None))
-        
-        with patch('time.sleep') as mock_sleep:
-            result = chat_service._wait_for_completion(thread_id, initial_response)
-            
-            assert result == final_response
-            mock_sleep.assert_called_once_with(10)  # 排隊時等待 10 秒
-            chat_service.model.retrieve_thread_run.assert_called_once_with(thread_id, 'run_123')
-    
-    def test_wait_for_completion_failed_status(self, chat_service):
-        """測試等待完成時失敗狀態"""
-        thread_id = "test_thread"
-        response = {'id': 'run_123', 'status': 'failed'}
-        
-        result = chat_service._wait_for_completion(thread_id, response)
-        
-        assert result == response
-    
-    def test_wait_for_completion_retrieve_error(self, chat_service):
-        """測試等待完成時檢索錯誤"""
-        thread_id = "test_thread"
-        response = {'id': 'run_123', 'status': 'in_progress'}
-        
-        # Mock the retrieve_thread_run method which is not part of the base interface
-        # Since the mock is created with spec=FullLLMInterface, we need to add the method manually
-        chat_service.model.retrieve_thread_run = Mock(return_value=(False, None, "Retrieve failed"))
-        
-        with patch('time.sleep'):
-            with pytest.raises(OpenAIError, match="Failed to retrieve run status: Retrieve failed"):
-                chat_service._wait_for_completion(thread_id, response)
-            
-            chat_service.model.retrieve_thread_run.assert_called_once_with(thread_id, 'run_123')
+    # This class is now obsolete as the method has been moved to OpenAIModel.
+    # We will remove it and add new tests in test_openai_model.py.
+    pass
 
 
 class TestEdgeCases:

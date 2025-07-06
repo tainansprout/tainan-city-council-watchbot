@@ -245,7 +245,11 @@ class MultiPlatformChatBot:
                 if not request.is_json:
                     return self.response_formatter.json_response({'success': False, 'error': '請使用 JSON 格式提交'}, 400)
                 
-                data = request.get_json()
+                try:
+                    data = request.get_json()
+                except Exception:
+                    return self.response_formatter.json_response({'success': False, 'error': '無效的 JSON 格式'}, 400)
+                
                 if not data or 'password' not in data:
                     return self.response_formatter.json_response({'success': False, 'error': '缺少密碼欄位'}, 400)
                 
@@ -275,7 +279,11 @@ class MultiPlatformChatBot:
                 if not request.is_json:
                     return self.response_formatter.json_response({'success': False, 'error': '請使用 JSON 格式提交'}, 400)
                 
-                data = request.get_json()
+                try:
+                    data = request.get_json()
+                except Exception:
+                    return self.response_formatter.json_response({'success': False, 'error': '無效的 JSON 格式'}, 400)
+                
                 if not data or 'password' not in data:
                     return self.response_formatter.json_response({'success': False, 'error': '缺少密碼欄位'}, 400)
                 

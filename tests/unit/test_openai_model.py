@@ -245,15 +245,9 @@ class TestAssistantExecution:
         
         mock_run_response = {"id": "run_123", "status": "queued"}
         mock_final_response = {"status": "completed"}
-        mock_messages_response = {
-            "data": [{
-                "role": "assistant",
-                "content": [{"text": {"value": "Assistant response"}}]
-            }]
-        }
         
         with patch.object(model, '_request', return_value=(True, mock_run_response, None)), \
-             patch.object(model, '_wait_for_run_completion', return_value=mock_final_response), \
+             patch.object(model, '_wait_for_run_completion', return_value=(True, mock_final_response, None)), \
              patch.object(model, '_get_thread_messages', return_value=(True, ChatResponse(content="Assistant response"), None)):
             
             success, chat_response, error = model.run_assistant(thread_id)
@@ -283,13 +277,13 @@ class TestAssistantExecution:
         mock_final_response = {"status": "failed"}
         
         with patch.object(model, '_request', return_value=(True, mock_run_response, None)), \
-             patch.object(model, '_wait_for_run_completion', return_value=mock_final_response):
+             patch.object(model, '_wait_for_run_completion', return_value=(False, mock_final_response, "Run failed")):
             
             success, chat_response, error = model.run_assistant(thread_id)
             
             assert success is False
             assert chat_response is None
-            assert "Assistant run failed with status: failed" in error
+            assert "Assistant run failed: Run failed" in error
 
 
 class TestFileOperations:
@@ -993,9 +987,11 @@ class TestInternalMethods:
             ]
             
             with patch('time.sleep'):  # 避免實際等待
-                result = model._wait_for_run_completion(thread_id, run_id, max_wait_time=120)
+                success, result, error = model._wait_for_run_completion(thread_id, run_id, max_wait_time=120)
                 
+                assert success is True
                 assert result["status"] == "completed"
+                assert error is None
     
     def test_wait_for_run_completion_timeout(self, model):
         """測試等待執行完成 - 超時"""
@@ -1003,19 +999,35 @@ class TestInternalMethods:
         run_id = "run_456"
         
         with patch.object(model, 'retrieve_thread_run', return_value=(True, {"status": "in_progress"}, None)), \
-             patch('time.time', side_effect=[0, 130]):  # 模擬超時
+             patch('time.time', side_effect=[0, 1, 122]):  # 模擬超時
             
-            with pytest.raises(Exception, match="Request timeout"):
-                model._wait_for_run_completion(thread_id, run_id, max_wait_time=120)
+            success, response, error = model._wait_for_run_completion(thread_id, run_id, max_wait_time=120)
+            
+            assert success is False
+            assert response is None
+            assert error == "Request timeout"
     
-    def test_wait_for_run_completion_api_failure(self, model):
-        """測試等待執行完成 - API 失敗"""
+    def test_wait_for_run_completion_failed_status_with_details(self, model):
+        """測試等待執行完成 - 失敗狀態帶有詳細資訊"""
         thread_id = "thread_123"
         run_id = "run_456"
         
-        with patch.object(model, 'retrieve_thread_run', return_value=(False, None, "API error")):
-            with pytest.raises(Exception, match="API error"):
-                model._wait_for_run_completion(thread_id, run_id)
+        failed_response = {
+            "status": "failed",
+            "last_error": {
+                "code": "rate_limit_exceeded",
+                "message": "You exceeded your current quota, please check your plan and billing details."
+            }
+        }
+        
+        with patch.object(model, 'retrieve_thread_run', return_value=(True, failed_response, None)):
+            success, response, error = model._wait_for_run_completion(thread_id, run_id)
+            
+            assert success is False
+            assert response == failed_response
+            assert "Run failed with status: failed" in error
+            assert "rate_limit_exceeded" in error
+            assert "exceeded your current quota" in error
     
     def test_wait_for_run_completion_queued_status(self, model):
         """測試等待執行完成 - 排隊狀態更長等待"""
@@ -1030,9 +1042,11 @@ class TestInternalMethods:
                 (True, {"status": "completed"}, None)
             ]
             
-            result = model._wait_for_run_completion(thread_id, run_id)
+            success, result, error = model._wait_for_run_completion(thread_id, run_id)
             
+            assert success is True
             assert result["status"] == "completed"
+            assert error is None
             # 檢查排隊狀態時使用更長的等待時間
             assert mock_sleep.call_args_list[0][0][0] == 10
     

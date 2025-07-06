@@ -60,16 +60,15 @@ class AudioService:
     def _transcribe_audio(self, input_audio_path: str) -> str:
         """轉錄音訊檔案 - 使用統一接口"""
         try:
-            # 使用統一的音訊轉錄接口
+            # 使用統一的音訊轉錄接口，不指定特定模型
             is_successful, transcribed_text, error_message = self.model.transcribe_audio(
-                input_audio_path, 
-                model='whisper-1'  # 各模型可以有不同的參數處理方式
+                input_audio_path
             )
             
             if not is_successful:
                 raise OpenAIError(f"Audio transcription failed: {error_message}")
             
-            logger.info(f"Audio transcription resutl: {transcribed_text}")
+            logger.info(f"Audio transcription result: {transcribed_text}")
             return transcribed_text
             
         except Exception as e:

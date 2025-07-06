@@ -67,7 +67,7 @@ class TestAudioService:
             
             # 驗證方法呼叫
             mock_save.assert_called_once_with(audio_content)
-            mock_model.transcribe_audio.assert_called_once_with('test_audio.m4a', model='whisper-1')
+            mock_model.transcribe_audio.assert_called_once_with('test_audio.m4a')
             mock_chat_service.handle_message.assert_called_once_with(user_id, expected_text, platform)
             mock_remove.assert_called_once_with('test_audio.m4a')
     
@@ -258,7 +258,7 @@ class TestAudioServiceTranscribe:
         result = audio_service._transcribe_audio(audio_path)
         
         assert result == expected_text
-        audio_service.model.transcribe_audio.assert_called_once_with(audio_path, model='whisper-1')
+        audio_service.model.transcribe_audio.assert_called_once_with(audio_path)
     
     def test_transcribe_audio_model_failure(self, audio_service):
         """測試模型轉錄失敗"""
@@ -302,8 +302,7 @@ class TestAudioServiceTranscribe:
         
         # 驗證傳遞了正確的模型參數
         audio_service.model.transcribe_audio.assert_called_once_with(
-            audio_path, 
-            model='whisper-1'
+            audio_path
         )
 
 

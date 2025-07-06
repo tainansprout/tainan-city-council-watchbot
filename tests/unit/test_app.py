@@ -832,10 +832,10 @@ class TestMultiPlatformChatBotRouteEdgeCases:
         
         with bot.app.test_client() as client:
             with patch('src.app.logger'):  # 避免日誌輸出干擾測試
-                with pytest.raises(Exception):  # Flask 會將 500 錯誤轉為異常
-                    response = client.post('/webhooks/line', 
-                                         data='{"events": []}',
-                                         headers={'X-Line-Signature': 'test_signature'})
+                response = client.post('/webhooks/line', 
+                                     data='{"events": []}',
+                                     headers={'X-Line-Signature': 'test_signature'})
+                assert response.status_code == 500
 
 
 class TestMultiPlatformChatBotAuthenticationRoutes:

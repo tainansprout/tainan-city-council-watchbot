@@ -2,6 +2,7 @@ import requests
 from ..core.logger import get_logger
 import re
 from typing import List, Dict, Tuple, Optional
+import time
 
 logger = get_logger(__name__)
 from .base import (
@@ -131,10 +132,10 @@ class OpenAIModel(FullLLMInterface):
             
             # 等待完成
             run_id = run_response['id']
-            final_response = self._wait_for_run_completion(thread_id, run_id)
-            
-            if final_response['status'] != 'completed':
-                return False, None, f"Assistant run failed with status: {final_response['status']}"
+            is_successful, final_response, error_message = self._wait_for_run_completion(thread_id, run_id)
+
+            if not is_successful:
+                return False, None, f"Assistant run failed: {error_message}"
             
             # 取得回應
             return self._get_thread_messages(thread_id)
@@ -345,9 +346,12 @@ class OpenAIModel(FullLLMInterface):
     def transcribe_audio(self, audio_file_path: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
         """音訊轉文字"""
         try:
+            # OpenAI 模型預設使用 whisper-1
+            model = kwargs.get('model', 'whisper-1')
+            
             files = {
                 'file': open(audio_file_path, 'rb'),
-                'model': (None, kwargs.get('model', 'whisper-1')),
+                'model': (None, model),
             }
             is_successful, response, error_message = self._request('POST', '/audio/transcriptions', files=files)
             
@@ -480,22 +484,29 @@ class OpenAIModel(FullLLMInterface):
         except Exception as e:
             return False, None, f'OpenAI API 系統不穩定，請稍後再試: {str(e)}'
     
-    def _wait_for_run_completion(self, thread_id: str, run_id: str, max_wait_time: int = 120):
+    def _wait_for_run_completion(self, thread_id: str, run_id: str, max_wait_time: int = 120) -> Tuple[bool, Optional[Dict], Optional[str]]:
         """等待執行完成"""
-        import time
         start_time = time.time()
         
         while True:
             if time.time() - start_time > max_wait_time:
-                raise Exception("Request timeout")
+                return False, None, "Request timeout"
             
             is_successful, response, error_message = self.retrieve_thread_run(thread_id, run_id)
             if not is_successful:
-                raise Exception(error_message)
+                return False, None, error_message
             
             status = response['status']
-            if status in ['completed', 'failed', 'expired', 'cancelled']:
-                return response
+            if status == 'completed':
+                return True, response, None
+            elif status in ['failed', 'expired', 'cancelled']:
+                # 從回應中提取更詳細的錯誤訊息
+                error_details = response.get('last_error')
+                if error_details:
+                    error_message = f"Run failed with status: {status}. Code: {error_details.get('code')}. Message: {error_details.get('message')}"
+                else:
+                    error_message = f"Run finished with uncompleted status: {status}"
+                return False, response, error_message
             
             # 根據狀態調整等待時間
             if status == 'queued':
