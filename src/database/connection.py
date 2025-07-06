@@ -45,10 +45,10 @@ class Database:
         return create_engine(
             connection_string,
             connect_args=ssl_args,
-            pool_size=10,           # 增加連線池大小
-            max_overflow=20,        # 允許超過連線池的連線數
+            pool_size=5,            # 優化：降低基本連線數（適配 2 worker gunicorn）
+            max_overflow=10,        # 優化：降低最大溢出數
             pool_pre_ping=True,     # 連線健康檢查
-            pool_recycle=3600,      # 1小時回收連線
+            pool_recycle=1800,      # 優化：30分鐘回收連線，減少記憶體使用
             echo=False              # 生產環境關閉SQL日誌
         )
     
@@ -155,26 +155,43 @@ class Database:
         }
 
 
-# 向後兼容性函數 - 供 OpenAI 模型使用
-def get_thread_id_by_user_id(user_id: str, platform: str = 'line') -> Optional[str]:
-    """取得用戶的對話串 ID（兼容性函數）"""
-    from ..core.config import load_config
-    config = load_config()
-    db = Database(config['db'])
-    return db.query_thread(user_id, platform)
+# 全局資料庫實例管理 - 修復記憶體洩漏
+_global_database = None
+_database_lock = None
 
+def _get_database_lock():
+    """獲取資料庫鎖（延遲初始化）"""
+    global _database_lock
+    if _database_lock is None:
+        import threading
+        _database_lock = threading.Lock()
+    return _database_lock
+
+def get_global_database():
+    """取得全局資料庫實例（線程安全單例模式）"""
+    global _global_database
+    if _global_database is None:
+        with _get_database_lock():
+            # 雙重檢查鎖定模式
+            if _global_database is None:
+                from ..core.config import ConfigManager
+                config = ConfigManager().get_config()
+                _global_database = Database(config['db'])
+                logger.info("Created global database instance")
+    return _global_database
+
+# 向後兼容性函數 - 供 OpenAI 模型使用（已優化）
+def get_thread_id_by_user_id(user_id: str, platform: str = 'line') -> Optional[str]:
+    """取得用戶的對話串 ID（優化：使用全局實例）"""
+    database = get_global_database()  # ✅ 使用全局實例
+    return database.query_thread(user_id, platform)
 
 def save_thread_id(user_id: str, thread_id: str, platform: str = 'line'):
-    """儲存用戶的對話串 ID（兼容性函數）"""
-    from ..core.config import load_config
-    config = load_config()
-    db = Database(config['db'])
-    return db.save_thread(user_id, thread_id, platform)
-
+    """儲存用戶的對話串 ID（優化：使用全局實例）"""
+    database = get_global_database()  # ✅ 使用全局實例
+    return database.save_thread(user_id, thread_id, platform)
 
 def delete_thread_id(user_id: str, platform: str = 'line'):
-    """刪除用戶的對話串 ID（兼容性函數）"""
-    from ..core.config import load_config
-    config = load_config()
-    db = Database(config['db'])
-    return db.delete_thread(user_id, platform)
+    """刪除用戶的對話串 ID（優化：使用全局實例）"""
+    database = get_global_database()  # ✅ 使用全局實例
+    return database.delete_thread(user_id, platform)

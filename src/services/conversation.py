@@ -17,11 +17,12 @@ class ORMConversationManager:
     
     def __init__(self):
         self.session_factory = get_db_session
-        # 記憶體快取最近對話
-        self.memory_cache = {}
-        self.cache_ttl = 300  # 5分鐘快取
+        # 記憶體快取最近對話 - 使用有界快取
+        from ..core.bounded_cache import BoundedCache
+        self.cache_ttl = 300  # 為了測試兼容性，保留這個屬性
+        self.memory_cache = BoundedCache(max_size=500, ttl=self.cache_ttl)  # 500個快取項目，5分鐘TTL
         
-        logger.info("ORMConversationManager initialized with caching support")
+        logger.info("ORMConversationManager initialized with bounded caching support")
     
     def add_message(self, user_id: str, model_provider: str, role: str, content: str, platform: str = 'line') -> bool:
         """新增對話訊息到資料庫"""
@@ -39,6 +40,7 @@ class ORMConversationManager:
                 
                 # 清除快取，強制下次重新載入
                 cache_key = f"{user_id}:{platform}:{model_provider}"
+                # 使用 BoundedCache 的刪除方法
                 if cache_key in self.memory_cache:
                     del self.memory_cache[cache_key]
                 
@@ -55,11 +57,11 @@ class ORMConversationManager:
             cache_key = f"{user_id}:{platform}:{model_provider}"
             
             # 檢查快取
-            if cache_key in self.memory_cache:
-                cache_data = self.memory_cache[cache_key]
-                if datetime.now() - cache_data['timestamp'] < timedelta(seconds=self.cache_ttl):
-                    logger.debug(f"Cache hit for user {user_id} on platform {platform} ({model_provider})")
-                    return cache_data['conversations'][:limit * 2]  # 取雙倍以防萬一
+            cache_data = self.memory_cache.get(cache_key)
+            if cache_data and cache_data is not None:
+                # BoundedCache 已經處理 TTL，不需要這裡再檢查時間
+                logger.debug(f"Cache hit for user {user_id} on platform {platform} ({model_provider})")
+                return cache_data['conversations'][:limit * 2]  # 取雙倍以防萬一
             
             # 從資料庫查詢
             with self.session_factory() as session:
@@ -82,10 +84,10 @@ class ORMConversationManager:
                     })
                 
                 # 更新快取
-                self.memory_cache[cache_key] = {
+                self.memory_cache.set(cache_key, {
                     'conversations': result,
                     'timestamp': datetime.now()
-                }
+                })
                 
                 logger.debug(f"Retrieved {len(result)} conversations for user {user_id} on platform {platform} ({model_provider})")
                 return result
@@ -108,6 +110,7 @@ class ORMConversationManager:
                 
                 # 清除快取
                 cache_key = f"{user_id}:{platform}:{model_provider}"
+                # 使用 BoundedCache 的刪除方法
                 if cache_key in self.memory_cache:
                     del self.memory_cache[cache_key]
                 

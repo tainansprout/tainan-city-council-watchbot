@@ -25,8 +25,8 @@ class TestAnthropicModel:
         assert model.base_url == 'https://api.anthropic.com/v1'
         assert model.cache_enabled == True
         assert model.cache_ttl == 3600
-        assert isinstance(model.files_store, dict)
-        assert isinstance(model.cached_conversations, dict)
+        assert hasattr(model.files_store, 'get')  # FileCache should have dict-like interface
+        assert hasattr(model.cached_conversations, 'get')  # BoundedCache should have dict-like interface
     
     def test_check_connection_success(self, anthropic_model):
         """測試連線檢查成功"""

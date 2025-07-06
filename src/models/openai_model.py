@@ -1,5 +1,7 @@
 import requests
 from ..core.logger import get_logger
+from ..core.api_timeouts import SmartTimeoutConfig, TimeoutContext
+from ..core.smart_polling import OpenAIPollingStrategy, PollingContext
 import re
 from typing import List, Dict, Tuple, Optional
 import time
@@ -26,6 +28,7 @@ class OpenAIModel(FullLLMInterface):
         self.api_key = api_key
         self.assistant_id = assistant_id
         self.base_url = base_url or 'https://api.openai.com/v1'
+        self.polling_strategy = OpenAIPollingStrategy()
     
     def get_provider(self) -> ModelProvider:
         return ModelProvider.OPENAI
@@ -33,7 +36,7 @@ class OpenAIModel(FullLLMInterface):
     def check_connection(self) -> Tuple[bool, Optional[str]]:
         """檢查 OpenAI API 連線"""
         try:
-            is_successful, response, error_message = self._request('GET', '/models')
+            is_successful, response, error_message = self._request('GET', '/models', operation='health_check')
             if is_successful:
                 return True, None
             else:
@@ -353,7 +356,7 @@ class OpenAIModel(FullLLMInterface):
                 'file': open(audio_file_path, 'rb'),
                 'model': (None, model),
             }
-            is_successful, response, error_message = self._request('POST', '/audio/transcriptions', files=files)
+            is_successful, response, error_message = self._request('POST', '/audio/transcriptions', files=files, operation='audio_transcription')
             
             if not is_successful:
                 return False, None, error_message
@@ -410,7 +413,7 @@ class OpenAIModel(FullLLMInterface):
                 'assistant_id': self.assistant_id,
                 'temperature': 0
             }
-            return self._request('POST', endpoint, body=json_body, assistant=True)
+            return self._request('POST', endpoint, body=json_body, assistant=True, operation='assistant_run')
         except Exception as e:
             return False, None, str(e)
     
@@ -436,28 +439,35 @@ class OpenAIModel(FullLLMInterface):
     
     # === 內部方法 ===
     @retry_on_rate_limit(max_retries=3, base_delay=1.0)
-    def _request(self, method: str, endpoint: str, body=None, files=None, assistant=False):
-        """發送 HTTP 請求（帶重試機制）"""
+    def _request(self, method: str, endpoint: str, body=None, files=None, assistant=False, operation='chat_completion'):
+        """發送 HTTP 請求（智慧超時配置）"""
         headers = {
             'Authorization': f'Bearer {self.api_key}'
         }
+        
+        # 根據操作類型決定超時時間
+        timeout = SmartTimeoutConfig.get_timeout_for_model(operation, 'openai')
         
         try:
             if method == 'GET':
                 if assistant:
                     headers['Content-Type'] = 'application/json'
                     headers['OpenAI-Beta'] = 'assistants=v2'
-                r = requests.get(f'{self.base_url}{endpoint}', headers=headers, timeout=30)
+                if 'models' in endpoint:
+                    timeout = SmartTimeoutConfig.get_timeout('model_list')
+                r = requests.get(f'{self.base_url}{endpoint}', headers=headers, timeout=timeout)
             elif method == 'POST':
                 if body:
                     headers['Content-Type'] = 'application/json'
                 if assistant:
                     headers['OpenAI-Beta'] = 'assistants=v2'
-                r = requests.post(f'{self.base_url}{endpoint}', headers=headers, json=body, files=files, timeout=30)
+                if files:  # 檔案上傳
+                    timeout = SmartTimeoutConfig.get_timeout('file_upload')
+                r = requests.post(f'{self.base_url}{endpoint}', headers=headers, json=body, files=files, timeout=timeout)
             elif method == 'DELETE':
                 if assistant:
                     headers['OpenAI-Beta'] = 'assistants=v2'
-                r = requests.delete(f'{self.base_url}{endpoint}', headers=headers, timeout=30)
+                r = requests.delete(f'{self.base_url}{endpoint}', headers=headers, timeout=timeout)
             
             # 檢查 HTTP 狀態碼
             if r.status_code == 429:  # Rate limit
@@ -484,35 +494,29 @@ class OpenAIModel(FullLLMInterface):
         except Exception as e:
             return False, None, f'OpenAI API 系統不穩定，請稍後再試: {str(e)}'
     
-    def _wait_for_run_completion(self, thread_id: str, run_id: str, max_wait_time: int = 120) -> Tuple[bool, Optional[Dict], Optional[str]]:
-        """等待執行完成"""
-        start_time = time.time()
+    def _wait_for_run_completion(self, thread_id: str, run_id: str, max_wait_time: int = None) -> Tuple[bool, Optional[Dict], Optional[str]]:
+        """智慧等待執行完成 - 使用 5s→3s→2s→1s→1s 策略"""
         
-        while True:
-            if time.time() - start_time > max_wait_time:
-                return False, None, "Request timeout"
-            
+        # 使用智慧輪詢策略
+        if max_wait_time:
+            self.polling_strategy.max_wait_time = max_wait_time
+        
+        def check_run_status():
+            """檢查執行狀態的回調函數"""
             is_successful, response, error_message = self.retrieve_thread_run(thread_id, run_id)
             if not is_successful:
-                return False, None, error_message
+                return False, 'error', error_message
             
             status = response['status']
-            if status == 'completed':
-                return True, response, None
-            elif status in ['failed', 'expired', 'cancelled']:
-                # 從回應中提取更詳細的錯誤訊息
-                error_details = response.get('last_error')
-                if error_details:
-                    error_message = f"Run failed with status: {status}. Code: {error_details.get('code')}. Message: {error_details.get('message')}"
-                else:
-                    error_message = f"Run finished with uncompleted status: {status}"
-                return False, response, error_message
-            
-            # 根據狀態調整等待時間
-            if status == 'queued':
-                time.sleep(10)
-            else:
-                time.sleep(3)
+            return True, status, response
+        
+        # 使用智慧輪詢等待
+        with PollingContext(f"OpenAI Assistant Run {run_id}", self.polling_strategy) as context:
+            return context.wait_for_condition(
+                check_function=check_run_status,
+                completion_statuses=['completed'],
+                failure_statuses=['failed', 'expired', 'cancelled', 'requires_action']
+            )
     
     def _get_thread_messages(self, thread_id: str) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
         """取得對話串訊息"""

@@ -11,6 +11,7 @@ from ..utils import preprocess_text, postprocess_text
 from ..core.exceptions import OpenAIError, DatabaseError, ThreadError
 from ..core.error_handler import ErrorHandler
 from .response import ResponseFormatter
+from .optimized_audio import get_audio_handler
 from ..platforms.base import PlatformMessage, PlatformResponse, PlatformUser
 
 logger = get_logger(__name__)
@@ -35,6 +36,7 @@ class CoreChatService:
         self.config = config
         self.error_handler = ErrorHandler()
         self.response_formatter = ResponseFormatter(config)
+        self.audio_handler = get_audio_handler()  # 使用優化的音訊處理器
         try:
             provider = model.get_provider()
             provider_name = provider.value if hasattr(provider, 'value') else str(provider)
@@ -112,18 +114,26 @@ class CoreChatService:
         input_audio_path = None
         
         try:
-            # 儲存音訊檔案
-            input_audio_path = self._save_audio_file(audio_data)
+            # 🔥 使用優化的音訊處理器
+            is_successful, transcription, error_message = self.audio_handler.process_audio_optimized(
+                audio_data, self.model
+            )
             
-            # 轉錄音訊
-            text = self._transcribe_audio(input_audio_path)
+            if not is_successful:
+                logger.error(f"音訊轉錄失敗 - 用戶 {user.user_id}: {error_message}")
+                raise Exception(f"音訊處理失敗: {error_message}")
+            
+            if not transcription or not transcription.strip():
+                logger.warning(f"空的轉錄結果 - 用戶 {user.user_id}")
+                raise ValueError("無法識別音訊內容，請嘗試說得更清楚")
+            
             try:
-                logger.info(f"Audio transcribed for user {user.user_id}: {text}")
+                logger.info(f"音訊轉錄成功 - 用戶 {user.user_id}: {transcription[:50]}{'...' if len(transcription) > 50 else ''}")
             except ValueError:
                 pass
             
             # 處理轉錄的文字
-            return self._handle_chat_message(user, text, platform)
+            return self._handle_chat_message(user, transcription, platform)
             
         except Exception as e:
             # 記錄詳細的錯誤 log
@@ -150,8 +160,7 @@ class CoreChatService:
                     response_type="text"
                 )
         
-        finally:
-            self._delete_audio_file(input_audio_path)
+        # 注意：使用優化音訊處理器後不需要手動清理檔案
     
     def _handle_command(self, user: PlatformUser, text: str, platform: str) -> PlatformResponse:
         """處理指令"""
@@ -255,7 +264,7 @@ class CoreChatService:
             raise OpenAIError(f"Conversation processing failed: {e}")
     
     def _save_audio_file(self, audio_content: bytes) -> str:
-        """儲存音訊檔案到臨時位置"""
+        """儲存音訊檔案到臨時位置 - 已過時，請使用 OptimizedAudioHandler"""
         import uuid
         from ..core.exceptions import OpenAIError
         
@@ -272,7 +281,7 @@ class CoreChatService:
             raise OpenAIError(f"Failed to save audio file: {e}")
 
     def _delete_audio_file(self, file_path: Optional[str]) -> None:
-        """刪除臨時音訊檔案"""
+        """刪除臨時音訊檔案 - 已過時，請使用 OptimizedAudioHandler"""
         if not file_path:
             return
         try:
@@ -289,7 +298,7 @@ class CoreChatService:
                 pass
     
     def _transcribe_audio(self, input_audio_path: str) -> str:
-        """轉錄音訊檔案 - 使用統一接口"""
+        """轉錄音訊檔案 - 已過時，請使用 OptimizedAudioHandler"""
         try:
             # 使用統一的音訊轉錄接口，不指定特定模型
             is_successful, transcribed_text, error_message = self.model.transcribe_audio(

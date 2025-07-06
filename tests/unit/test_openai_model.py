@@ -1025,9 +1025,8 @@ class TestInternalMethods:
             
             assert success is False
             assert response == failed_response
-            assert "Run failed with status: failed" in error
-            assert "rate_limit_exceeded" in error
-            assert "exceeded your current quota" in error
+            assert "失敗: failed" in error  # Updated to match Chinese error message
+            assert "exceeded your current quota" in error  # Error details should be included
     
     def test_wait_for_run_completion_queued_status(self, model):
         """測試等待執行完成 - 排隊狀態更長等待"""
@@ -1047,8 +1046,8 @@ class TestInternalMethods:
             assert success is True
             assert result["status"] == "completed"
             assert error is None
-            # 檢查排隊狀態時使用更長的等待時間
-            assert mock_sleep.call_args_list[0][0][0] == 10
+            # 檢查排隊狀態時使用更長的等待時間 (5 * 1.5 = 7.5)
+            assert mock_sleep.call_args_list[0][0][0] == 7.5
     
     def test_get_thread_messages_success(self, model):
         """測試獲取對話串訊息 - 成功"""

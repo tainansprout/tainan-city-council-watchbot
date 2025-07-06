@@ -37,14 +37,15 @@ class AnthropicModel(FullLLMInterface):
         self.model_name = model_name
         self.base_url = base_url or "https://api.anthropic.com/v1"
         
-        # Files API 支援
-        self.files_store = {}  # Files API 快取 {file_id: file_info}
-        self.file_store = {}   # 檔案名稱對應 {file_id: filename}
+        # Files API 支援 - 使用有界快取
+        from ..core.bounded_cache import FileCache, ConversationCache
+        self.files_store = FileCache(max_files=300, file_ttl=3600)  # 300個檔案，1小時TTL
+        self.file_store = FileCache(max_files=300, file_ttl=3600)   # 檔案名稱對應
         
-        # Extended Prompt Caching 支援
+        # Extended Prompt Caching 支援 - 使用對話快取
         self.cache_enabled = True
         self.cache_ttl = 3600  # 1小時
-        self.cached_conversations = {}  # 快取的對話上下文
+        self.cached_conversations = ConversationCache(max_conversations=1000, conversation_ttl=3600)  # 1000對話，1小時TTL
         
         # 系統提示詞配置
         self.system_prompt = self._build_system_prompt()

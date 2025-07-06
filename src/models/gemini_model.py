@@ -29,7 +29,7 @@ class GeminiModel(FullLLMInterface):
     - Multimodal RAG: 支援文字、圖片、影片的混合檢索
     - Long Context Window: Gemini Pro 1.5 支援百萬 token 上下文
     - Vertex AI 整合: 企業級 AI 平台整合
-    - Ranking API: 智能重排序提升檢索品質
+    - Ranking API: 智慧重排序提升檢索品質
     """
     
     def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", base_url: str = None, project_id: str = None):
@@ -38,8 +38,9 @@ class GeminiModel(FullLLMInterface):
         self.base_url = base_url or "https://generativelanguage.googleapis.com/v1beta"
         self.project_id = project_id  # Google Cloud 專案 ID，用於 Vertex AI
         
-        # Semantic Retrieval API 支援
-        self.corpora = {}  # 語料庫快取 {corpus_name: corpus_info}
+        # Semantic Retrieval API 支援 - 使用有界快取
+        from ..core.bounded_cache import BoundedCache
+        self.corpora = BoundedCache(max_size=50, ttl=7200)  # 50個語料庫，2小時TTL
         self.default_corpus_name = "chatbot-knowledge"
         
         # Multimodal 和長上下文支援
@@ -190,11 +191,11 @@ class GeminiModel(FullLLMInterface):
             
             # 1. 確保語料庫存在
             corpus_name = kwargs.get('corpus_name', self.default_corpus_name)
-            if corpus_name not in self.corpora:
+            if self.corpora.get(corpus_name) is None:
                 is_successful, corpus, error = self._create_corpus(corpus_name)
                 if not is_successful:
                     return False, None, error
-                self.corpora[corpus_name] = corpus
+                self.corpora.set(corpus_name, corpus)
             
             # 2. 讀取檔案內容並檢測類型
             content_type, _ = mimetypes.guess_type(file_path)
@@ -223,14 +224,17 @@ class GeminiModel(FullLLMInterface):
                 ]
             }
             
-            corpus_name_full = self.corpora[corpus_name]['name']
+            corpus_data = self.corpora.get(corpus_name)
+            if not corpus_data:
+                return False, None, f"Corpus {corpus_name} not found"
+            corpus_name_full = corpus_data['name']
             endpoint = f'{corpus_name_full}/documents'
             is_successful, document_response, error = self._request('POST', endpoint, body=document_data)
             
             if not is_successful:
                 return False, None, error
             
-            # 4. 智能分塊並上傳
+            # 4. 智慧分塊並上傳
             chunks = self._intelligent_chunk_text(content, kwargs.get('chunk_size', 1000))
             document_name = document_response['name']
             
@@ -285,7 +289,7 @@ class GeminiModel(FullLLMInterface):
             corpus_name = kwargs.get('corpus_name', self.default_corpus_name)
             context_messages = kwargs.get('context_messages', [])  # 新增：支援上下文訊息
             
-            if corpus_name not in self.corpora:
+            if self.corpora.get(corpus_name) is None:
                 # 沒有語料庫，使用長上下文一般聊天
                 if context_messages:
                     # 如果有上下文訊息，使用它們
@@ -311,7 +315,10 @@ class GeminiModel(FullLLMInterface):
                 return True, rag_response, None
             
             # 1. 使用 Semantic Retrieval 搜尋相關內容
-            corpus_name_full = self.corpora[corpus_name]['name']
+            corpus_data = self.corpora.get(corpus_name)
+            if not corpus_data:
+                return False, None, f"Corpus {corpus_name} not found"
+            corpus_name_full = corpus_data['name']
             query_corpus_endpoint = f'{corpus_name_full}:queryCorpus'
             
             query_data = {
@@ -433,7 +440,15 @@ class GeminiModel(FullLLMInterface):
         try:
             files = []
             
-            for corpus_name, corpus_data in self.corpora.items():
+            # 獲取所有語料庫數據
+            if hasattr(self.corpora, 'cache'):
+                # 直接從 BoundedCache 的內部 cache 獲取項目
+                with self.corpora.lock:
+                    corpora_items = list(self.corpora.cache.items())
+            else:
+                corpora_items = []
+            
+            for corpus_name, corpus_data in corpora_items:
                 corpus_name_full = corpus_data['name']
                 documents_endpoint = f'{corpus_name_full}/documents'
                 

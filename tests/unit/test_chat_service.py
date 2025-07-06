@@ -303,18 +303,14 @@ class TestHandleAudioMessage:
             response_type="text"
         )
         
-        with patch.object(chat_service, '_save_audio_file', return_value='test_audio.m4a') as mock_save, \
-             patch.object(chat_service, '_transcribe_audio', return_value=transcribed_text) as mock_transcribe, \
-             patch.object(chat_service, '_handle_chat_message', return_value=expected_response) as mock_chat, \
-             patch.object(chat_service, '_delete_audio_file') as mock_delete:
+        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(True, transcribed_text, None)) as mock_audio, \
+             patch.object(chat_service, '_handle_chat_message', return_value=expected_response) as mock_chat:
             
             result = chat_service._handle_audio_message(mock_user, audio_data, "line")
             
             assert result == expected_response
-            mock_save.assert_called_once_with(audio_data)
-            mock_transcribe.assert_called_once_with('test_audio.m4a')
+            mock_audio.assert_called_once_with(audio_data, chat_service.model)
             mock_chat.assert_called_once_with(mock_user, transcribed_text, "line")
-            mock_delete.assert_called_once_with('test_audio.m4a')
     
     def test_handle_audio_message_error_for_test_user(self, chat_service, mock_user):
         """測試測試用戶的音訊錯誤處理"""
@@ -322,18 +318,16 @@ class TestHandleAudioMessage:
         mock_user.user_id = "U" + "0" * 32
         audio_data = b"fake_audio_data"
         
-        with patch.object(chat_service, '_save_audio_file', side_effect=Exception("Save error")), \
-             patch.object(chat_service, '_delete_audio_file'):
+        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(False, None, "cannot unpack non-iterable Mock object")):
             
-            with pytest.raises(Exception, match="Save error"):
+            with pytest.raises(Exception, match="音訊處理失敗: cannot unpack non-iterable Mock object"):
                 chat_service._handle_audio_message(mock_user, audio_data, "line")
     
     def test_handle_audio_message_error_for_real_user(self, chat_service, mock_user):
         """測試真實用戶的音訊錯誤處理"""
         audio_data = b"fake_audio_data"
         
-        with patch.object(chat_service, '_save_audio_file', side_effect=Exception("Save error")), \
-             patch.object(chat_service, '_delete_audio_file'), \
+        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(False, None, "Audio processing failed")), \
              patch.object(chat_service.error_handler, 'get_error_message', return_value="音訊處理錯誤") as mock_error:
             
             result = chat_service._handle_audio_message(mock_user, audio_data, "line")
@@ -346,30 +340,30 @@ class TestHandleAudioMessage:
         """測試音訊處理錯誤時的清理工作"""
         audio_data = b"fake_audio_data"
         
-        with patch.object(chat_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch.object(chat_service, '_transcribe_audio', side_effect=Exception("Transcribe error")), \
-             patch.object(chat_service, '_delete_audio_file') as mock_delete, \
+        # With OptimizedAudioHandler, cleanup is automatic (no manual _delete_audio_file)
+        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(False, None, "Transcribe error")), \
              patch.object(chat_service.error_handler, 'get_error_message', return_value="Error"):
             
-            chat_service._handle_audio_message(mock_user, audio_data, "line")
+            result = chat_service._handle_audio_message(mock_user, audio_data, "line")
             
-            mock_delete.assert_called_once_with('test_audio.m4a')
+            # Just verify the error response is returned
+            assert result.content == "Error"
+            assert result.response_type == "text"
     
     def test_handle_audio_message_logging(self, chat_service, mock_user):
         """測試音訊處理的日誌記錄"""
         audio_data = b"fake_audio_data"
         transcribed_text = "Hello from audio"
         
-        with patch.object(chat_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch.object(chat_service, '_transcribe_audio', return_value=transcribed_text), \
+        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(True, transcribed_text, None)), \
              patch.object(chat_service, '_handle_chat_message', return_value=Mock()), \
-             patch.object(chat_service, '_delete_audio_file'), \
              patch('src.services.chat.logger') as mock_logger:
             
             chat_service._handle_audio_message(mock_user, audio_data, "line")
             
+            # Check for the actual log message pattern in the updated code
             mock_logger.info.assert_called_once_with(
-                f"Audio transcribed for user {mock_user.user_id}: {transcribed_text}"
+                f"音訊轉錄成功 - 用戶 {mock_user.user_id}: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}"
             )
 
 

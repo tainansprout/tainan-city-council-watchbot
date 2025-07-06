@@ -396,7 +396,10 @@
             <div class="welcome-message">
                 <i class="fas fa-comments" style="font-size: 2rem; color: #667eea; margin-bottom: 1rem; display: block;"></i>
                 歡迎使用{{ app_name }}！<br>
-                請輸入您的問題，我會幫您檢索台南市議會相關資訊。
+                {{ app_description }}，請輸入您的問題。<br>
+                <small style="color: #8a8a8a; margin-top: 0.5rem; display: block;">
+                    💡 小提示：按 <kbd style="background: #f1f1f1; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem;">Shift + Enter</kbd> 即可快速送出訊息
+                </small>
             </div>
         </div>
 
@@ -410,7 +413,7 @@
                 <textarea 
                     id="messageInput" 
                     class="input-field" 
-                    placeholder="請輸入您的問題..."
+                    placeholder="請輸入您的問題... (Shift + Enter 送出)"
                     rows="1"
                 ></textarea>
                 <button id="sendButton" class="send-button" onclick="sendMessage()">
@@ -556,8 +559,15 @@
         // 事件監聽器
         document.getElementById('messageInput').addEventListener('input', autoResize);
 
-        // 移除Enter鍵送出功能，避免與注音輸入法衝突
-        // 使用者只能通過點擊按鈕送出訊息
+        // 添加 Shift + Enter 送出功能
+        document.getElementById('messageInput').addEventListener('keydown', function(event) {
+            // 檢查是否按下 Shift + Enter
+            if (event.shiftKey && event.key === 'Enter') {
+                event.preventDefault(); // 防止換行
+                sendMessage();
+            }
+            // 單純的 Enter 鍵保持換行功能，避免與注音輸入法衝突
+        });
 
         // 登出功能
         async function logout() {

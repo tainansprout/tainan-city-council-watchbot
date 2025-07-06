@@ -96,7 +96,10 @@ class MultiPlatformChatBot:
             # 7. 註冊路由
             self._register_routes()
             
-            # 8. 註冊清理函數
+            # 8. 初始化記憶體監控
+            self._initialize_memory_monitoring()
+            
+            # 9. 註冊清理函數
             self._register_cleanup()
             
             logger.info("Multi-platform chat bot initialized successfully")
@@ -177,6 +180,36 @@ class MultiPlatformChatBot:
         enabled_platforms = self.platform_manager.get_enabled_platforms()
         logger.info(f"Initialized {len(enabled_platforms)} platform handlers: {[p.value for p in enabled_platforms]}")
     
+    def _initialize_memory_monitoring(self):
+        """初始化記憶體監控和智慧垃圾回收"""
+        logger.info("Initializing memory monitoring...")
+        
+        try:
+            from .core.memory_monitor import setup_memory_monitoring
+            
+            # 設置 Flask 應用的記憶體監控
+            self.memory_monitor, self.smart_gc = setup_memory_monitoring(self.app)
+            
+            # 添加記憶體統計端點
+            @self.app.route("/memory-stats")
+            def memory_stats():
+                """記憶體統計端點"""
+                try:
+                    stats = self.memory_monitor.get_detailed_report()
+                    return self.response_formatter.json_response(stats)
+                except Exception as e:
+                    logger.error(f"Error getting memory stats: {e}")
+                    return self.response_formatter.json_response({
+                        'error': 'Failed to get memory stats',
+                        'message': str(e)
+                    }, 500)
+            
+            logger.info("Memory monitoring initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize memory monitoring: {e}")
+            # 不拋出異常，允許應用程式繼續運行
+    
     def _register_routes(self):
         """註冊 Flask 路由"""
         
@@ -230,11 +263,12 @@ class MultiPlatformChatBot:
         def chat_interface():
             """聊天介面 - GET 顯示頁面，POST 處理 JSON 登入"""
             app_name = self.config.get('app', {}).get('name', '聊天機器人')
+            app_description = self.config.get('app', {}).get('description', '智慧對話系統')
             
             if request.method == 'GET':
                 # GET 請求檢查是否已登入
                 if 'test_authenticated' in __import__('flask').session and __import__('flask').session['test_authenticated']:
-                    return render_template('chat.html', app_name=app_name)
+                    return render_template('chat.html', app_name=app_name, app_description=app_description)
                 else:
                     # 未登入時重定向到 /login，而不是直接顯示登入頁面
                     from flask import redirect, url_for

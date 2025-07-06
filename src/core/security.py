@@ -25,6 +25,7 @@ from typing import Dict, Any, Optional, List, Union
 from functools import wraps
 from flask import request, abort, current_app
 from .logger import get_logger
+from .optimized_security import OptimizedInputValidator, OptimizedRateLimiter, get_security_middleware
 
 logger = get_logger(__name__)
 
@@ -147,69 +148,18 @@ class InputValidator:
     
     @staticmethod
     def sanitize_text(text: str, max_length: int = 4000) -> str:
-        """清理文本輸入"""
-        if not isinstance(text, str):
-            return ""
-        
-        # 長度限制
-        if len(text) > max_length:
-            text = text[:max_length]
-        
-        # HTML 編碼
-        text = html.escape(text)
-        
-        # 移除危險模式
-        for pattern in InputValidator.DANGEROUS_PATTERNS:
-            text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.DOTALL)
-        
-        # 移除控制字符（但保留換行和製表符）
-        text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\t')
-        
-        return text.strip()
+        """清理文本輸入 - 使用優化版本"""
+        return OptimizedInputValidator.sanitize_text_optimized(text, max_length)
     
     @staticmethod
     def validate_user_id(user_id: str) -> bool:
-        """驗證用戶 ID 格式"""
-        if not isinstance(user_id, str):
-            return False
-        
-        # Line 用戶 ID 格式驗證
-        pattern = r'^U[0-9a-f]{32}$'
-        return bool(re.match(pattern, user_id))
+        """驗證用戶 ID 格式 - 使用優化版本"""
+        return OptimizedInputValidator.validate_user_id_fast(user_id)
     
     @staticmethod
     def validate_message_content(content: str) -> Dict[str, Any]:
-        """驗證訊息內容"""
-        result = {
-            'is_valid': True,
-            'errors': [],
-            'cleaned_content': content
-        }
-        
-        if not isinstance(content, str):
-            result['is_valid'] = False
-            result['errors'].append('訊息必須是字符串格式')
-            return result
-        
-        # 長度檢查
-        if len(content) == 0:
-            result['is_valid'] = False
-            result['errors'].append('訊息不能為空')
-        elif len(content) > 5000:
-            result['is_valid'] = False
-            result['errors'].append('訊息長度不能超過 5000 字符')
-        
-        # 清理內容
-        result['cleaned_content'] = InputValidator.sanitize_text(content)
-        
-        # 檢查是否包含危險內容
-        for pattern in InputValidator.DANGEROUS_PATTERNS:
-            if re.search(pattern, content, re.IGNORECASE):
-                result['is_valid'] = False
-                result['errors'].append('訊息包含不安全的內容')
-                break
-        
-        return result
+        """驗證訊息內容 - 使用優化版本"""
+        return OptimizedInputValidator.validate_message_content_optimized(content)
     
     @staticmethod
     def validate_json_input(data: Dict[str, Any], required_fields: List[str]) -> Dict[str, Any]:
@@ -236,64 +186,44 @@ class InputValidator:
 
 
 class RateLimiter:
-    """請求頻率限制器"""
+    """請求頻率限制器 - 向後兼容包裝器"""
     
     def __init__(self, time_func=None):
-        self._requests = {}  # {client_id: [timestamp, ...]}
-        self._cleanup_interval = 3600  # 1 小時清理一次
-        self._time_func = time_func or time.time  # 允許注入時間函數用於測試
-        self._last_cleanup = self._time_func()
+        # 使用優化版本的 RateLimiter
+        self._optimized_limiter = OptimizedRateLimiter()
+        self._time_func = time_func or time.time  # 保持兼容性
     
     def is_allowed(self, client_id: str, max_requests: int = 60, window_seconds: int = 60) -> bool:
-        """檢查是否允許請求"""
-        now = self._time_func()
+        """檢查是否允許請求 - 使用優化版本"""
+        # 轉換參數格式以匹配優化版本
+        requests_per_minute = max_requests if window_seconds == 60 else int(max_requests * 60 / window_seconds)
+        window_minutes = max(1, window_seconds // 60)
         
-        # 定期清理過期記錄
-        if now - self._last_cleanup > self._cleanup_interval:
-            self._cleanup_old_requests(now - window_seconds * 2)
-            self._last_cleanup = now
-        
-        # 初始化客戶端記錄
-        if client_id not in self._requests:
-            self._requests[client_id] = []
-        
-        # 移除過期請求
-        window_start = now - window_seconds
-        self._requests[client_id] = [
-            timestamp for timestamp in self._requests[client_id]
-            if timestamp > window_start
-        ]
-        
-        # 檢查頻率限制
-        if len(self._requests[client_id]) >= max_requests:
-            return False
-        
-        # 記錄新請求
-        self._requests[client_id].append(now)
-        return True
-    
-    def _cleanup_old_requests(self, cutoff_time: float):
-        """清理過期的請求記錄"""
-        for client_id in list(self._requests.keys()):
-            self._requests[client_id] = [
-                timestamp for timestamp in self._requests[client_id]
-                if timestamp > cutoff_time
-            ]
-            if not self._requests[client_id]:
-                del self._requests[client_id]
+        return self._optimized_limiter.is_allowed(client_id, requests_per_minute, window_minutes)
     
     def reset(self):
         """重置所有請求記錄（用於測試）"""
-        self._requests.clear()
-        self._last_cleanup = self._time_func()
+        # 重新建立優化版本實例
+        self._optimized_limiter = OptimizedRateLimiter()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """取得統計資訊"""
+        return self._optimized_limiter.get_stats()
+    
+    def get_client_status(self, client_id: str) -> Dict[str, int]:
+        """取得特定客戶端狀態"""
+        return self._optimized_limiter.get_client_status(client_id)
 
 
 class SecurityMiddleware:
-    """安全中間件"""
+    """安全中間件 - 整合優化組件"""
     
     def __init__(self, app=None, config=None):
         self.app = app
         self.config = config or {}
+        # 使用優化的安全中間件
+        self._optimized_middleware = get_security_middleware()
+        # 保持向後兼容的 rate_limiter 屬性
         self.rate_limiter = RateLimiter()
         
         if app:
