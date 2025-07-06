@@ -24,13 +24,13 @@ class MemoryMonitor:
     - 詳細的記憶體統計
     """
     
-    def __init__(self, warning_threshold: float = 0.8, critical_threshold: float = 0.9):
+    def __init__(self, warning_threshold: float = 2.0, critical_threshold: float = 4.0):
         """
         初始化記憶體監控
         
         Args:
-            warning_threshold: 警告閾值（0.8 = 80%）
-            critical_threshold: 緊急閾值（0.9 = 90%）
+            warning_threshold: 警告閾值（2.0 = 2% 系統記憶體）
+            critical_threshold: 緊急閾值（4.0 = 4% 系統記憶體）
         """
         self.warning_threshold = warning_threshold
         self.critical_threshold = critical_threshold
@@ -101,18 +101,19 @@ class MemoryMonitor:
             if 'error' in stats:
                 return True  # 無法取得統計時假設正常
             
-            # 使用進程記憶體百分比作為主要指標
-            memory_percent = stats['process_memory_percent'] / 100
-            system_percent = stats['system_memory_percent'] / 100
+            # 只使用進程記憶體百分比作為警告依據
+            # 系統記憶體使用率不應影響應用程式警告
+            process_percent = stats['process_memory_percent']
+            system_percent = stats['system_memory_percent'] 
             
-            # 使用較高的百分比作為警告依據
-            alert_percent = max(memory_percent, system_percent)
+            # 使用進程記憶體百分比來決定警告
+            alert_percent = process_percent / 100
             
             if alert_percent >= self.critical_threshold:
                 self.critical_count += 1
                 self.logger.critical(
                     f"🚨 Critical memory usage: {alert_percent:.1%} "
-                    f"(Process: {memory_percent:.1%}, System: {system_percent:.1%}) "
+                    f"(Process: {process_percent:.1%}, System: {system_percent:.1%}) "
                     f"RSS: {stats['process_memory_mb']:.1f}MB"
                 )
                 
@@ -124,7 +125,7 @@ class MemoryMonitor:
                 self.warning_count += 1
                 self.logger.warning(
                     f"⚠️ High memory usage: {alert_percent:.1%} "
-                    f"(Process: {memory_percent:.1%}, System: {system_percent:.1%}) "
+                    f"(Process: {process_percent:.1%}, System: {system_percent:.1%}) "
                     f"RSS: {stats['process_memory_mb']:.1f}MB"
                 )
                 
