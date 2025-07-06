@@ -10,7 +10,8 @@ deploy/
 ├── README.md             # 本說明文件
 ├── Dockerfile.cloudrun   # Cloud Run 專用 Dockerfile
 ├── cloudrun-service.yaml # Cloud Run 服務配置
-├── deploy-to-cloudrun.sh # 主要部署腳本
+├── setup-and-deploy-to-cloudrun.sh # 主要設定與部署腳本
+├── deploy-to-cloudrun.sh # 重複部署腳本
 ├── monitoring-setup.sh   # 監控設定腳本
 ├── setup-loadbalancer.sh # 負載平衡器設定腳本
 └── setup-monitoring.sh   # 監控和警報設定腳本

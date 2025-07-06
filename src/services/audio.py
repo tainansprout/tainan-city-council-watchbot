@@ -69,6 +69,7 @@ class AudioService:
             if not is_successful:
                 raise OpenAIError(f"Audio transcription failed: {error_message}")
             
+            logger.info(f"Audio transcription resutl: {transcribed_text}")
             return transcribed_text
             
         except Exception as e:

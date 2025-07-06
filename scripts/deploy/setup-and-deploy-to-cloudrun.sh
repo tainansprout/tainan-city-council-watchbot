@@ -231,10 +231,81 @@ echo "SERVICE_CONFIG_PATH: $SERVICE_CONFIG_PATH"
 echo ""
 
 # 設定專案和啟用 API
-execute_step "setup-project" "gcloud config set project $PROJECT_ID" "📋 設定 Google Cloud 專案"
+execute_step "setup-project" "gcloud config set project $PROJECT_ID && gcloud services enable cloudbuild.googleapis.com run.googleapis.com secretmanager.googleapis.com sql-component.googleapis.com sqladmin.googleapis.com" "📋 設定 Google Cloud 專案並啟用必要的 API"
+
+# 配置 Secret Manager 密鑰
+setup_secrets_step() {
+    echo -e "${YELLOW}🔐 配置敏感資訊...${NC}"
+    
+    if [ "$DRY_RUN" = false ] && [ "$INTERACTIVE" = true ]; then
+        echo -e "${YELLOW}建議：將敏感資訊設為環境變數，例如：${NC}"
+        echo "export OPENAI_API_KEY='your_key_here'"
+        echo "export LINE_CHANNEL_ACCESS_TOKEN='your_token_here'"
+        echo ""
+    fi
+
+    # 在 dry-run 或自動模式下，顯示需要的變數
+    if [ "$DRY_RUN" = true ] || [ "$INTERACTIVE" = false ]; then
+        OPENAI_KEY='${OPENAI_API_KEY}'
+        OPENAI_ASSISTANT_ID='${OPENAI_ASSISTANT_ID}'
+        LINE_TOKEN='${LINE_CHANNEL_ACCESS_TOKEN}'
+        LINE_SECRET='${LINE_CHANNEL_SECRET}'
+        DB_HOST='${DB_HOST}'
+        DB_USER='${DB_USER}'
+        DB_PASSWORD='${DB_PASSWORD}'
+        DB_NAME='${DB_NAME}'
+    else
+        OPENAI_KEY=${OPENAI_API_KEY:-$(read -p "請輸入 OpenAI API Key: " && echo $REPLY)}
+        OPENAI_ASSISTANT_ID=${OPENAI_ASSISTANT_ID:-$(read -p "請輸入 OpenAI Assistant ID: " && echo $REPLY)}
+        LINE_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN:-$(read -p "請輸入 Line Channel Access Token: " && echo $REPLY)}
+        LINE_SECRET=${LINE_CHANNEL_SECRET:-$(read -p "請輸入 Line Channel Secret: " && echo $REPLY)}
+        DB_HOST=${DB_HOST:-$(read -p "請輸入資料庫主機地址: " && echo $REPLY)}
+        DB_USER=${DB_USER:-$(read -p "請輸入資料庫使用者名稱: " && echo $REPLY)}
+        DB_PASSWORD=${DB_PASSWORD:-$(read -s -p "請輸入資料庫密碼: " && echo $REPLY && echo)}
+        DB_NAME=${DB_NAME:-$(read -p "請輸入資料庫名稱: " && echo $REPLY)}
+    fi
+
+    local secrets_cmd="gcloud secrets describe $OPENAI_API_KEY_SECRET --quiet || echo '$OPENAI_KEY' | gcloud secrets create $OPENAI_API_KEY_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $OPENAI_ASSISTANT_ID_SECRET --quiet || echo '$OPENAI_ASSISTANT_ID' | gcloud secrets create $OPENAI_ASSISTANT_ID_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $LINE_CHANNEL_ACCESS_TOKEN_SECRET --quiet || echo '$LINE_TOKEN' | gcloud secrets create $LINE_CHANNEL_ACCESS_TOKEN_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $LINE_CHANNEL_SECRET_SECRET --quiet || echo '$LINE_SECRET' | gcloud secrets create $LINE_CHANNEL_SECRET_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $DB_HOST_SECRET --quiet || echo '$DB_HOST' | gcloud secrets create $DB_HOST_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $DB_USER_SECRET --quiet || echo '$DB_USER' | gcloud secrets create $DB_USER_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $DB_PASSWORD_SECRET --quiet || echo '$DB_PASSWORD' | gcloud secrets create $DB_PASSWORD_SECRET --data-file=-; "
+    secrets_cmd+="gcloud secrets describe $DB_NAME_SECRET --quiet || echo '$DB_NAME' | gcloud secrets create $DB_NAME_SECRET --data-file=-"
+    
+    return 0
+}
+
+# 執行 secrets 設定步驟
+setup_secrets_step
+if [ $? -eq 0 ]; then
+    execute_step "setup-secrets" "$secrets_cmd" "🔐 配置 Secret Manager 密鑰"
+fi
 
 # 建立和推送 Docker 映像
 execute_step "build-image" "cd '$PROJECT_ROOT' && gcloud builds submit --tag gcr.io/$PROJECT_ID/$IMAGE_NAME' ." "🐳 建立 Docker 映像"
 
 # 部署到 Cloud Run
 execute_step "deploy-service" "cd '$PROJECT_ROOT' && cp 'config/deploy/$SERVICE_CONFIG_PATH' 'config/deploy/$SERVICE_CONFIG_PATH.bak' && sed 's/YOUR_PROJECT_ID/$PROJECT_ID/g' 'config/deploy/$SERVICE_CONFIG_PATH.bak' > 'config/deploy/$SERVICE_CONFIG_PATH' && gcloud run services replace 'config/deploy/$SERVICE_CONFIG_PATH' --region=$REGION && mv 'config/deploy/$SERVICE_CONFIG_PATH.bak' 'config/deploy/$SERVICE_CONFIG_PATH'" "☁️ 部署到 Cloud Run"
+
+# 設定 IAM 權限和取得服務 URL
+execute_step "setup-permissions" "gcloud run services add-iam-policy-binding $SERVICE_NAME --region=$REGION --member='allUsers' --role='roles/run.invoker'" "🔒 設定 IAM 權限（允許公開存取）"
+
+# 取得服務 URL（只在非 dry-run 模式下執行）
+if [ "$DRY_RUN" = false ]; then
+    SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region=$REGION --format="value(status.url)" 2>/dev/null || echo "https://your-service-url")
+    
+    echo -e "${GREEN}✅ 部署完成！${NC}"
+    echo -e "${GREEN}🌐 服務 URL: $SERVICE_URL${NC}"
+    echo -e "${GREEN}🔗 Webhook URL: $SERVICE_URL/webhooks/line${NC}"
+    
+    echo -e "${YELLOW}📝 後續設定步驟：${NC}"
+    echo "1. Line Developers Console 中的 Webhook URL: $SERVICE_URL/webhooks/line"
+    echo "2. 啟用 Webhook"
+    echo "3. 測試 Bot 功能"
+else
+    echo -e "${BLUE}[DRY RUN] 部署完成後，請記得：${NC}"
+    echo -e "${BLUE}1. 在 Line Developers Console 設定 Webhook URL${NC}"
+    echo -e "${BLUE}2. 啟用 Webhook 並測試 Bot 功能${NC}"
+fi

@@ -1,5 +1,5 @@
 # 使用較小的 Python 基礎映像
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # 設定環境變數
 ENV PYTHONUNBUFFERED=True \
@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=True \
     PIP_DISABLE_PIP_VERSION_CHECK=True
 
 # 安裝系統依賴
-RUN apt-get update && apt-get install -y \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     curl \

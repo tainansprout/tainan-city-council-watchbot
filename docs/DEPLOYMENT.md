@@ -113,11 +113,14 @@ echo -n "$TEST_PASSWORD" | gcloud secrets create test-password --data-file=-
 ### 步驟 4: 部署應用程式
 
 ```bash
+# 載入環境變數
+source config/deploy/.env
+
 # 建立 Docker 映像
-gcloud builds submit --tag asia.gcr.io/$PROJECT_ID/chatgpt-line-bot
+gcloud builds submit --tag asia.gcr.io/$PROJECT_ID/$SERVICE_NAME
 
 # 部署到 Cloud Run
-gcloud run deploy chatgpt-line-bot --image asia.gcr.io/$PROJECT_ID/chatgpt-line-bot --platform managed --port 8080 --memory 2G --timeout=3m
+gcloud run deploy $SERVICE_NAME--image asia.gcr.io/$PROJECT_ID/$SERVICE_NAME --platform managed --port 8080 --memory 4G --timeout=3m
 ```
 
 ### 步驟 5: 設定 Load Balancer（可選但推薦）
