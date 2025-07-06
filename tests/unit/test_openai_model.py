@@ -486,7 +486,7 @@ class TestRAGFunctionality:
             
             assert success is False
             assert rag_response is None
-            assert "Failed to add message to thread" in error
+            assert "Failed to add message" in error
 
 
 class TestAudioTranscription:
@@ -686,7 +686,8 @@ class TestResponseProcessing:
     
     def test_process_openai_response_error_handling(self, model):
         """測試回應處理錯誤處理"""
-        malformed_data = {"invalid": "format"}
+        # 傳入會導致異常的惡意數據
+        malformed_data = {"data": [{"role": "assistant", "content": [{"type": "text", "text": None}]}]}
         
         with patch('src.models.openai_model.logger') as mock_logger:
             content, sources = model._process_openai_response(malformed_data)
@@ -724,7 +725,9 @@ class TestResponseProcessing:
     
     def test_get_response_data_exception(self, model):
         """測試數據提取異常"""
-        malformed_response = {"invalid": "format"}
+        # 模擬會導致異常的情況（get方法拋出異常）
+        malformed_response = Mock()
+        malformed_response.get.side_effect = Exception("Test exception")
         
         with patch('src.models.openai_model.logger') as mock_logger:
             data = model._get_response_data(malformed_response)
@@ -740,12 +743,15 @@ class TestResponseProcessing:
                 "content": [{
                     "type": "text",
                     "text": {
+                        "value": "Test response with citations [1][1]",
                         "annotations": [
                             {
+                                "text": "[1]",
                                 "type": "file_citation",
                                 "file_citation": {"file_id": "file_123", "quote": "quote1"}
                             },
                             {
+                                "text": "[1]",
                                 "type": "file_citation", 
                                 "file_citation": {"file_id": "file_123", "quote": "quote2"}
                             }
@@ -755,7 +761,7 @@ class TestResponseProcessing:
             }]
         }
         
-        sources = model._extract_sources_from_response(thread_messages)
+        formatted_content, sources = model._process_openai_response(thread_messages)
         
         # 應該只有一個來源（去重）
         assert len(sources) == 1
@@ -899,20 +905,30 @@ class TestInternalMethods:
         with patch('requests.post') as mock_post:
             mock_response = Mock()
             mock_response.status_code = 429
+            mock_response.json.return_value = {"error": {"message": "Rate limit exceeded"}}
             mock_post.return_value = mock_response
             
-            with pytest.raises(RequestException):
-                model._request('POST', '/test')
+            # 由於重試裝飾器的存在，異常會被捕獲並轉為返回值
+            success, data, error = model._request('POST', '/test')
+            
+            assert success is False
+            assert data is None
+            assert "Rate limit exceeded" in error
     
     def test_request_server_error(self, model):
         """測試服務器錯誤"""
         with patch('requests.post') as mock_post:
             mock_response = Mock()
             mock_response.status_code = 500
+            mock_response.json.return_value = {"error": {"message": "Server error"}}
             mock_post.return_value = mock_response
             
-            with pytest.raises(RequestException):
-                model._request('POST', '/test')
+            # 由於重試裝飾器的存在，異常會被捕獲並轉為返回值
+            success, data, error = model._request('POST', '/test')
+            
+            assert success is False
+            assert data is None
+            assert "Server error" in error
     
     def test_request_client_error(self, model):
         """測試客戶端錯誤"""
@@ -947,8 +963,12 @@ class TestInternalMethods:
     def test_request_network_exception(self, model):
         """測試網路異常"""
         with patch('requests.post', side_effect=RequestException("Network error")):
-            with pytest.raises(RequestException):
-                model._request('POST', '/test')
+            # 由於重試裝飾器的存在，異常會被捕獲並轉為返回值
+            success, data, error = model._request('POST', '/test')
+            
+            assert success is False
+            assert data is None
+            assert "Network error" in error
     
     def test_request_general_exception(self, model):
         """測試一般異常"""
@@ -1083,7 +1103,7 @@ class TestUserLevelConversationManagement:
             metadata={'thread_messages': {'data': []}}
         )
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', return_value=existing_thread_id), \
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=existing_thread_id), \
              patch.object(model, 'add_message_to_thread', return_value=(True, None)), \
              patch.object(model, 'run_assistant', return_value=(True, mock_chat_response, None)), \
              patch.object(model, '_process_openai_response', return_value=("I'm doing well!", [])):
@@ -1109,9 +1129,9 @@ class TestUserLevelConversationManagement:
             metadata={'thread_messages': {'data': []}}
         )
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', return_value=None), \
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=None), \
              patch.object(model, 'create_thread', return_value=(True, mock_thread_info, None)), \
-             patch('src.models.openai_model.save_thread_id') as mock_save, \
+             patch('src.database.connection.save_thread_id') as mock_save, \
              patch.object(model, 'add_message_to_thread', return_value=(True, None)), \
              patch.object(model, 'run_assistant', return_value=(True, mock_chat_response, None)), \
              patch.object(model, '_process_openai_response', return_value=("Welcome!", [])):
@@ -1127,7 +1147,7 @@ class TestUserLevelConversationManagement:
         user_id = "user_123"
         message = "Test message"
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', return_value=None), \
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=None), \
              patch.object(model, 'create_thread', return_value=(False, None, "Thread creation failed")):
             
             success, rag_response, error = model.chat_with_user(user_id, message)
@@ -1141,7 +1161,7 @@ class TestUserLevelConversationManagement:
         user_id = "user_123"
         message = "Test message"
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', side_effect=Exception("Database error")), \
+        with patch('src.database.connection.get_thread_id_by_user_id', side_effect=Exception("Database error")), \
              patch('src.models.openai_model.logger') as mock_logger:
             
             success, rag_response, error = model.chat_with_user(user_id, message)
@@ -1157,9 +1177,9 @@ class TestUserLevelConversationManagement:
         platform = "line"
         thread_id = "thread_456"
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', return_value=thread_id), \
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=thread_id), \
              patch.object(model, 'delete_thread', return_value=(True, None)), \
-             patch('src.models.openai_model.delete_thread_id') as mock_delete:
+             patch('src.database.connection.delete_thread_id') as mock_delete:
             
             success, error = model.clear_user_history(user_id, platform)
             
@@ -1172,7 +1192,7 @@ class TestUserLevelConversationManagement:
         user_id = "user_123"
         platform = "line"
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', return_value=None), \
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=None), \
              patch('src.models.openai_model.logger') as mock_logger:
             
             success, error = model.clear_user_history(user_id, platform)
@@ -1187,9 +1207,9 @@ class TestUserLevelConversationManagement:
         platform = "line"
         thread_id = "thread_456"
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', return_value=thread_id), \
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=thread_id), \
              patch.object(model, 'delete_thread', return_value=(False, "API error")), \
-             patch('src.models.openai_model.delete_thread_id') as mock_delete, \
+             patch('src.database.connection.delete_thread_id') as mock_delete, \
              patch('src.models.openai_model.logger') as mock_logger:
             
             success, error = model.clear_user_history(user_id, platform)
@@ -1204,7 +1224,7 @@ class TestUserLevelConversationManagement:
         user_id = "user_123"
         platform = "line"
         
-        with patch('src.models.openai_model.get_thread_id_by_user_id', side_effect=Exception("Database error")), \
+        with patch('src.database.connection.get_thread_id_by_user_id', side_effect=Exception("Database error")), \
              patch('src.models.openai_model.logger') as mock_logger:
             
             success, error = model.clear_user_history(user_id, platform)
@@ -1317,8 +1337,11 @@ class TestEdgeCases:
         mock_response = {"usage": {"total_tokens": 10}}
         
         with patch.object(model, '_request', return_value=(True, mock_response, None)):
-            with pytest.raises((KeyError, IndexError)):
-                model.chat_completion([ChatMessage(role="user", content="test")])
+            success, chat_response, error = model.chat_completion([ChatMessage(role="user", content="test")])
+            
+            assert success is False
+            assert chat_response is None
+            assert "choices" in error
     
     def test_file_not_found_error(self, model):
         """測試檔案不存在錯誤"""

@@ -203,6 +203,8 @@ class CoreChatService:
             # 後處理回應
             final_response = postprocess_text(response_message, self.config)
             
+            logger.info(f'Response message to {user.user_id} on {platform}: {final_response}')
+
             return PlatformResponse(
                 content=final_response,
                 response_type="text"

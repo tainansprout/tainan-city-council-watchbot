@@ -4,6 +4,7 @@
 """
 import os
 import sys
+import logging
 from src.core.logger import get_logger
 from pathlib import Path
 
@@ -64,7 +65,8 @@ def check_database_status():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    # 使用統一的 logger 系統
+    logger.info("Starting database initialization script...")
     
     if len(sys.argv) > 1 and sys.argv[1] == "status":
         check_database_status()

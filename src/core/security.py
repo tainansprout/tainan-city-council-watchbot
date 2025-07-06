@@ -238,14 +238,15 @@ class InputValidator:
 class RateLimiter:
     """請求頻率限制器"""
     
-    def __init__(self):
+    def __init__(self, time_func=None):
         self._requests = {}  # {client_id: [timestamp, ...]}
         self._cleanup_interval = 3600  # 1 小時清理一次
-        self._last_cleanup = time.time()
+        self._time_func = time_func or time.time  # 允許注入時間函數用於測試
+        self._last_cleanup = self._time_func()
     
     def is_allowed(self, client_id: str, max_requests: int = 60, window_seconds: int = 60) -> bool:
         """檢查是否允許請求"""
-        now = time.time()
+        now = self._time_func()
         
         # 定期清理過期記錄
         if now - self._last_cleanup > self._cleanup_interval:
@@ -280,6 +281,11 @@ class RateLimiter:
             ]
             if not self._requests[client_id]:
                 del self._requests[client_id]
+    
+    def reset(self):
+        """重置所有請求記錄（用於測試）"""
+        self._requests.clear()
+        self._last_cleanup = self._time_func()
 
 
 class SecurityMiddleware:

@@ -4,7 +4,7 @@
 import pytest
 import os
 from datetime import datetime
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, ANY
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
@@ -37,7 +37,10 @@ class TestUserThreadTable:
             thread_id="thread_456"
         )
         
-        assert user_thread.platform == "line"  # 默認值
+        # SQLAlchemy 預設值只有在資料庫操作時才會生效
+        # 這裡測試欄位的預設值定義
+        assert hasattr(UserThreadTable.platform.property.columns[0], 'default')
+        assert UserThreadTable.platform.property.columns[0].default.arg == 'line'
     
     def test_user_thread_table_repr(self):
         """測試 __repr__ 方法"""
@@ -92,7 +95,10 @@ class TestSimpleConversationHistory:
             content="I'm doing well, thank you!"
         )
         
-        assert conversation.platform == "line"  # 默認值
+        # SQLAlchemy 預設值只有在資料庫操作時才會生效
+        # 這裡測試欄位的預設值定義
+        assert hasattr(SimpleConversationHistory.platform.property.columns[0], 'default')
+        assert SimpleConversationHistory.platform.property.columns[0].default.arg == 'line'
     
     def test_conversation_history_repr(self):
         """測試 __repr__ 方法"""
@@ -168,14 +174,14 @@ class TestDatabaseManagerInitialization:
             mock_build_url.assert_called_once()
             mock_create_engine.assert_called_once_with(
                 "test_url",
-                poolclass=patch.ANY,
+                poolclass=ANY,
                 pool_size=20,
                 max_overflow=30,
                 pool_timeout=30,
                 pool_recycle=3600,
                 pool_pre_ping=True,
                 echo=False,
-                connect_args=patch.ANY
+                connect_args=ANY
             )
     
     def test_postgresql_connect_args(self):
@@ -227,7 +233,7 @@ class TestDatabaseManagerBuildDatabaseUrl:
             }
         }
         
-        with patch('src.database.models.load_config', return_value=mock_config), \
+        with patch('src.core.config.load_config', return_value=mock_config), \
              patch('src.database.models.create_engine'), \
              patch('src.database.models.sessionmaker'):
             
@@ -253,7 +259,7 @@ class TestDatabaseManagerBuildDatabaseUrl:
             }
         }
         
-        with patch('src.database.models.load_config', return_value=mock_config), \
+        with patch('src.core.config.load_config', return_value=mock_config), \
              patch('src.database.models.create_engine'), \
              patch('src.database.models.sessionmaker'):
             
@@ -267,7 +273,7 @@ class TestDatabaseManagerBuildDatabaseUrl:
     
     def test_build_url_fallback_to_env_vars(self):
         """測試回退到環境變數"""
-        with patch('src.database.models.load_config', side_effect=Exception("Config error")), \
+        with patch('src.core.config.load_config', side_effect=Exception("Config error")), \
              patch('src.database.models.create_engine'), \
              patch('src.database.models.sessionmaker'), \
              patch('os.getenv') as mock_getenv:
@@ -289,7 +295,7 @@ class TestDatabaseManagerBuildDatabaseUrl:
     
     def test_build_url_ultimate_fallback(self):
         """測試最終回退到預設值"""
-        with patch('src.database.models.load_config', side_effect=Exception("Config error")), \
+        with patch('src.core.config.load_config', side_effect=Exception("Config error")), \
              patch('src.database.models.create_engine'), \
              patch('src.database.models.sessionmaker'), \
              patch('os.getenv', return_value='postgresql://postgres:password@localhost:5432/chatbot'):
@@ -343,7 +349,13 @@ class TestDatabaseManagerMethods:
     def test_check_connection_success(self, manager):
         """測試成功的連線檢查"""
         mock_connection = Mock()
-        manager.engine.connect.return_value.__enter__.return_value = mock_connection
+        
+        # 設定 mock_connection 支援 context manager 協議
+        mock_connection.__enter__ = Mock(return_value=mock_connection)
+        mock_connection.__exit__ = Mock(return_value=None)
+        
+        # 讓 engine.connect() 返回可以作為 context manager 的 mock_connection
+        manager.engine.connect.return_value = mock_connection
         
         result = manager.check_connection()
         
@@ -448,7 +460,7 @@ class TestDatabaseConnectionScenarios:
             }
         }
         
-        with patch('src.database.models.load_config', return_value=mock_config), \
+        with patch('src.core.config.load_config', return_value=mock_config), \
              patch('src.database.models.create_engine') as mock_create_engine, \
              patch('src.database.models.sessionmaker'):
             
@@ -477,7 +489,7 @@ class TestDatabaseConnectionScenarios:
             }
         }
         
-        with patch('src.database.models.load_config', return_value=mock_config), \
+        with patch('src.core.config.load_config', return_value=mock_config), \
              patch('src.database.models.create_engine') as mock_create_engine, \
              patch('src.database.models.sessionmaker'):
             
@@ -495,16 +507,16 @@ class TestDatabaseConnectionScenarios:
         """測試無 SSL 配置"""
         mock_config = {
             'db': {
-                'host': 'no-ssl-host',
+                'host': 'regular-host',
                 'port': '5432',
-                'db_name': 'no_ssl_db',
+                'db_name': 'regular_db',
                 'user': 'regular_user',
                 'password': 'regular_pass'
                 # 沒有任何 SSL 參數
             }
         }
         
-        with patch('src.database.models.load_config', return_value=mock_config), \
+        with patch('src.core.config.load_config', return_value=mock_config), \
              patch('src.database.models.create_engine') as mock_create_engine, \
              patch('src.database.models.sessionmaker'):
             
@@ -513,9 +525,12 @@ class TestDatabaseConnectionScenarios:
             call_args = mock_create_engine.call_args[0]
             database_url = call_args[0]
             
-            # 不應該包含任何 SSL 參數
-            assert 'ssl' not in database_url.lower()
-            assert database_url == "postgresql://regular_user:regular_pass@no-ssl-host:5432/no_ssl_db"
+            # 檢查 URL 不包含 SSL 參數（而不是 ssl 字符串）
+            assert 'sslmode=' not in database_url
+            assert 'sslcert=' not in database_url
+            assert 'sslkey=' not in database_url
+            assert 'sslrootcert=' not in database_url
+            assert database_url == "postgresql://regular_user:regular_pass@regular-host:5432/regular_db"
 
 
 class TestDatabaseErrorHandling:
@@ -542,7 +557,7 @@ class TestDatabaseErrorHandling:
     
     def test_config_loading_exception_handling(self):
         """測試配置載入異常處理"""
-        with patch('src.database.models.load_config', side_effect=ImportError("Module not found")), \
+        with patch('src.core.config.load_config', side_effect=ImportError("Module not found")), \
              patch('src.database.models.create_engine'), \
              patch('src.database.models.sessionmaker'), \
              patch('src.database.models.logger') as mock_logger, \

@@ -713,12 +713,12 @@ class TestMultiPlatformChatBotCleanup:
             cleanup_func = mock_atexit.register.call_args[0][0]
             
             # 測試清理函數
-            with patch('src.app.logger') as mock_logger:
+            with patch('builtins.print') as mock_print:
                 cleanup_func()
                 
-                mock_logger.info.assert_any_call("Shutting down application...")
+                mock_print.assert_any_call("Shutting down application...")
                 bot.database.close_engine.assert_called_once()
-                mock_logger.info.assert_any_call("Application shutdown complete")
+                mock_print.assert_any_call("Application shutdown complete")
     
     def test_cleanup_with_logger_error(self, chatbot_with_mocks):
         """測試清理函數處理 logger 錯誤"""
@@ -756,3 +756,130 @@ class TestMultiPlatformChatBotCleanup:
             cleanup_func()
             
             bot.database.close_engine.assert_called_once()
+
+
+class TestMultiPlatformChatBotInitializationFailures:
+    """測試應用初始化失敗的情況"""
+    
+    @patch('src.app.load_config')
+    def test_initialization_failure_exception(self, mock_load_config):
+        """測試初始化過程中拋出異常"""
+        mock_config = {
+            'app': {'name': 'Test Bot', 'version': '2.0.0'},
+            'llm': {'provider': 'openai'},
+            'openai': {'api_key': 'test_key'},
+            'db': {'host': 'localhost'}
+        }
+        mock_load_config.return_value = mock_config
+        
+        # 模擬 _validate_config 拋出異常
+        with patch.object(MultiPlatformChatBot, '_validate_config', side_effect=Exception("Validation failed")), \
+             patch('src.app.logger') as mock_logger:
+            
+            with pytest.raises(Exception, match="Validation failed"):
+                MultiPlatformChatBot()
+            
+            # 檢查錯誤被記錄
+            mock_logger.error.assert_called_with("Failed to initialize application: Validation failed")
+
+
+class TestMultiPlatformChatBotRouteEdgeCases:
+    """測試路由的邊緣情況"""
+    
+    @pytest.fixture
+    def chatbot_with_app(self):
+        """創建帶有 Flask app 的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.platform_manager = Mock()
+            bot.model = Mock()
+            bot.database = Mock()
+            bot.error_handler = Mock()
+            bot.response_formatter = Mock()
+            bot.core_chat_service = Mock()
+            
+            # 註冊路由以便測試
+            bot._register_routes()
+            
+            return bot
+    
+    def test_home_endpoint_with_no_providers(self, chatbot_with_app):
+        """測試首頁端點當沒有可用提供商時"""
+        bot = chatbot_with_app
+        bot.config = {
+            'app': {'name': 'Test Bot', 'version': '2.0.0'},
+            'llm': {'provider': 'openai'}
+        }
+        
+        from src.platforms.base import PlatformType
+        bot.platform_manager.get_enabled_platforms.return_value = [PlatformType.LINE]
+        bot.response_formatter.json_response.return_value = {'status': 'ok'}
+        
+        with bot.app.test_client() as client:
+            response = client.get('/')
+            
+            assert response.status_code == 200
+            bot.response_formatter.json_response.assert_called_once()
+    
+    def test_webhook_handler_with_exception(self, chatbot_with_app):
+        """測試 webhook 處理器遇到異常"""
+        bot = chatbot_with_app
+        
+        # 模擬平台管理器拋出異常
+        bot.platform_manager.handle_platform_webhook.side_effect = Exception("Platform error")
+        
+        with bot.app.test_client() as client:
+            with patch('src.app.logger'):  # 避免日誌輸出干擾測試
+                with pytest.raises(Exception):  # Flask 會將 500 錯誤轉為異常
+                    response = client.post('/webhooks/line', 
+                                         data='{"events": []}',
+                                         headers={'X-Line-Signature': 'test_signature'})
+
+
+class TestMultiPlatformChatBotAuthenticationRoutes:
+    """測試認證相關路由"""
+    
+    @pytest.fixture
+    def chatbot_with_auth(self):
+        """創建帶有認證功能的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.config = {
+                'app': {'name': 'Test Bot'},
+                'auth': {'method': 'simple_password', 'password': 'test123'}
+            }
+            bot.response_formatter = Mock()
+            
+            # 註冊路由
+            bot._register_routes()
+            
+            return bot
+    
+    def test_login_post_invalid_json(self, chatbot_with_auth):
+        """測試登入端點接收無效 JSON"""
+        bot = chatbot_with_auth
+        bot.response_formatter.json_response.return_value = {'error': 'Invalid JSON'}
+        
+        with bot.app.test_client() as client:
+            response = client.post('/login', 
+                                 data='invalid json',
+                                 content_type='application/json')
+            
+            # 應該返回錯誤
+            bot.response_formatter.json_response.assert_called()
+    
+    def test_ask_endpoint_unauthenticated(self, chatbot_with_auth):
+        """測試未認證訪問 ask 端點"""
+        bot = chatbot_with_auth
+        bot.response_formatter.json_response.return_value = {'error': 'Unauthorized'}
+        
+        with bot.app.test_client() as client:
+            response = client.post('/ask', 
+                                 json={'message': 'Hello'},
+                                 content_type='application/json')
+            
+            bot.response_formatter.json_response.assert_called()

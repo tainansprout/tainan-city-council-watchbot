@@ -269,10 +269,11 @@ class OpenAIModel(FullLLMInterface):
         try:
             # 取得助理回應數據
             data = self._get_response_data(thread_messages)
+            logger.debug("OpenAI Assistant response data:")
+            logger.debug(data)
             if not data:
                 logger.debug("_process_openai_response: 沒有找到助理回應數據")
                 return '', []
-            print(data)
             text = data['content'][0]['text']['value']
             annotations = data['content'][0]['text']['annotations']
             
@@ -321,8 +322,6 @@ class OpenAIModel(FullLLMInterface):
             
             # 直接返回處理後的文本，讓 ResponseFormatter 統一處理 sources
             final_text = dedup_citation_blocks(text.strip())
-            print(final_text)
-            print(sources)
             
             logger.debug(f"_process_openai_response: 最終文本長度={len(final_text)}, 生成了 {len(sources)} 個來源")
             

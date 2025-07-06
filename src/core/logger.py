@@ -2,6 +2,8 @@ import os
 import logging
 import logging.handlers
 import json
+import re
+import copy
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -46,8 +48,6 @@ class SensitiveDataFilter(logging.Filter):
     
     def _sanitize_string(self, text: str) -> str:
         """清理字符串中的敏感資料"""
-        import re
-        
         # 常見的敏感資料模式
         patterns = [
             r'(api_key["\']?\s*[:=]\s*["\']?)([^"\'\s]+)',
@@ -104,9 +104,11 @@ class ColoredConsoleFormatter(logging.Formatter):
     RESET = '\x1b[0m'
     
     def format(self, record):
-        color = self.LEVEL_COLORS.get(record.levelno, '')
-        record.levelname = f"{color}{record.levelname}{self.RESET}"
-        return super().format(record)
+        # 創建 record 的副本以避免修改原始 record
+        colored_record = copy.copy(record)
+        color = self.LEVEL_COLORS.get(colored_record.levelno, '')
+        colored_record.levelname = f"{color}{colored_record.levelname}{self.RESET}"
+        return super().format(colored_record)
 
 
 class LoggerManager:
@@ -120,33 +122,44 @@ class LoggerManager:
     
     def _load_default_config(self) -> Dict[str, Any]:
         """載入預設配置"""
+        default_config = {
+            'level': 'DEBUG',
+            'file_path': './logs/chatbot.log',
+            'max_bytes': 10 * 1024 * 1024,  # 10MB
+            'backup_count': 5,
+            'format': 'simple',
+            'enable_console': True,
+            'enable_file': True,
+        }
+        
         try:
             from .config import load_config
             config = load_config()
-            return {
-                'level': config.get('log_level', 'DEBUG'),  # 改為DEBUG以顯示完整API回應
-                'file_path': config.get('logfile', './logs/chatbot.log'),
-                'max_bytes': 10 * 1024 * 1024,  # 10MB
-                'backup_count': 5,
-                'format': config.get('log_format', 'simple'),  # 改為simple以便閱讀
-                'enable_console': True,
-                'enable_file': True,
-            }
-        except:
-            return {
-                'level': 'DEBUG',  # 備用配置也改為DEBUG
-                'file_path': './logs/chatbot.log',
-                'max_bytes': 10 * 1024 * 1024,
-                'backup_count': 5,
-                'format': 'simple',
-                'enable_console': True,
-                'enable_file': True,
-            }
+            
+            # 安全地合併配置
+            if config:
+                default_config.update({
+                    'level': config.get('log_level', default_config['level']),
+                    'file_path': config.get('logfile', default_config['file_path']),
+                    'format': config.get('log_format', default_config['format']),
+                })
+        except Exception as e:
+            print(f"Warning: Could not load config file, using defaults: {e}")
+        
+        return default_config
     
     def _setup_logger(self):
         """設定日誌記錄器"""
         self.logger = logging.getLogger(self.name)
-        self.logger.setLevel(getattr(logging, self.config['level'].upper()))
+        
+        # 安全地設置日誌級別，如果無效則使用 DEBUG
+        try:
+            level = self.config['level'].upper()
+            log_level = getattr(logging, level)
+            self.logger.setLevel(log_level)
+        except (AttributeError, KeyError):
+            self.logger.setLevel(logging.DEBUG)
+            print(f"Warning: Invalid log level '{self.config.get('level', 'unknown')}', using DEBUG instead")
         
         # 避免重複添加 handler
         if self.logger.handlers:
@@ -156,9 +169,9 @@ class LoggerManager:
         sensitive_filter = SensitiveDataFilter()
         
         # 控制台處理器
-        if self.config['enable_console']:
+        if self.config.get('enable_console', True):
             console_handler = logging.StreamHandler()
-            if self.config['format'] == 'structured':
+            if self.config.get('format', 'simple') == 'structured':
                 console_formatter = StructuredFormatter()
             else:
                 console_formatter = ColoredConsoleFormatter(
@@ -170,18 +183,19 @@ class LoggerManager:
             self.logger.addHandler(console_handler)
         
         # 檔案處理器
-        if self.config['enable_file']:
-            log_dir = os.path.dirname(self.config['file_path'])
+        if self.config.get('enable_file', True):
+            file_path = self.config.get('file_path', './logs/chatbot.log')
+            log_dir = os.path.dirname(file_path)
             os.makedirs(log_dir, exist_ok=True)
             
             file_handler = logging.handlers.RotatingFileHandler(
-                self.config['file_path'],
-                maxBytes=self.config['max_bytes'],
-                backupCount=self.config['backup_count'],
+                file_path,
+                maxBytes=self.config.get('max_bytes', 10 * 1024 * 1024),
+                backupCount=self.config.get('backup_count', 5),
                 encoding='utf-8'
             )
             
-            if self.config['format'] == 'structured':
+            if self.config.get('format', 'simple') == 'structured':
                 file_formatter = StructuredFormatter()
             else:
                 file_formatter = logging.Formatter(
@@ -240,7 +254,7 @@ def setup_request_logging(app):
             if k.lower() not in ['authorization', 'x-line-signature']
         }
         
-        # 記錄請求資訊（不應該捕獲 ValueError）
+        # 記錄請求資訊
         logger.info(
             "Incoming request",
             extra={
@@ -254,7 +268,7 @@ def setup_request_logging(app):
     
     @app.after_request
     def log_response_info(response):
-        # 記錄回應資訊（不應該捕獲 ValueError）
+        # 記錄回應資訊
         logger.info(
             "Response sent",
             extra={
