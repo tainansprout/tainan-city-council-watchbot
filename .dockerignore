@@ -1,0 +1,98 @@
+# Git 相關
+.git
+.gitignore
+.gitattributes
+
+# Python 相關
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache
+.mypy_cache
+.hypothesis
+
+# 開發工具
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.ipynb
+.ipynb_checkpoints/
+
+# 測試相關
+tests/
+test_*
+*_test.py
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache
+
+# 文檔相關
+docs/
+*.md
+!README.md
+!CLAUDE.md
+
+# 環境變數
+.env
+.env.local
+.env.*.local
+
+# Node.js (如有)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 系統檔案
+.DS_Store
+Thumbs.db
+
+# 部署相關
+.deployment
+.vscode/
+.github/
+scripts/
+config/deploy/
+
+# 本地開發
+*.sqlite
+*.sqlite3
+*.db
+temp/
+tmp/
+
+# 日誌檔案
+*.log
+logs/
+
+# 備份檔案
+*.bak
+*.backup
+
+# IDE 檔案
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# 雲端部署檔案
+cloudbuild.yaml
+cloudrun-service.yaml

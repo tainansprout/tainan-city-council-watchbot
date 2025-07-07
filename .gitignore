@@ -250,7 +250,7 @@ kubeconfig
 k8s-secrets.yaml
 
 # Docker
-.dockerignore
+# .dockerignore
 docker-compose.override.yml
 
 # Backup files
