@@ -28,3 +28,5 @@ gunicorn>=21.0.0,<22.0.0
 # Security and validation
 cryptography>=41.0.0,<42.0.0
 python-dateutil>=2.8.0,<3.0.0
+
+psutil
