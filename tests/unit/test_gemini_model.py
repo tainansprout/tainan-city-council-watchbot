@@ -4,6 +4,7 @@ import time
 
 from src.models.gemini_model import GeminiModel
 from src.models.base import FileInfo, RAGResponse, ChatMessage, ChatResponse, ThreadInfo, ModelProvider
+from src.core.bounded_cache import BoundedCache
 
 
 class TestGeminiModel:
@@ -26,7 +27,7 @@ class TestGeminiModel:
         assert model.base_url == 'https://generativelanguage.googleapis.com/v1beta'
         assert model.max_context_tokens == 1000000  # 1M token 上下文
         assert model.default_corpus_name == 'chatbot-knowledge'
-        assert isinstance(model.corpora, dict)
+        assert isinstance(model.corpora, BoundedCache)
         assert 'image' in model.supported_media_types
         assert 'video' in model.supported_media_types
     

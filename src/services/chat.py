@@ -8,16 +8,15 @@ from typing import Dict, Any, Optional, Tuple
 from ..models.base import FullLLMInterface, ModelProvider
 from ..database.connection import Database
 from ..utils import preprocess_text, postprocess_text
-from ..core.exceptions import OpenAIError, DatabaseError, ThreadError
+from ..core.exceptions import ChatBotError, DatabaseError, ThreadError
 from ..core.error_handler import ErrorHandler
 from .response import ResponseFormatter
-from .optimized_audio import get_audio_handler
 from ..platforms.base import PlatformMessage, PlatformResponse, PlatformUser
 
 logger = get_logger(__name__)
 
 
-class CoreChatService:
+class ChatService:
     """
     核心聊天服務 - 處理平台無關的聊天邏輯
     
@@ -36,15 +35,14 @@ class CoreChatService:
         self.config = config
         self.error_handler = ErrorHandler()
         self.response_formatter = ResponseFormatter(config)
-        self.audio_handler = get_audio_handler()  # 使用優化的音訊處理器
         try:
             provider = model.get_provider()
             provider_name = provider.value if hasattr(provider, 'value') else str(provider)
-            logger.info(f"CoreChatService initialized with model: {provider_name}")
+            logger.info(f"ChatService initialized with model: {provider_name}")
         except (ValueError, AttributeError):
             pass
     
-    def process_message(self, message: PlatformMessage) -> PlatformResponse:
+    def handle_message(self, message: PlatformMessage) -> PlatformResponse:
         """
         處理平台訊息並返回統一的回應格式
         
@@ -65,7 +63,11 @@ class CoreChatService:
         if message.message_type == "text":
             return self._handle_text_message(user, message.content, platform)
         elif message.message_type == "audio":
-            return self._handle_audio_message(user, message.raw_data, platform)
+            # 音訊處理由應用層的 AudioService 處理，ChatService 不應該接收到音訊訊息
+            return PlatformResponse(
+                content="系統錯誤：音訊訊息應由應用層處理。",
+                response_type="text"
+            )
         else:
             return PlatformResponse(
                 content="抱歉，暫不支援此類型的訊息。",
@@ -104,63 +106,6 @@ class CoreChatService:
                     content=error_message,
                     response_type="text"
                 )
-    
-    def _handle_audio_message(self, user: PlatformUser, audio_data: bytes, platform: str) -> PlatformResponse:
-        """處理音訊訊息"""
-        import os
-        import uuid
-        from ..core.exceptions import OpenAIError
-        
-        input_audio_path = None
-        
-        try:
-            # 🔥 使用優化的音訊處理器
-            is_successful, transcription, error_message = self.audio_handler.process_audio_optimized(
-                audio_data, self.model
-            )
-            
-            if not is_successful:
-                logger.error(f"音訊轉錄失敗 - 用戶 {user.user_id}: {error_message}")
-                raise Exception(f"音訊處理失敗: {error_message}")
-            
-            if not transcription or not transcription.strip():
-                logger.warning(f"空的轉錄結果 - 用戶 {user.user_id}")
-                raise ValueError("無法識別音訊內容，請嘗試說得更清楚")
-            
-            try:
-                logger.info(f"音訊轉錄成功 - 用戶 {user.user_id}: {transcription[:50]}{'...' if len(transcription) > 50 else ''}")
-            except ValueError:
-                pass
-            
-            # 處理轉錄的文字
-            return self._handle_chat_message(user, transcription, platform)
-            
-        except Exception as e:
-            # 記錄詳細的錯誤 log
-            try:
-                logger.error(f"Error processing audio for user {user.user_id}: {type(e).__name__}: {e}")
-            except ValueError:
-                pass
-            try:
-                logger.error(f"Error details - Platform: {platform}, Audio size: {len(audio_data) if audio_data else 0} bytes")
-            except ValueError:
-                pass
-            
-            # 檢查是否為測試用戶（來自 /chat 介面）
-            is_test_user = user.user_id.startswith("U" + "0" * 32)
-            
-            if is_test_user:
-                # 測試用戶：拋出異常讓上層 /ask 端點處理，顯示詳細錯誤
-                raise
-            else:
-                # 實際平台用戶：使用簡化錯誤訊息
-                error_message = self.error_handler.get_error_message(e, use_detailed=False)
-                return PlatformResponse(
-                    content=error_message,
-                    response_type="text"
-                )
-        
-        # 注意：使用優化音訊處理器後不需要手動清理檔案
     
     def _handle_command(self, user: PlatformUser, text: str, platform: str) -> PlatformResponse:
         """處理指令"""
@@ -246,7 +191,7 @@ class CoreChatService:
                 elif error_message and ('column' in error_message.lower() or 'sql' in error_message.lower()):
                     raise DatabaseError(error_message)
                 else:
-                    raise OpenAIError(f"Chat with user failed: {error_message}")
+                    raise ChatBotError(f"Chat with user failed: {error_message}")
             formatted_response = self.response_formatter.format_rag_response(rag_response)
             try:
                 logger.debug(f"Processed conversation response length: {len(formatted_response)}")
@@ -254,65 +199,11 @@ class CoreChatService:
                 pass
             return formatted_response
         except Exception as e:
-            if isinstance(e, (OpenAIError, DatabaseError)):
+            if isinstance(e, (ChatBotError, DatabaseError)):
                 raise
             # 檢查是否為資料庫相關錯誤
             error_str = str(e).lower()
             if ('database' in error_str or 'sql' in error_str or 'column' in error_str or 
                 'psycopg' in error_str or 'table' in error_str):
                 raise DatabaseError(f"Database operation failed: {e}")
-            raise OpenAIError(f"Conversation processing failed: {e}")
-    
-    def _save_audio_file(self, audio_content: bytes) -> str:
-        """儲存音訊檔案到臨時位置 - 已過時，請使用 OptimizedAudioHandler"""
-        import uuid
-        from ..core.exceptions import OpenAIError
-        
-        try:
-            input_audio_path = f'{str(uuid.uuid4())}.m4a'
-            with open(input_audio_path, 'wb') as fd:
-                fd.write(audio_content)
-            try:
-                logger.debug(f"Audio file saved: {input_audio_path}")
-            except ValueError:
-                pass
-            return input_audio_path
-        except Exception as e:
-            raise OpenAIError(f"Failed to save audio file: {e}")
-
-    def _delete_audio_file(self, file_path: Optional[str]) -> None:
-        """刪除臨時音訊檔案 - 已過時，請使用 OptimizedAudioHandler"""
-        if not file_path:
-            return
-        try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                try:
-                    logger.debug(f"Cleaned up audio file: {file_path}")
-                except ValueError:
-                    pass
-        except Exception as e:
-            try:
-                logger.warning(f"Failed to clean up audio file {file_path}: {e}")
-            except ValueError:
-                pass
-    
-    def _transcribe_audio(self, input_audio_path: str) -> str:
-        """轉錄音訊檔案 - 已過時，請使用 OptimizedAudioHandler"""
-        try:
-            # 使用統一的音訊轉錄接口，不指定特定模型
-            is_successful, transcribed_text, error_message = self.model.transcribe_audio(
-                input_audio_path
-            )
-            
-            if not is_successful:
-                raise OpenAIError(f"Audio transcription failed: {error_message}")
-            
-            return transcribed_text
-            
-        except Exception as e:
-            if isinstance(e, OpenAIError):
-                raise
-            raise OpenAIError(f"Audio transcription error: {e}")
-    
-    
+            raise ChatBotError(f"Conversation processing failed: {e}")

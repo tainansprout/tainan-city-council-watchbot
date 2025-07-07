@@ -11,7 +11,8 @@ from flask import Flask, request, abort
 from src.core.security import (
     SecurityConfig, InputValidator, RateLimiter, SecurityMiddleware,
     verify_line_signature, require_json_input, sanitize_output,
-    security_config, security_middleware, init_security
+    security_config, security_middleware, init_security,
+    get_security_middleware
 )
 
 
@@ -466,8 +467,8 @@ class TestRateLimiter:
         limiter = self._create_test_rate_limiter(time_func=mock_time)
         
         # 添加一些記錄
-        self._call_original_is_allowed(limiter, "client_1", max_requests=10)
-        self._call_original_is_allowed(limiter, "client_2", max_requests=10)
+        limiter.is_allowed("client_1", max_requests=10)
+        limiter.is_allowed("client_2", max_requests=10)
         
         # 驗證有請求記錄
         stats_before = limiter.get_stats()
@@ -479,6 +480,7 @@ class TestRateLimiter:
         # 驗證重置後的狀態
         stats_after = limiter.get_stats()
         assert stats_after['total_requests'] == 0
+        assert stats_after['blocked_requests'] == 0
 
 
 class TestSecurityMiddleware:
@@ -857,18 +859,18 @@ class TestSecurityIntegration:
     def test_rate_limiting_logic(self):
         """測試速率限制邏輯"""
         # 使用測試文件中的輔助方法來創建不受 mock 影響的 RateLimiter
-        test_rate_limiter = TestRateLimiter()
-        rate_limiter = test_rate_limiter._create_test_rate_limiter()
+        rate_limiter = RateLimiter()
         
         # 測試速率限制邏輯
         client_id = "integration_test_client"
+        max_requests = 2
         
         # 前兩個請求應該被允許（限制是 2）
-        result1 = test_rate_limiter._call_original_is_allowed(rate_limiter, client_id, max_requests=2)
-        result2 = test_rate_limiter._call_original_is_allowed(rate_limiter, client_id, max_requests=2)
+        result1 = rate_limiter.is_allowed(client_id, max_requests=max_requests)
+        result2 = rate_limiter.is_allowed(client_id, max_requests=max_requests)
         
         # 第三個請求應該被拒絕
-        result3 = test_rate_limiter._call_original_is_allowed(rate_limiter, client_id, max_requests=2)
+        result3 = rate_limiter.is_allowed(client_id, max_requests=max_requests)
         
         assert result1 is True
         assert result2 is True
@@ -876,7 +878,7 @@ class TestSecurityIntegration:
         
         # 測試重置功能
         rate_limiter.reset()
-        result4 = test_rate_limiter._call_original_is_allowed(rate_limiter, client_id, max_requests=2)
+        result4 = rate_limiter.is_allowed(client_id, max_requests=max_requests)
         assert result4 is True
     
     def test_input_validation_integration(self):
@@ -918,6 +920,124 @@ class TestSecurityConfigReload:
             
             assert new_config.config['general_rate_limit'] == 200
             assert new_config.config['max_message_length'] == 10000
+
+
+class TestOptimizedFeatures:
+    """測試優化功能"""
+    
+    def test_optimized_input_validator_cache(self):
+        """測試優化輸入驗證器的快取功能"""
+        # 清空快取
+        InputValidator.clear_cache()
+        
+        # 測試快取統計
+        stats = InputValidator.get_cache_stats()
+        assert stats['cache_size'] == 0
+        
+        # 測試快取功能
+        text = "test text"
+        result1 = InputValidator.sanitize_text(text)
+        result2 = InputValidator.sanitize_text(text)
+        
+        assert result1 == result2
+        
+        # 檢查快取是否工作
+        stats_after = InputValidator.get_cache_stats()
+        assert stats_after['cache_size'] > 0
+    
+    def test_optimized_rate_limiter_stats(self):
+        """測試優化速率限制器的統計功能"""
+        limiter = RateLimiter()
+        
+        # 發送一些請求
+        # 發送一些請求
+        limiter.is_allowed("client_1", max_requests=5)
+        limiter.is_allowed("client_2", max_requests=5)
+        
+        # 檢查統計
+        stats = limiter.get_stats()
+        
+        assert 'total_requests' in stats
+        assert 'blocked_requests' in stats
+        assert 'active_clients' in stats
+        assert 'success_rate_percent' in stats
+        assert stats['total_requests'] == 2
+        assert stats['active_clients'] == 2
+    
+    def test_optimized_rate_limiter_client_status(self):
+        """測試優化速率限制器的客戶端狀態"""
+        limiter = RateLimiter()
+        
+        # 發送請求
+        limiter.is_allowed("client_test", 10)
+        
+        # 檢查客戶端狀態
+        status = limiter.get_client_status("client_test")
+        
+        assert 'recent_requests_5min' in status
+        assert 'active_windows' in status
+        assert 'last_request_window' in status
+    
+    def test_batch_text_sanitization(self):
+        """測試批次文本清理"""
+        texts = [
+            "normal text",
+            "api_key=secret123",
+            "password=hidden",
+            "clean text"
+        ]
+        
+        results = InputValidator.sanitize_text_batch(texts)
+        
+        assert len(results) == len(texts)
+        assert results[0] == "normal text"
+        assert results[1] == "api_key=secret123"  # 敏感資訊不會被 sanitize_text 替換
+        assert results[2] == "password=hidden"  # 敏感資訊不會被 sanitize_text 替換
+        assert results[3] == "clean text"
+    
+    def test_security_middleware_optimization(self):
+        """測試安全中間件優化功能"""
+        middleware = get_security_middleware()
+        
+        # 測試統一請求檢查
+        allowed, message = middleware.check_request("test_client", "normal", "safe content")
+        assert allowed is True
+        assert message == "OK"
+        
+        # 測試安全統計
+        stats = middleware.get_security_stats()
+        assert 'rate_limiter' in stats
+        assert 'input_validator' in stats
+    
+    def test_is_safe_content_optimization(self):
+        """測試快速內容安全檢查"""
+        # 安全內容
+        assert InputValidator.is_safe_content("This is safe text") is True
+        
+        # 危險內容
+        assert InputValidator.is_safe_content("<script>alert('xss')</script>") is False
+        assert InputValidator.is_safe_content("javascript:alert('xss')") is False
+        assert InputValidator.is_safe_content("eval('malicious code')") is False
+
+
+class TestCoreIntegration:
+    """測試核心整合功能"""
+    
+    def test_integrated_functionality(self):
+        """測試整合後的功能"""
+        # 測試輸入驗證器
+        validator = InputValidator()
+        result = validator.sanitize_text("test")
+        assert isinstance(result, str)
+        
+        # 測試速率限制器
+        limiter = RateLimiter()
+        allowed = limiter.is_allowed("test_client", 10)
+        assert isinstance(allowed, bool)
+        
+        # 測試安全中間件
+        middleware = get_security_middleware()
+        assert hasattr(middleware, 'check_request')
 
 
 if __name__ == "__main__":

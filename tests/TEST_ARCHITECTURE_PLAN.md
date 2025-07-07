@@ -124,7 +124,7 @@ from src.services.chat_service import ChatService
 
 # 新導入  
 from main import create_app, application
-from src.services.core_chat_service import CoreChatService
+from src.services.core_chat_service import ChatService
 ```
 
 ### **測試客戶端更新**

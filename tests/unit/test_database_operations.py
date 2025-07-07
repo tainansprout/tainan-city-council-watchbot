@@ -149,6 +149,164 @@ class TestDatabaseOperations:
             assert result["platform"] == "line"
             assert result["has_thread"] is True
             assert result["thread_id"] == "test_thread_123"
+            assert len(result["conversation_stats"]) == 2
+            assert result["conversation_stats"]["openai"]["count"] == 5
+            assert result["conversation_stats"]["anthropic"]["count"] == 3
+    
+    def test_get_user_summary_no_thread(self, db_ops):
+        """測試沒有線程的用戶摘要獲取"""
+        with patch.object(db_ops, 'session_factory') as mock_session_factory:
+            
+            # 設定 mock session
+            mock_session = Mock()
+            mock_session_factory.return_value.__enter__.return_value = mock_session
+            
+            # 設定線程查詢結果（無線程）
+            mock_session.query.return_value.filter.return_value.first.return_value = None
+            
+            # 設定對話統計查詢結果（空）
+            mock_session.query.return_value.filter.return_value.group_by.return_value.all.return_value = []
+            
+            # 執行摘要獲取
+            result = db_ops.get_user_summary("new_user", "discord")
+            
+            # 驗證結果
+            assert result["user_id"] == "new_user"
+            assert result["platform"] == "discord"
+            assert result["has_thread"] is False
+            assert result["thread_id"] is None
+            assert result["conversation_stats"] == {}
+    
+    def test_get_user_summary_error(self, db_ops):
+        """測試用戶摘要獲取錯誤"""
+        with patch.object(db_ops, 'session_factory') as mock_session_factory:
+            
+            # 模擬異常
+            mock_session_factory.side_effect = Exception("Database connection failed")
+            
+            # 執行摘要獲取
+            result = db_ops.get_user_summary("test_user", "line")
+            
+            # 驗證結果
+            assert "error" in result
+            assert "Database connection failed" in result["error"]
+    
+    def test_cleanup_old_data_error(self, db_ops):
+        """測試舊資料清理錯誤"""
+        with patch.object(db_ops, 'session_factory') as mock_session_factory:
+            
+            # 模擬異常
+            mock_session_factory.side_effect = Exception("Cleanup failed")
+            
+            # 執行清理
+            result = db_ops.cleanup_old_data(days_to_keep=7)
+            
+            # 驗證結果
+            assert "error" in result
+            assert "Cleanup failed" in result["error"]
+    
+    def test_get_database_stats_detailed(self, db_ops):
+        """測試詳細的資料庫統計"""
+        with patch.object(db_ops, 'session_factory') as mock_session_factory:
+            
+            # 設定 mock session
+            mock_session = Mock()
+            mock_session_factory.return_value.__enter__.return_value = mock_session
+            
+            # 設定查詢 mock
+            mock_query = Mock()
+            mock_session.query.return_value = mock_query
+            
+            # 設定統計查詢結果
+            mock_query.scalar.side_effect = [5, 15]  # threads, conversations
+            mock_query.group_by.return_value.all.side_effect = [
+                [('line', 10), ('discord', 5)],  # platform stats
+                [('openai', 8), ('anthropic', 7)]  # provider stats
+            ]
+            
+            # 執行統計獲取
+            result = db_ops._get_database_stats(mock_session)
+            
+            # 驗證結果
+            assert result["total_threads"] == 5
+            assert result["total_conversations"] == 15
+            assert result["conversations_by_platform"]["line"] == 10
+            assert result["conversations_by_platform"]["discord"] == 5
+            assert result["conversations_by_provider"]["openai"] == 8
+            assert result["conversations_by_provider"]["anthropic"] == 7
+    
+    def test_get_database_stats_error(self, db_ops):
+        """測試資料庫統計獲取錯誤"""
+        with patch('src.database.operations.logger') as mock_logger:
+            
+            # 設定 mock session（會拋出異常）
+            mock_session = Mock()
+            mock_session.query.side_effect = Exception("Query failed")
+            
+            # 執行統計獲取
+            result = db_ops._get_database_stats(mock_session)
+            
+            # 驗證結果
+            assert result == {}
+            mock_logger.error.assert_called_once()
+    
+    def test_check_tables_exist_error(self, db_ops):
+        """測試表存在檢查錯誤"""
+        with patch('src.database.operations.logger') as mock_logger:
+            
+            # 設定 mock session（會拋出異常）
+            mock_session = Mock()
+            mock_session.execute.side_effect = Exception("Query failed")
+            
+            # 執行檢查
+            result = db_ops._check_tables_exist(mock_session)
+            
+            # 驗證結果（所有表都標記為不存在）
+            assert result["user_thread_table"] is False
+            assert result["simple_conversation_history"] is False
+            mock_logger.error.assert_called_once()
+    
+    def test_check_tables_exist_partial(self, db_ops, mock_session):
+        """測試部分表存在檢查"""
+        # 設定查詢結果 - 只有第一個表存在
+        mock_session.execute.side_effect = [
+            Mock(fetchone=lambda: [True]),   # user_thread_table exists
+            Mock(fetchone=lambda: [False])   # simple_conversation_history doesn't exist
+        ]
+        
+        # 執行檢查
+        result = db_ops._check_tables_exist(mock_session)
+        
+        # 驗證結果
+        assert result["user_thread_table"] is True
+        assert result["simple_conversation_history"] is False
+    
+    def test_cleanup_old_data_with_custom_days(self, db_ops):
+        """測試自定義天數的舊資料清理"""
+        with patch.object(db_ops, 'session_factory') as mock_session_factory, \
+             patch('src.database.operations.logger') as mock_logger:
+            
+            # 設定 mock session
+            mock_session = Mock()
+            mock_session_factory.return_value.__enter__.return_value = mock_session
+            
+            # 設定查詢 mock
+            mock_query = Mock()
+            mock_session.query.return_value = mock_query
+            
+            # 設定過濾和刪除結果
+            mock_query.filter.return_value.delete.side_effect = [10, 5]  # 刪除的記錄數
+            
+            # 執行清理（7天）
+            result = db_ops.cleanup_old_data(days_to_keep=7)
+            
+            # 驗證結果
+            assert result["deleted_conversations"] == 10
+            assert result["deleted_threads"] == 5
+            
+            # 驗證日誌記錄
+            mock_logger.info.assert_called_once()
+            assert "Cleanup completed" in mock_logger.info.call_args[0][0]
 
 
 class TestDatabaseOperationsSingleton:

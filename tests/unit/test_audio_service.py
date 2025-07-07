@@ -1,476 +1,452 @@
 """
-測試音訊服務模組的單元測試
+測試音訊服務的單元測試
 """
 import pytest
-import os
-import tempfile
-from unittest.mock import Mock, patch, mock_open
-from linebot.v3.messaging import TextMessage
-
-from src.services.audio import AudioService
-from src.core.exceptions import OpenAIError
+from unittest.mock import Mock, patch, MagicMock
+from src.services.audio import (
+    AudioService, process_audio, get_audio_handler, 
+    AudioPerformanceMonitor, get_audio_stats, get_audio_performance_summary
+)
+from src.services.chat import ChatService
+from src.models.base import FullLLMInterface, ModelProvider
+from src.platforms.base import PlatformMessage, PlatformResponse, PlatformUser, PlatformType
+from src.core.exceptions import AudioError
 from src.core.error_handler import ErrorHandler
-from src.models.base import FullLLMInterface
-from src.services.chat import CoreChatService
 
 
 class TestAudioService:
-    """測試音訊服務主要功能"""
+    """測試音訊服務"""
     
     @pytest.fixture
     def mock_model(self):
         """模擬 AI 模型"""
         model = Mock(spec=FullLLMInterface)
+        model.get_provider.return_value = ModelProvider.OPENAI
         return model
     
     @pytest.fixture
     def mock_chat_service(self):
         """模擬聊天服務"""
-        service = Mock()
-        service.handle_message = Mock()
-        return service
+        return Mock(spec=ChatService)
     
     @pytest.fixture
-    def audio_service(self, mock_model, mock_chat_service):
+    def audio_service(self, mock_model):
         """創建音訊服務實例"""
-        return AudioService(mock_model, mock_chat_service)
+        return AudioService(mock_model)
     
-    def test_audio_service_initialization(self, mock_model, mock_chat_service):
+    def test_audio_service_initialization(self, mock_model):
         """測試音訊服務初始化"""
-        service = AudioService(mock_model, mock_chat_service)
+        service = AudioService(mock_model)
         
         assert service.model == mock_model
-        assert service.chat_service == mock_chat_service
         assert isinstance(service.error_handler, ErrorHandler)
     
-    def test_handle_audio_message_success(self, audio_service, mock_model, mock_chat_service):
-        """測試成功處理音訊訊息"""
-        # 準備測試資料
-        user_id = "test_user"
+    @patch('src.services.audio.process_audio')
+    def test_handle_message_success(self, mock_process_audio, audio_service):
+        """測試成功處理音訊訊息 - 僅轉錄"""
+        user_id = "test_user_123"
         audio_content = b"fake_audio_data"
-        platform = "line"
-        expected_text = "Hello, this is transcribed text"
-        expected_response = Mock(spec=TextMessage)
+        transcribed_text = "Hello from audio"
         
-        # 設定 mock 行為
-        mock_model.transcribe_audio.return_value = (True, expected_text, None)
-        mock_chat_service.handle_message.return_value = expected_response
+        # 模擬音訊處理成功
+        mock_process_audio.return_value = (True, transcribed_text, None)
         
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a') as mock_save, \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove') as mock_remove:
-            
-            result = audio_service.handle_audio_message(user_id, audio_content, platform)
-            
-            # 驗證結果
-            assert result == expected_response
-            
-            # 驗證方法呼叫
-            mock_save.assert_called_once_with(audio_content)
-            mock_model.transcribe_audio.assert_called_once_with('test_audio.m4a')
-            mock_chat_service.handle_message.assert_called_once_with(user_id, expected_text, platform)
-            mock_remove.assert_called_once_with('test_audio.m4a')
+        result = audio_service.handle_message(user_id, audio_content, "line")
+        
+        assert result['success'] is True
+        assert result['transcribed_text'] == transcribed_text
+        assert result['error_message'] is None
+        
+        # 驗證音訊處理被調用
+        mock_process_audio.assert_called_once_with(audio_content, audio_service.model)
     
-    def test_handle_audio_message_transcription_failure(self, audio_service, mock_model):
-        """測試音訊轉錄失敗的情況"""
-        user_id = "test_user"
+    @patch('src.services.audio.process_audio')
+    def test_handle_message_transcription_failure(self, mock_process_audio, audio_service):
+        """測試音訊轉錄失敗"""
+        user_id = "test_user_123"
         audio_content = b"fake_audio_data"
+        error_message = "Audio transcription failed"
         
-        # 設定轉錄失敗
-        mock_model.transcribe_audio.return_value = (False, None, "Transcription failed")
+        # 模擬音訊處理失敗
+        mock_process_audio.return_value = (False, None, error_message)
         
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'), \
-             patch.object(audio_service.error_handler, 'handle_error') as mock_error_handler:
-            
-            mock_error_response = Mock(spec=TextMessage)
-            mock_error_handler.return_value = mock_error_response
-            
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 驗證錯誤處理被呼叫
-            mock_error_handler.assert_called_once()
-            assert result == mock_error_response
+        result = audio_service.handle_message(user_id, audio_content, "line")
+        
+        assert result['success'] is False
+        assert result['transcribed_text'] is None
+        assert "Audio transcription failed" in result['error_message']
     
-    def test_handle_audio_message_save_file_failure(self, audio_service):
-        """測試儲存音訊檔案失敗的情況"""
-        user_id = "test_user"
+    @patch('src.services.audio.process_audio')
+    def test_handle_message_exception(self, mock_process_audio, audio_service):
+        """測試音訊處理異常"""
+        user_id = "test_user_123"
         audio_content = b"fake_audio_data"
         
-        with patch.object(audio_service, '_save_audio_file', side_effect=OpenAIError("Save failed")), \
-             patch.object(audio_service.error_handler, 'handle_error') as mock_error_handler:
-            
-            mock_error_response = Mock(spec=TextMessage)
-            mock_error_handler.return_value = mock_error_response
-            
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 驗證錯誤處理被呼叫
-            mock_error_handler.assert_called_once()
-            assert result == mock_error_response
+        # 模擬異常
+        mock_process_audio.side_effect = Exception("Unexpected error")
+        
+        result = audio_service.handle_message(user_id, audio_content, "line")
+        
+        assert result['success'] is False
+        assert result['transcribed_text'] is None
+        assert "Unexpected error" in result['error_message']
     
-    def test_handle_audio_message_cleanup_failure(self, audio_service, mock_model, mock_chat_service):
-        """測試清理檔案失敗但不影響主要流程"""
-        user_id = "test_user"
+    @patch('src.services.audio.process_audio')
+    def test_handle_message_logging(self, mock_process_audio, audio_service):
+        """測試音訊處理的日誌記錄"""
+        user_id = "test_user_123"
         audio_content = b"fake_audio_data"
-        expected_response = Mock(spec=TextMessage)
+        transcribed_text = "Hello from audio"
         
-        # 設定正常的轉錄和處理
-        mock_model.transcribe_audio.return_value = (True, "transcribed text", None)
-        mock_chat_service.handle_message.return_value = expected_response
+        mock_process_audio.return_value = (True, transcribed_text, None)
         
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove', side_effect=OSError("Permission denied")) as mock_remove, \
-             patch('src.services.audio.logger') as mock_logger:
+        with patch('src.services.audio.logger') as mock_logger:
+            audio_service.handle_message(user_id, audio_content, "line")
             
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 主要流程應該成功
-            assert result == expected_response
-            
-            # 清理失敗應該被記錄為警告
-            mock_remove.assert_called_once_with('test_audio.m4a')
-            mock_logger.warning.assert_called_once()
-    
-    def test_handle_audio_message_no_cleanup_if_file_not_exists(self, audio_service, mock_model, mock_chat_service):
-        """測試當檔案不存在時不進行清理"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        expected_response = Mock(spec=TextMessage)
-        
-        mock_model.transcribe_audio.return_value = (True, "transcribed text", None)
-        mock_chat_service.handle_message.return_value = expected_response
-        
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=False), \
-             patch('os.remove') as mock_remove:
-            
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 檔案不存在時不應該嘗試刪除
-            mock_remove.assert_not_called()
-            assert result == expected_response
-    
-    def test_handle_audio_message_default_platform(self, audio_service, mock_model, mock_chat_service):
-        """測試預設平台參數"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        expected_response = Mock(spec=TextMessage)
-        
-        mock_model.transcribe_audio.return_value = (True, "transcribed text", None)
-        mock_chat_service.handle_message.return_value = expected_response
-        
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'):
-            
-            # 不提供 platform 參數，應該使用預設值 'line'
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            mock_chat_service.handle_message.assert_called_once_with(user_id, "transcribed text", 'line')
-            assert result == expected_response
+            # 檢查日誌記錄
+            mock_logger.info.assert_called_once_with(
+                f"Audio transcribed for user {user_id}: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}"
+            )
 
 
-class TestAudioServiceSaveFile:
-    """測試音訊檔案儲存功能"""
+class TestProcessAudio:
+    """測試音訊處理函數"""
+    
+    @patch('src.services.audio.get_audio_handler')
+    def test_process_audio_success(self, mock_get_handler):
+        """測試成功處理音訊"""
+        audio_content = b"fake_audio_data"
+        model_handler = Mock()
+        
+        # 模擬音訊處理器
+        mock_handler = Mock()
+        mock_handler.process_audio.return_value = (True, "transcribed text", None)
+        mock_get_handler.return_value = mock_handler
+        
+        result = process_audio(audio_content, model_handler)
+        
+        assert result == (True, "transcribed text", None)
+        mock_handler.process_audio.assert_called_once_with(audio_content, model_handler)
+    
+    @patch('src.services.audio.get_audio_handler')
+    def test_process_audio_failure(self, mock_get_handler):
+        """測試音訊處理失敗"""
+        audio_content = b"fake_audio_data"
+        model_handler = Mock()
+        
+        # 模擬音訊處理器失敗
+        mock_handler = Mock()
+        mock_handler.process_audio.return_value = (False, "", "Processing failed")
+        mock_get_handler.return_value = mock_handler
+        
+        result = process_audio(audio_content, model_handler)
+        
+        assert result == (False, "", "Processing failed")
+
+
+class TestOptimizedAudioHandler:
+    """測試優化音訊處理器"""
+    
+    def test_get_audio_handler_singleton(self):
+        """測試音訊處理器單例模式"""
+        handler1 = get_audio_handler()
+        handler2 = get_audio_handler()
+        
+        assert handler1 is handler2  # 確保是同一個實例
+    
+    def test_audio_handler_stats(self):
+        """測試音訊處理器統計功能"""
+        handler = get_audio_handler()
+        stats = handler.get_stats()
+        
+        assert isinstance(stats, dict)
+        assert 'total_processed' in stats
+        assert 'memory_processed' in stats
+        assert 'file_processed' in stats
+        assert 'cleanup_count' in stats
+        assert 'average_processing_time' in stats
+
+
+class TestAudioHandlerIntegration:
+    """測試音訊處理器整合功能"""
+    
+    def test_audio_handler_process_audio(self):
+        """測試音訊處理器的優化處理功能"""
+        handler = get_audio_handler()
+        mock_model = Mock()
+        mock_model.transcribe_audio.return_value = (True, "transcribed text", None)
+        
+        # 測試檔案處理模式
+        audio_content = b"fake_audio_data"
+        success, text, error = handler.process_audio(audio_content, mock_model)
+        
+        assert success is True
+        assert text == "transcribed text"
+        assert error is None
+    
+    def test_audio_handler_memory_processing_capability(self):
+        """測試音訊處理器記憶體處理能力檢查"""
+        handler = get_audio_handler()
+        
+        # 測試不支援記憶體處理的模型
+        mock_model_no_memory = Mock()
+        del mock_model_no_memory.supports_memory_audio  # 確保屬性不存在
+        assert handler._can_use_memory_processing(mock_model_no_memory) is False
+        
+        # 測試支援記憶體處理的模型
+        mock_model_with_memory = Mock()
+        mock_model_with_memory.supports_memory_audio = True
+        assert handler._can_use_memory_processing(mock_model_with_memory) is True
+    
+    def test_audio_handler_stats_tracking(self):
+        """測試音訊處理器統計追蹤"""
+        handler = get_audio_handler()
+        initial_stats = handler.get_stats()
+        
+        # 更新統計
+        handler._update_stats(1.5, used_memory=True)
+        updated_stats = handler.get_stats()
+        
+        assert updated_stats['total_processed'] == initial_stats['total_processed'] + 1
+        assert updated_stats['memory_processed'] == initial_stats['memory_processed'] + 1
+        assert updated_stats['average_processing_time'] > 0
+
+
+class TestAudioServiceErrorHandling:
+    """測試音訊服務錯誤處理"""
+    
+    @pytest.fixture
+    def audio_service_with_failing_model(self):
+        """創建有故障模型的音訊服務"""
+        mock_model = Mock(spec=FullLLMInterface)
+        mock_model.transcribe_audio.side_effect = Exception("Model failure")
+        return AudioService(mock_model)
+    
+    def test_audio_service_model_failure_handling(self, audio_service_with_failing_model):
+        """測試音訊服務模型故障處理"""
+        user_id = "test_user_456"
+        audio_content = b"test_audio"
+        
+        with patch('src.services.audio.process_audio', side_effect=Exception("Model failure")):
+            result = audio_service_with_failing_model.handle_message(user_id, audio_content)
+        
+        assert result['success'] is False
+        assert result['transcribed_text'] is None
+        assert 'Model failure' in result['error_message']
+    
+    def test_audio_service_empty_transcription_handling(self):
+        """測試音訊服務空轉錄處理"""
+        mock_model = Mock(spec=FullLLMInterface)
+        audio_service = AudioService(mock_model)
+        
+        # 模擬空轉錄結果
+        with patch('src.services.audio.process_audio', return_value=(True, "", None)):
+            result = audio_service.handle_message("test_user", b"audio_data")
+            
+            # 空轉錄應該被處理為失敗
+            assert result['success'] is False
+            assert result['transcribed_text'] is None
+            assert "無法識別音訊內容" in result['error_message']
+
+
+class TestAudioServicePlatformSupport:
+    """測試音訊服務平台支援"""
     
     @pytest.fixture
     def audio_service(self):
         """創建音訊服務實例"""
         mock_model = Mock(spec=FullLLMInterface)
-        mock_chat_service = Mock()
-        mock_chat_service.handle_message = Mock()
-        return AudioService(mock_model, mock_chat_service)
+        return AudioService(mock_model)
     
-    def test_save_audio_file_success(self, audio_service):
-        """測試成功儲存音訊檔案"""
-        audio_content = b"test_audio_content"
+    def test_different_platform_support(self, audio_service):
+        """測試不同平台支援"""
+        platforms = ['line', 'discord', 'telegram']
         
-        mock_uuid = Mock()
-        mock_uuid.__str__ = Mock(return_value='test-uuid')
-        
-        with patch('builtins.open', mock_open()) as mock_file, \
-             patch('uuid.uuid4', return_value=mock_uuid), \
-             patch('src.services.audio.logger') as mock_logger:
-            
-            result = audio_service._save_audio_file(audio_content)
-            
-            # 驗證檔案路徑格式
-            assert result == 'test-uuid.m4a'
-            
-            # 驗證檔案寫入
-            mock_file.assert_called_once_with('test-uuid.m4a', 'wb')
-            mock_file().write.assert_called_once_with(audio_content)
-            
-            # 驗證除錯日誌
-            mock_logger.debug.assert_called_once()
-    
-    def test_save_audio_file_write_failure(self, audio_service):
-        """測試寫入檔案失敗的情況"""
-        audio_content = b"test_audio_content"
-        
-        mock_uuid = Mock()
-        mock_uuid.__str__ = Mock(return_value='test-uuid')
-        
-        with patch('builtins.open', side_effect=IOError("Disk full")), \
-             patch('uuid.uuid4', return_value=mock_uuid):
-            
-            with pytest.raises(OpenAIError, match="Failed to save audio file.*Disk full"):
-                audio_service._save_audio_file(audio_content)
-    
-    def test_save_audio_file_uuid_generation(self, audio_service):
-        """測試 UUID 生成和檔案名稱格式"""
-        audio_content = b"test_audio_content"
-        
-        # 模擬 UUID
-        mock_uuid = Mock()
-        mock_uuid.__str__ = Mock(return_value='12345678-1234-5678-9012-123456789abc')
-        
-        with patch('builtins.open', mock_open()), \
-             patch('uuid.uuid4', return_value=mock_uuid):
-            
-            result = audio_service._save_audio_file(audio_content)
-            
-            assert result == '12345678-1234-5678-9012-123456789abc.m4a'
+        for platform in platforms:
+            with patch('src.services.audio.process_audio', return_value=(True, "test text", None)):
+                result = audio_service.handle_message("test_user", b"audio", platform)
+                
+                assert result['success'] is True
+                assert result['transcribed_text'] == "test text"
 
 
-class TestAudioServiceTranscribe:
-    """測試音訊轉錄功能"""
+class TestAudioProcessingFunctions:
+    """測試音訊處理相關函數"""
     
-    @pytest.fixture
-    def audio_service(self):
-        """創建音訊服務實例"""
-        mock_model = Mock(spec=FullLLMInterface)
-        mock_chat_service = Mock()
-        mock_chat_service.handle_message = Mock()
-        return AudioService(mock_model, mock_chat_service)
+    @patch('src.services.audio.get_audio_handler')
+    def test_process_audio_exception_handling(self, mock_get_handler):
+        """測試音訊處理異常處理"""
+        audio_content = b"test_audio_data"
+        model_handler = Mock()
+        
+        # 模擬處理器拋出異常
+        mock_handler = Mock()
+        mock_handler.process_audio.side_effect = Exception("Processing error")
+        mock_get_handler.return_value = mock_handler
+        
+        # process_audio 函數會直接調用處理器並傳播異常
+        try:
+            result = process_audio(audio_content, model_handler)
+            assert False, "Expected exception to be raised"
+        except Exception as e:
+            assert "Processing error" in str(e)
     
-    def test_transcribe_audio_success(self, audio_service):
-        """測試成功轉錄音訊"""
-        audio_path = "test_audio.m4a"
-        expected_text = "Hello, this is transcribed text"
+    def test_audio_handler_memory_processing_edge_cases(self):
+        """測試音訊處理器記憶體處理邊界情況"""
+        handler = get_audio_handler()
         
-        # 設定模型返回成功結果
-        audio_service.model.transcribe_audio.return_value = (True, expected_text, None)
+        # 測試 None 模型
+        assert handler._can_use_memory_processing(None) is False
         
-        result = audio_service._transcribe_audio(audio_path)
+        # 測試模型沒有 supports_memory_audio 屬性
+        mock_model_no_attr = Mock()
+        del mock_model_no_attr.supports_memory_audio
+        assert handler._can_use_memory_processing(mock_model_no_attr) is False
         
-        assert result == expected_text
-        audio_service.model.transcribe_audio.assert_called_once_with(audio_path)
+        # 測試模型屬性為 False
+        mock_model_false = Mock()
+        mock_model_false.supports_memory_audio = False
+        assert handler._can_use_memory_processing(mock_model_false) is False
+        
+        # 測試模型屬性為 True
+        mock_model_true = Mock()
+        mock_model_true.supports_memory_audio = True
+        assert handler._can_use_memory_processing(mock_model_true) is True
     
-    def test_transcribe_audio_model_failure(self, audio_service):
-        """測試模型轉錄失敗"""
-        audio_path = "test_audio.m4a"
-        error_message = "Model API error"
+    def test_audio_handler_schedule_cleanup(self):
+        """測試音訊處理器檔案排程清理功能"""
+        handler = get_audio_handler()
         
-        # 設定模型返回失敗結果
-        audio_service.model.transcribe_audio.return_value = (False, None, error_message)
+        # 測試排程清理方法
+        test_file_path = "/tmp/test_audio.wav"
+        handler._schedule_cleanup(test_file_path)
         
-        with pytest.raises(OpenAIError, match=f"Audio transcription failed: {error_message}"):
-            audio_service._transcribe_audio(audio_path)
+        # 驗證檔案被加入清理佇列（由於是異步的，我們檢查內部狀態）
+        assert hasattr(handler, 'temp_files_to_cleanup')
     
-    def test_transcribe_audio_model_exception(self, audio_service):
-        """測試模型拋出異常"""
-        audio_path = "test_audio.m4a"
+    def test_audio_handler_stats_tracking(self):
+        """測試音訊處理器統計追蹤"""
+        handler = get_audio_handler()
+        initial_stats = handler.get_stats()
         
-        # 設定模型拋出異常
-        audio_service.model.transcribe_audio.side_effect = ValueError("Invalid audio format")
+        # 更新統計
+        handler._update_stats(1.5, used_memory=True)
+        updated_stats = handler.get_stats()
         
-        with pytest.raises(OpenAIError, match="Audio transcription error.*Invalid audio format"):
-            audio_service._transcribe_audio(audio_path)
+        assert updated_stats['total_processed'] >= initial_stats['total_processed']
+        assert updated_stats['memory_processed'] >= initial_stats['memory_processed']
     
-    def test_transcribe_audio_openai_error_passthrough(self, audio_service):
-        """測試 OpenAIError 異常的直接傳遞"""
-        audio_path = "test_audio.m4a"
-        original_error = OpenAIError("Original error")
+    def test_audio_handler_memory_usage_calculation(self):
+        """測試音訊處理器記憶體使用率計算"""
+        handler = get_audio_handler()
         
-        # 設定模型拋出 OpenAIError
-        audio_service.model.transcribe_audio.side_effect = original_error
+        # 測試記憶體使用率方法
+        memory_percent = handler.get_memory_usage_percent()
         
-        with pytest.raises(OpenAIError, match="Original error"):
-            audio_service._transcribe_audio(audio_path)
-    
-    def test_transcribe_audio_model_parameters(self, audio_service):
-        """測試轉錄時傳遞正確的模型參數"""
-        audio_path = "test_audio.m4a"
-        
-        audio_service.model.transcribe_audio.return_value = (True, "text", None)
-        
-        audio_service._transcribe_audio(audio_path)
-        
-        # 驗證傳遞了正確的模型參數
-        audio_service.model.transcribe_audio.assert_called_once_with(
-            audio_path
-        )
-
-
-class TestAudioServiceLogging:
-    """測試音訊服務的日誌功能"""
-    
-    @pytest.fixture
-    def audio_service(self):
-        """創建音訊服務實例"""
-        mock_model = Mock(spec=FullLLMInterface)
-        mock_chat_service = Mock()
-        mock_chat_service.handle_message = Mock()
-        return AudioService(mock_model, mock_chat_service)
-    
-    def test_successful_transcription_logging(self, audio_service):
-        """測試成功轉錄的日誌記錄"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        transcribed_text = "Hello world"
-        
-        audio_service.model.transcribe_audio.return_value = (True, transcribed_text, None)
-        audio_service.chat_service.handle_message.return_value = Mock()
-        
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'), \
-             patch('src.services.audio.logger') as mock_logger:
-            
-            audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 驗證轉錄成功的日誌
-            mock_logger.info.assert_called_with(f"Audio transcribed for user {user_id}: {transcribed_text}")
-    
-    def test_error_logging(self, audio_service):
-        """測試錯誤情況的日誌記錄"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        
-        with patch.object(audio_service, '_save_audio_file', side_effect=Exception("Test error")), \
-             patch.object(audio_service.error_handler, 'handle_error', return_value=Mock()), \
-             patch('src.services.audio.logger') as mock_logger:
-            
-            audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 驗證錯誤日誌
-            mock_logger.error.assert_called_with(f"Error processing audio for user {user_id}: Test error")
-    
-    def test_cleanup_success_logging(self, audio_service):
-        """測試清理成功的日誌記錄"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        audio_path = 'test_audio.m4a'
-        
-        audio_service.model.transcribe_audio.return_value = (True, "text", None)
-        audio_service.chat_service.handle_message.return_value = Mock()
-        
-        with patch.object(audio_service, '_save_audio_file', return_value=audio_path), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'), \
-             patch('src.services.audio.logger') as mock_logger:
-            
-            audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 驗證清理成功的日誌
-            mock_logger.debug.assert_any_call(f"Cleaned up audio file: {audio_path}")
-    
-    def test_cleanup_failure_logging(self, audio_service):
-        """測試清理失敗的日誌記錄"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        audio_path = 'test_audio.m4a'
-        
-        audio_service.model.transcribe_audio.return_value = (True, "text", None)
-        audio_service.chat_service.handle_message.return_value = Mock()
-        
-        with patch.object(audio_service, '_save_audio_file', return_value=audio_path), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove', side_effect=OSError("Permission denied")), \
-             patch('src.services.audio.logger') as mock_logger:
-            
-            audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 驗證清理失敗的警告日誌
-            mock_logger.warning.assert_called_with(f"Failed to clean up audio file {audio_path}: Permission denied")
+        # 應該回傳一個介於 0-100 之間的數值
+        assert isinstance(memory_percent, float)
+        assert 0 <= memory_percent <= 100
 
 
 class TestAudioServiceEdgeCases:
-    """測試音訊服務的邊界情況"""
+    """測試音訊服務邊界情況"""
     
     @pytest.fixture
     def audio_service(self):
         """創建音訊服務實例"""
         mock_model = Mock(spec=FullLLMInterface)
-        mock_chat_service = Mock()
-        mock_chat_service.handle_message = Mock()
-        return AudioService(mock_model, mock_chat_service)
+        return AudioService(mock_model)
     
-    def test_empty_audio_content(self, audio_service):
-        """測試空的音訊內容"""
-        user_id = "test_user"
-        audio_content = b""  # 空內容
-        
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'), \
-             patch.object(audio_service.error_handler, 'handle_error') as mock_error_handler:
+    def test_handle_message_with_none_audio_content(self, audio_service):
+        """測試處理 None 音訊內容"""
+        with patch('src.services.audio.process_audio', side_effect=TypeError("a bytes-like object is required, not 'NoneType'")):
+            result = audio_service.handle_message("test_user", None, "line")
             
-            # 設定轉錄失敗（因為空內容）
-            audio_service.model.transcribe_audio.return_value = (False, None, "Empty audio")
-            mock_error_handler.return_value = Mock()
-            
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 應該處理錯誤並返回錯誤訊息
-            mock_error_handler.assert_called_once()
+            assert result['success'] is False
+            assert result['transcribed_text'] is None
+            assert "a bytes-like object is required" in result['error_message']
     
-    def test_very_long_transcribed_text(self, audio_service):
-        """測試非常長的轉錄文字"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        long_text = "A" * 10000  # 10,000 字元的長文字
-        
-        audio_service.model.transcribe_audio.return_value = (True, long_text, None)
-        expected_response = Mock()
-        audio_service.chat_service.handle_message.return_value = expected_response
-        
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'):
+    def test_handle_message_with_empty_audio_content(self, audio_service):
+        """測試處理空音訊內容"""
+        with patch('src.services.audio.process_audio', return_value=(True, "", None)):
+            result = audio_service.handle_message("test_user", b"", "line")
             
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 應該能正常處理長文字
-            audio_service.chat_service.handle_message.assert_called_once_with(user_id, long_text, 'line')
-            assert result == expected_response
+            # 空轉錄應該被處理為失敗
+            assert result['success'] is False
+            assert result['transcribed_text'] is None
+            assert "無法識別音訊內容" in result['error_message']
     
-    def test_special_characters_in_transcription(self, audio_service):
-        """測試轉錄結果包含特殊字元"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
-        special_text = "Hello! 你好 🎵 @#$%^&*()_+"
-        
-        audio_service.model.transcribe_audio.return_value = (True, special_text, None)
-        expected_response = Mock()
-        audio_service.chat_service.handle_message.return_value = expected_response
-        
-        with patch.object(audio_service, '_save_audio_file', return_value='test_audio.m4a'), \
-             patch('os.path.exists', return_value=True), \
-             patch('os.remove'):
+    def test_handle_message_with_invalid_user_id(self, audio_service):
+        """測試處理無效用戶 ID"""
+        with patch('src.services.audio.process_audio', return_value=(True, "test", None)):
+            result = audio_service.handle_message("", b"audio_data", "line")
             
-            result = audio_service.handle_audio_message(user_id, audio_content)
-            
-            # 應該能正常處理特殊字元
-            audio_service.chat_service.handle_message.assert_called_once_with(user_id, special_text, 'line')
-            assert result == expected_response
+            # 應該仍然正常處理
+            assert result['success'] is True
+            assert result['transcribed_text'] == "test"
     
-    def test_none_audio_path_in_cleanup(self, audio_service):
-        """測試音訊路徑為 None 時的清理行為"""
-        user_id = "test_user"
-        audio_content = b"fake_audio_data"
+    def test_handle_message_logging_with_long_transcription(self, audio_service):
+        """測試長轉錄文字的日誌記錄"""
+        long_text = "A" * 100  # 超過 50 字符的文字
         
-        with patch.object(audio_service, '_save_audio_file', side_effect=Exception("Save failed")), \
-             patch('os.path.exists') as mock_exists, \
-             patch('os.remove') as mock_remove, \
-             patch.object(audio_service.error_handler, 'handle_error', return_value=Mock()):
+        with patch('src.services.audio.process_audio', return_value=(True, long_text, None)), \
+             patch('src.services.audio.logger') as mock_logger:
             
-            audio_service.handle_audio_message(user_id, audio_content)
+            result = audio_service.handle_message("test_user", b"audio_data", "line")
             
-            # 當 input_audio_path 為 None 時，不應該檢查檔案存在性或刪除檔案
-            mock_exists.assert_not_called()
-            mock_remove.assert_not_called()
+            # 驗證日誌記錄被截斷
+            assert result['success'] is True
+            mock_logger.info.assert_called_once()
+            log_message = mock_logger.info.call_args[0][0]
+            assert "..." in log_message  # 確認有截斷標記
+    
+    def test_handle_message_with_whitespace_only_transcription(self, audio_service):
+        """測試只有空白字符的轉錄結果"""
+        with patch('src.services.audio.process_audio', return_value=(True, "   \n\t  ", None)):
+            result = audio_service.handle_message("test_user", b"audio_data", "line")
+            
+            # 空白字符應該被處理為失敗
+            assert result['success'] is False
+            assert result['transcribed_text'] is None
+            assert "無法識別音訊內容" in result['error_message']
+    
+    def test_handle_message_error_handler_integration(self, audio_service):
+        """測試錯誤處理器整合"""
+        mock_error = Exception("Test error")
+        
+        with patch('src.services.audio.process_audio', side_effect=mock_error):
+            result = audio_service.handle_message("test_user", b"audio_data", "line")
+            
+            # 驗證錯誤被捕獲並處理
+            assert result['success'] is False
+            assert result['transcribed_text'] is None
+            assert "Test error" in result['error_message']
+
+
+class TestAudioPerformanceMonitoring:
+    """測試音訊性能監控"""
+    
+    def test_performance_monitor_initialization(self):
+        """測試性能監控器初始化"""
+        monitor = AudioPerformanceMonitor()
+        summary = monitor.get_performance_summary()
+        
+        assert 'uptime_seconds' in summary
+        assert 'total_audio_processed' in summary
+        assert 'memory_processing_rate' in summary
+        assert 'average_processing_time' in summary
+        assert 'cleanup_efficiency' in summary
+    
+    def test_audio_stats_global_functions(self):
+        """測試全域音訊統計函數"""
+        stats = get_audio_stats()
+        performance = get_audio_performance_summary()
+        
+        assert isinstance(stats, dict)
+        assert isinstance(performance, dict)
+        assert 'total_processed' in stats
+        assert 'uptime_seconds' in performance
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

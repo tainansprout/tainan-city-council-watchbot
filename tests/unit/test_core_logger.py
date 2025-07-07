@@ -9,7 +9,8 @@ import logging
 from unittest.mock import Mock, patch, mock_open
 from src.core.logger import (
     SensitiveDataFilter, StructuredFormatter, ColoredConsoleFormatter,
-    LoggerManager, get_logger
+    LoggerManager, get_logger, AsyncLogHandler, setup_optimized_logger,
+    get_logger_stats, LoggerPerformanceMonitor
 )
 
 
@@ -30,15 +31,43 @@ class TestSensitiveDataFilter:
         filter_obj = SensitiveDataFilter()
         
         test_cases = [
-            ("API_KEY=sk-1234567890abcdef", "API_KEY=***REDACTED***"),
-            ("Bearer eyJ0eXAiOiJKV1QiLCJhbGc", "Bearer ***REDACTED***"),
-            ("password=secret123", "password=***REDACTED***"),
+            ("API_KEY=sk-1234567890abcdef", "API_KEY=***"),
+            ("Bearer eyJ0eXAiOiJKV1QiLCJhbGc", "Bearer ***"),
+            ("password=secret123", "password=***"),
             ("Normal text without secrets", "Normal text without secrets")
         ]
         
         for input_text, expected in test_cases:
             result = filter_obj._sanitize_string(input_text)
             assert result == expected
+    
+    def test_sanitize_fast_optimized(self):
+        """測試優化的快速清理功能"""
+        # 測試快取功能
+        text1 = "test_api_key=secret123"
+        
+        # 第一次調用
+        result1 = SensitiveDataFilter.sanitize_fast(text1)
+        
+        # 第二次調用（應該從快取取得）
+        result2 = SensitiveDataFilter.sanitize_fast(text1)
+        
+        assert result1 == result2
+        assert "***" in result1
+    
+    def test_cache_functionality(self):
+        """測試快取功能"""
+        # 清空快取
+        SensitiveDataFilter.clear_cache()
+        
+        # 測試快取統計
+        stats = SensitiveDataFilter.get_cache_stats()
+        assert stats['cache_size'] == 0
+        
+        # 添加一些項目到快取
+        SensitiveDataFilter.sanitize_fast("short_text")
+        stats_after = SensitiveDataFilter.get_cache_stats()
+        assert stats_after['cache_size'] > 0
     
     def test_sanitize_dict_nested(self):
         """測試清理嵌套字典"""
@@ -365,13 +394,96 @@ class TestLoggerIntegration:
             assert manager.logger.level == logging.DEBUG
 
 
-class TestBackwardCompatibility:
-    """測試向後兼容性"""
+class TestAsyncLogHandler:
+    """測試異步日誌處理器"""
     
-    def test_deprecated_aliases(self):
-        """測試已棄用的類別名稱"""
-        # 這些應該仍然可用但會發出警告
-        from src.core.logger import LoggerManager as LegacyLoggerFactory
+    def test_async_handler_initialization(self):
+        """測試異步處理器初始化"""
+        target_handler = Mock()
+        async_handler = AsyncLogHandler(target_handler, queue_size=100)
         
-        manager = LegacyLoggerFactory()
+        assert async_handler.target_handler == target_handler
+        assert async_handler.log_queue.maxsize == 100
+        assert async_handler.worker_thread is not None
+        assert async_handler.worker_thread.is_alive()
+    
+    def test_async_handler_emit(self):
+        """測試異步處理器發送日誌"""
+        target_handler = Mock()
+        async_handler = AsyncLogHandler(target_handler, queue_size=100)
+        
+        record = logging.LogRecord(
+            name='test', level=logging.INFO, pathname='test.py',
+            lineno=1, msg='test message', args=(), exc_info=None
+        )
+        
+        async_handler.emit(record)
+        
+        # 等待一下讓工作執行緒處理
+        import time
+        time.sleep(0.1)
+        
+        # 檢查目標處理器是否被調用
+        target_handler.emit.assert_called()
+    
+    def test_async_handler_stats(self):
+        """測試異步處理器統計"""
+        target_handler = Mock()
+        async_handler = AsyncLogHandler(target_handler, queue_size=100)
+        
+        stats = async_handler.get_stats()
+        
+        assert 'queue_size' in stats
+        assert 'dropped_logs' in stats
+        assert 'worker_alive' in stats
+
+
+class TestOptimizedFeatures:
+    """測試優化功能"""
+    
+    def test_setup_optimized_logger(self):
+        """測試設置優化日誌記錄器"""
+        logger = setup_optimized_logger('test_optimized', enable_async=False)
+        
+        assert logger.name == 'test_optimized'
+        assert isinstance(logger, logging.Logger)
+    
+    def test_performance_monitor(self):
+        """測試效能監控器"""
+        monitor = LoggerPerformanceMonitor()
+        
+        # 記錄一些日誌
+        monitor.record_log('INFO')
+        monitor.record_log('ERROR')
+        
+        stats = monitor.get_stats()
+        
+        assert stats['total_logs'] == 2
+        assert stats['log_levels']['INFO'] == 1
+        assert stats['log_levels']['ERROR'] == 1
+        assert 'uptime_seconds' in stats
+        assert 'logs_per_second' in stats
+    
+    def test_logger_stats(self):
+        """測試日誌系統統計"""
+        stats = get_logger_stats()
+        
+        assert 'performance' in stats
+        assert 'manager' in stats
+
+
+class TestCoreIntegration:
+    """測試核心整合功能"""
+    
+    def test_integrated_functionality(self):
+        """測試整合後的功能"""
+        manager = LoggerManager()
         assert isinstance(manager, LoggerManager)
+        
+        # 測試敏感資料過濾器
+        filter_obj = SensitiveDataFilter()
+        assert hasattr(filter_obj, 'sanitize_fast')
+        
+        # 測試異步處理器
+        async_handler = AsyncLogHandler(Mock())
+        assert hasattr(async_handler, 'get_stats')

@@ -479,7 +479,7 @@ class TestExternalServiceIntegration:
             
             # 執行完整流程測試
             from src.models.openai_model import OpenAIModel
-            from src.services.chat import CoreChatService
+            from src.services.chat import ChatService
             from src.database import Database
             
             db_config = {'host': 'localhost', 'port': 5432, 'db_name': 'test', 'user': 'test_user', 'password': 'test_password'}
@@ -500,9 +500,9 @@ class TestExternalServiceIntegration:
                 mock_get_session.return_value.__enter__.return_value = mock_session
                 mock_get_session.return_value.__exit__.return_value = None
                 
-                chat_service = CoreChatService(model, db, chat_config)
+                chat_service = ChatService(model, db, chat_config)
                 
-                # 測試服務鏈 - use process_message instead of handle_message
+                # 測試服務鏈 - use handle_message
                 from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
                 platform_message = PlatformMessage(
                     message_id='test_msg_123',
@@ -510,7 +510,7 @@ class TestExternalServiceIntegration:
                     user=PlatformUser(user_id='test_user', platform=PlatformType.LINE, display_name='Test User'),
                     message_type='text'
                 )
-                response = chat_service.process_message(platform_message)
+                response = chat_service.handle_message(platform_message)
                 
                 # 驗證整合結果
                 assert response is not None

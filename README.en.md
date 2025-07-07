@@ -4,6 +4,8 @@
 
 This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram and other platforms, integrated with multiple AI model providers (OpenAI, Anthropic Claude, Google Gemini, Ollama). The bot features modular architecture design, deployed on Google Cloud Run with Google Cloud SQL for conversation history management, and supports both text and audio message processing.
 
+**🆕 v2.1 Core Infrastructure Integration Upgrade**: High-performance logging system and security module integration, optimizing performance and simplifying maintenance.
+
 ## Core Features
 
 🤖 **Multi-AI Model Support**: Unified interface integrating OpenAI, Anthropic, Gemini, Ollama  
@@ -274,7 +276,7 @@ vim config/config.yml
 # Application information
 app:
   name: "Multi-Platform Chat Bot"
-  version: "2.0.0"
+  version: "2.1.0"
 
 # AI model settings (choose one as primary provider)
 llm:
@@ -586,6 +588,29 @@ auth:
 
 ## System Architecture
 
+### 🎯 **Core Module Integration (v2.1)**
+
+Core infrastructure has been integrated and upgraded for improved performance and maintainability:
+
+#### Integration Module Description
+- **src/core/logger.py**: Integrated high-performance logging system (removed optimized_logger.py)
+  - Pre-compiled regex patterns for sensitive data filtering
+  - Asynchronous log processing to avoid I/O blocking
+  - Structured log format with colored console output
+  - Performance monitoring and statistics
+
+- **src/core/security.py**: Integrated security module (removed optimized_security.py)
+  - O(1) complexity rate limiter
+  - Pre-compiled regex patterns for input validation
+  - Security configuration management and middleware
+  - Caching mechanisms for improved cleaning performance
+
+#### Architecture Optimization Results
+- ✅ **Reduced File Count**: Removed duplicate optimized_* files
+- ✅ **Performance Improvement**: Pre-compiled regex patterns, async processing, caching mechanisms
+- ✅ **Simplified Maintenance**: Unified module interfaces, reduced complexity
+- ✅ **Backward Compatibility**: Existing API interfaces remain unchanged
+
 ### Core Components
 
 ```
@@ -603,10 +628,10 @@ auth:
                     ┌──────────────────────────┐
                     │      Service Layer      │
                     ├──────────────────────────┤
-                    │ • chat.py (Chat Service) │
+                    │ • chat.py (Text Chat)    │
+                    │ • audio.py (Audio Trans) │
                     │ • conversation.py (Conv) │
                     │ • response.py (Response) │
-                    │ • audio.py (Audio Proc)  │
                     └──────────────────────────┘
                                   │
                     ┌──────────────────────────┐
@@ -624,22 +649,39 @@ auth:
 ```
 src/
 ├── services/           # Service Layer
-│   ├── chat.py        # Core chat service
+│   ├── chat.py        # Core text chat service
+│   ├── audio.py       # Audio transcription service
 │   ├── conversation.py # Conversation management
-│   ├── response.py    # Response formatting
-│   └── audio.py       # Audio processing
+│   └── response.py    # Response formatting
 ├── database/          # Database Layer
 │   ├── connection.py  # Database connection
 │   ├── models.py      # Data models
 │   ├── operations.py  # Database operations
 │   └── init_db.py     # Database initialization
+├── core/              # Core Infrastructure (v2.1 Integrated)
+│   ├── config.py      # Configuration manager
+│   ├── logger.py      # Integrated high-performance logging system
+│   ├── security.py    # Integrated security module
+│   ├── error_handler.py # Error handling
+│   ├── auth.py        # Authentication system
+│   └── memory.py      # Memory management
+├── platforms/         # Platform Support
+│   ├── base.py        # Platform abstraction interface
+│   ├── factory.py     # Platform factory
+│   └── line_handler.py # LINE platform handler
+├── models/           # AI Model Integration
+│   ├── base.py       # Model abstraction interface
+│   ├── factory.py    # Model factory
+│   ├── openai_model.py # OpenAI integration
+│   ├── anthropic_model.py # Anthropic integration
+│   ├── gemini_model.py # Gemini integration
+│   └── ollama_model.py # Ollama integration
 ├── templates/         # Web templates
 │   ├── chat.html
 │   └── login.html
-├── platforms/         # Platform support
-├── models/           # AI model integration
-├── core/             # Core modules
 └── utils/            # Utility modules
+    ├── main.py       # Text processing utilities
+    └── retry.py      # Retry mechanisms
 
 scripts/
 └── setup_database.py # One-click database setup
@@ -655,7 +697,15 @@ alembic/               # Database migration management
 
 All AI models' document citations are unified through `ResponseFormatter`:
 
-**Processing Flow**:
+**Message Processing Flow**:
+
+**Text Message Flow**:
+1. **Platform Input** → ChatService → AI Model → ResponseFormatter → **Platform Output**
+
+**Audio Message Flow**:
+1. **Platform Input** → AudioService (Transcription) → app.py (Orchestration) → ChatService → AI Model → ResponseFormatter → **Platform Output**
+
+**Citation Processing Flow**:
 1. **AI Model Response** → Contains RAGResponse (answer + sources)
 2. **ResponseFormatter** → Unifies source formatting to readable citations
 3. **Final Response** → Consistent citation format `[1]: Document Name`

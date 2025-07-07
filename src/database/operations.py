@@ -5,6 +5,7 @@
 from ..core.logger import get_logger
 from typing import Dict, List, Optional
 from sqlalchemy import text, func
+from datetime import datetime, timedelta
 from .connection import Database
 from .models import get_db_session, UserThreadTable, SimpleConversationHistory
 

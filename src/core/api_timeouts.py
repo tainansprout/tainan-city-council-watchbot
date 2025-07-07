@@ -4,6 +4,7 @@
 """
 
 from typing import Dict, Union
+from ..core.logger import get_logger
 
 
 class SmartTimeoutConfig:
@@ -137,7 +138,6 @@ class TimeoutContext:
         
         # 記錄超時事件
         if exc_type and 'timeout' in str(exc_val).lower():
-            from ..core.logger import get_logger
             logger = get_logger(__name__)
             logger.warning(
                 f"操作超時: {self.operation_type}, "

@@ -28,7 +28,7 @@ class BoundedCache:
         self.cache: OrderedDict = OrderedDict()
         self.max_size = max_size
         self.ttl = ttl
-        self.access_times: Dict[Any, float] = {} if ttl else None
+        self.access_times: Dict[Any, float] = {} if ttl is not None else None
         self.lock = threading.RLock()
         
         # 統計資訊
@@ -42,8 +42,8 @@ class BoundedCache:
         """取得快取值，支援 LRU 更新"""
         with self.lock:
             # 檢查 TTL 過期
-            if self.ttl and self.access_times and key in self.access_times:
-                if time.time() - self.access_times[key] > self.ttl:
+            if self.ttl is not None and key in self.cache:
+                if time.time() - self.access_times.get(key, 0) > self.ttl:
                     self._remove_expired(key)
                     self.miss_count += 1
                     return default
@@ -68,7 +68,9 @@ class BoundedCache:
                 # 更新現有項目
                 self.cache.move_to_end(key)
                 self.cache[key] = value
-                if self.access_times:
+                if self.ttl is not None:
+                    if self.access_times is None:
+                        self.access_times = {}
                     self.access_times[key] = current_time
             else:
                 # 新增項目，檢查是否需要淘汰
@@ -76,7 +78,9 @@ class BoundedCache:
                     self._evict_oldest()
                 
                 self.cache[key] = value
-                if self.access_times:
+                if self.ttl is not None:
+                    if self.access_times is None:
+                        self.access_times = {}
                     self.access_times[key] = current_time
     
     def __setitem__(self, key: Any, value: Any) -> None:

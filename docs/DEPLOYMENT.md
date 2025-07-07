@@ -116,11 +116,14 @@ echo -n "$TEST_PASSWORD" | gcloud secrets create test-password --data-file=-
 # 載入環境變數
 source config/deploy/.env
 
+# 設定project
+gcloud config set project $PROJECT_ID
+
 # 建立 Docker 映像
 gcloud builds submit --tag asia.gcr.io/$PROJECT_ID/$SERVICE_NAME
 
 # 部署到 Cloud Run
-gcloud run deploy $SERVICE_NAME--image asia.gcr.io/$PROJECT_ID/$SERVICE_NAME --platform managed --port 8080 --memory 4G --timeout=3m
+gcloud run deploy $SERVICE_NAME --image asia.gcr.io/$PROJECT_ID/$SERVICE_NAME --platform managed --port 8080 --memory 4G --timeout=3m
 ```
 
 ### 步驟 5: 設定 Load Balancer（可選但推薦）

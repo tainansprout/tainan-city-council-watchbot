@@ -5,16 +5,16 @@ import pytest
 import os
 import time
 from unittest.mock import Mock, patch, MagicMock, mock_open
-from src.services.chat import CoreChatService
+from src.services.chat import ChatService
 from src.models.base import FullLLMInterface, ModelProvider, RAGResponse, ChatMessage
 from src.database.connection import Database
 from src.platforms.base import PlatformMessage, PlatformResponse, PlatformUser, PlatformType
-from src.core.exceptions import OpenAIError, DatabaseError, ThreadError
+from src.core.exceptions import ChatBotError, DatabaseError, ThreadError
 from src.core.error_handler import ErrorHandler
 from src.services.response import ResponseFormatter
 
 
-class TestCoreChatServiceInitialization:
+class TestChatServiceInitialization:
     """測試核心聊天服務初始化"""
     
     @pytest.fixture
@@ -45,7 +45,7 @@ class TestCoreChatServiceInitialization:
     
     def test_initialization_success(self, mock_model, mock_database, mock_config):
         """測試成功初始化"""
-        service = CoreChatService(mock_model, mock_database, mock_config)
+        service = ChatService(mock_model, mock_database, mock_config)
         
         assert service.model == mock_model
         assert service.database == mock_database
@@ -58,16 +58,16 @@ class TestCoreChatServiceInitialization:
         mock_model.get_provider.return_value = ModelProvider.ANTHROPIC
         
         with patch('src.services.chat.logger') as mock_logger:
-            service = CoreChatService(mock_model, mock_database, mock_config)
+            service = ChatService(mock_model, mock_database, mock_config)
             
-            mock_logger.info.assert_called_once_with("CoreChatService initialized with model: anthropic")
+            mock_logger.info.assert_called_once_with("ChatService initialized with model: anthropic")
     
     def test_initialization_with_invalid_provider(self, mock_model, mock_database, mock_config):
         """測試初始化時處理無效的模型提供商"""
         mock_model.get_provider.side_effect = ValueError("Invalid provider")
         
         with patch('src.services.chat.logger') as mock_logger:
-            service = CoreChatService(mock_model, mock_database, mock_config)
+            service = ChatService(mock_model, mock_database, mock_config)
             
             # 應該不會拋出異常，只是不記錄日誌
             assert service.model == mock_model
@@ -84,7 +84,7 @@ class TestProcessMessage:
         mock_model.get_provider.return_value = ModelProvider.OPENAI
         mock_database = Mock(spec=Database)
         mock_config = {'commands': {}}
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -110,13 +110,13 @@ class TestProcessMessage:
         )
         
         with patch.object(chat_service, '_handle_text_message', return_value=expected_response) as mock_handle:
-            result = chat_service.process_message(message)
+            result = chat_service.handle_message(message)
             
             assert result == expected_response
             mock_handle.assert_called_once_with(mock_user, "Hello world", "line")
     
     def test_process_audio_message(self, chat_service, mock_user):
-        """測試處理音訊訊息"""
+        """測試處理音訊訊息 - 應該返回要通過 AudioService 處理的訊息"""
         audio_data = b"fake_audio_data"
         message = PlatformMessage(
             message_id="msg_124",
@@ -126,16 +126,10 @@ class TestProcessMessage:
             raw_data=audio_data
         )
         
-        expected_response = PlatformResponse(
-            content="Audio processed",
-            response_type="text"
-        )
+        result = chat_service.handle_message(message)
         
-        with patch.object(chat_service, '_handle_audio_message', return_value=expected_response) as mock_handle:
-            result = chat_service.process_message(message)
-            
-            assert result == expected_response
-            mock_handle.assert_called_once_with(mock_user, audio_data, "line")
+        assert "系統錯誤：音訊訊息應由應用層處理" in result.content
+        assert result.response_type == "text"
     
     def test_process_unsupported_message_type(self, chat_service, mock_user):
         """測試處理不支援的訊息類型"""
@@ -146,12 +140,12 @@ class TestProcessMessage:
             message_type="video"
         )
         
-        result = chat_service.process_message(message)
+        result = chat_service.handle_message(message)
         
         assert result.content == "抱歉，暫不支援此類型的訊息。"
         assert result.response_type == "text"
     
-    def test_process_message_logging(self, chat_service, mock_user):
+    def test_handle_message_logging(self, chat_service, mock_user):
         """測試訊息處理的日誌記錄"""
         message = PlatformMessage(
             message_id="msg_126",
@@ -163,13 +157,13 @@ class TestProcessMessage:
         with patch.object(chat_service, '_handle_text_message', return_value=Mock()), \
              patch('src.services.chat.logger') as mock_logger:
             
-            chat_service.process_message(message)
+            chat_service.handle_message(message)
             
             mock_logger.info.assert_called_once_with(
                 'Processing message from test_user_123 on line: Test message'
             )
     
-    def test_process_message_logging_value_error(self, chat_service, mock_user):
+    def test_handle_message_logging_value_error(self, chat_service, mock_user):
         """測試訊息處理日誌記錄時的 ValueError 處理"""
         message = PlatformMessage(
             message_id="msg_126",
@@ -184,7 +178,7 @@ class TestProcessMessage:
             mock_logger.info.side_effect = ValueError("Logger error")
             
             # 應該不會拋出異常
-            result = chat_service.process_message(message)
+            result = chat_service.handle_message(message)
             assert result is not None
 
 
@@ -198,7 +192,7 @@ class TestHandleTextMessage:
         mock_model.get_provider.return_value = ModelProvider.OPENAI
         mock_database = Mock(spec=Database)
         mock_config = {'commands': {}}
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -272,102 +266,10 @@ class TestHandleTextMessage:
             )
 
 
-class TestHandleAudioMessage:
-    """測試音訊訊息處理"""
-    
-    @pytest.fixture
-    def chat_service(self):
-        """創建聊天服務實例"""
-        mock_model = Mock(spec=FullLLMInterface)
-        mock_model.get_provider.return_value = ModelProvider.OPENAI
-        mock_database = Mock(spec=Database)
-        mock_config = {'commands': {}}
-        return CoreChatService(mock_model, mock_database, mock_config)
-    
-    @pytest.fixture
-    def mock_user(self):
-        """模擬用戶"""
-        return PlatformUser(
-            user_id="test_user_123",
-            platform=PlatformType.LINE,
-            display_name="Test User"
-        )
-    
-    def test_handle_audio_message_success(self, chat_service, mock_user):
-        """測試成功處理音訊訊息"""
-        audio_data = b"fake_audio_data"
-        transcribed_text = "Hello from audio"
-        
-        expected_response = PlatformResponse(
-            content="Audio response",
-            response_type="text"
-        )
-        
-        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(True, transcribed_text, None)) as mock_audio, \
-             patch.object(chat_service, '_handle_chat_message', return_value=expected_response) as mock_chat:
-            
-            result = chat_service._handle_audio_message(mock_user, audio_data, "line")
-            
-            assert result == expected_response
-            mock_audio.assert_called_once_with(audio_data, chat_service.model)
-            mock_chat.assert_called_once_with(mock_user, transcribed_text, "line")
-    
-    def test_handle_audio_message_error_for_test_user(self, chat_service, mock_user):
-        """測試測試用戶的音訊錯誤處理"""
-        # 設定為測試用戶 ID
-        mock_user.user_id = "U" + "0" * 32
-        audio_data = b"fake_audio_data"
-        
-        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(False, None, "cannot unpack non-iterable Mock object")):
-            
-            with pytest.raises(Exception, match="音訊處理失敗: cannot unpack non-iterable Mock object"):
-                chat_service._handle_audio_message(mock_user, audio_data, "line")
-    
-    def test_handle_audio_message_error_for_real_user(self, chat_service, mock_user):
-        """測試真實用戶的音訊錯誤處理"""
-        audio_data = b"fake_audio_data"
-        
-        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(False, None, "Audio processing failed")), \
-             patch.object(chat_service.error_handler, 'get_error_message', return_value="音訊處理錯誤") as mock_error:
-            
-            result = chat_service._handle_audio_message(mock_user, audio_data, "line")
-            
-            assert result.content == "音訊處理錯誤"
-            assert result.response_type == "text"
-            mock_error.assert_called_once()
-    
-    def test_handle_audio_message_cleanup_on_error(self, chat_service, mock_user):
-        """測試音訊處理錯誤時的清理工作"""
-        audio_data = b"fake_audio_data"
-        
-        # With OptimizedAudioHandler, cleanup is automatic (no manual _delete_audio_file)
-        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(False, None, "Transcribe error")), \
-             patch.object(chat_service.error_handler, 'get_error_message', return_value="Error"):
-            
-            result = chat_service._handle_audio_message(mock_user, audio_data, "line")
-            
-            # Just verify the error response is returned
-            assert result.content == "Error"
-            assert result.response_type == "text"
-    
-    def test_handle_audio_message_logging(self, chat_service, mock_user):
-        """測試音訊處理的日誌記錄"""
-        audio_data = b"fake_audio_data"
-        transcribed_text = "Hello from audio"
-        
-        with patch.object(chat_service.audio_handler, 'process_audio_optimized', return_value=(True, transcribed_text, None)), \
-             patch.object(chat_service, '_handle_chat_message', return_value=Mock()), \
-             patch('src.services.chat.logger') as mock_logger:
-            
-            chat_service._handle_audio_message(mock_user, audio_data, "line")
-            
-            # Check for the actual log message pattern in the updated code
-            mock_logger.info.assert_called_once_with(
-                f"音訊轉錄成功 - 用戶 {mock_user.user_id}: {transcribed_text[:50]}{'...' if len(transcribed_text) > 50 else ''}"
-            )
 
 
 class TestHandleCommand:
+
     """測試指令處理"""
     
     @pytest.fixture
@@ -382,7 +284,7 @@ class TestHandleCommand:
                 'status': '系統狀態'
             }
         }
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -438,7 +340,7 @@ class TestHandleResetCommand:
         mock_model.get_provider.return_value = ModelProvider.OPENAI
         mock_database = Mock(spec=Database)
         mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -495,7 +397,7 @@ class TestHandleChatMessage:
         mock_model.get_provider.return_value = ModelProvider.OPENAI
         mock_database = Mock(spec=Database)
         mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -546,7 +448,7 @@ class TestProcessConversation:
         mock_model.get_provider.return_value = ModelProvider.OPENAI
         mock_database = Mock(spec=Database)
         mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -596,7 +498,7 @@ class TestProcessConversation:
         """測試對話處理失敗 - OpenAI 錯誤"""
         chat_service.model.chat_with_user.return_value = (False, None, "API rate limit exceeded")
         
-        with pytest.raises(OpenAIError, match="Chat with user failed: API rate limit exceeded"):
+        with pytest.raises(ChatBotError, match="Chat with user failed: API rate limit exceeded"):
             chat_service._process_conversation(mock_user, "Hello", "line")
     
     def test_process_conversation_exception_database_related(self, chat_service, mock_user):
@@ -610,7 +512,7 @@ class TestProcessConversation:
         """測試對話處理異常 - 一般錯誤"""
         chat_service.model.chat_with_user.side_effect = Exception("General error")
         
-        with pytest.raises(OpenAIError, match="Conversation processing failed"):
+        with pytest.raises(ChatBotError, match="Conversation processing failed"):
             chat_service._process_conversation(mock_user, "Hello", "line")
     
     def test_process_conversation_logging(self, chat_service, mock_user):
@@ -627,148 +529,10 @@ class TestProcessConversation:
             )
 
 
-class TestAudioFileOperations:
-    """測試音訊檔案操作"""
-    
-    @pytest.fixture
-    def chat_service(self):
-        """創建聊天服務實例"""
-        mock_model = Mock(spec=FullLLMInterface)
-        mock_model.get_provider.return_value = ModelProvider.OPENAI
-        mock_database = Mock(spec=Database)
-        mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
-    
-    def test_save_audio_file_success(self, chat_service):
-        """測試成功儲存音訊檔案"""
-        audio_content = b"fake_audio_data"
-        
-        with patch('uuid.uuid4') as mock_uuid, \
-             patch('builtins.open', mock_open()) as mock_file, \
-             patch('src.services.chat.logger') as mock_logger:
-            
-            mock_uuid.return_value = Mock(__str__=Mock(return_value="test-uuid"))
-            
-            result = chat_service._save_audio_file(audio_content)
-            
-            assert result == "test-uuid.m4a"
-            mock_file.assert_called_once_with("test-uuid.m4a", 'wb')
-            mock_file().write.assert_called_once_with(audio_content)
-            mock_logger.debug.assert_called_once_with("Audio file saved: test-uuid.m4a")
-    
-    def test_save_audio_file_failure(self, chat_service):
-        """測試儲存音訊檔案失敗"""
-        audio_content = b"fake_audio_data"
-        
-        with patch('uuid.uuid4') as mock_uuid, \
-             patch('builtins.open', side_effect=IOError("Disk full")):
-            
-            mock_uuid.return_value = Mock(__str__=Mock(return_value="test-uuid"))
-            
-            with pytest.raises(OpenAIError, match="Failed to save audio file: Disk full"):
-                chat_service._save_audio_file(audio_content)
-    
-    def test_delete_audio_file_success(self, chat_service):
-        """測試成功刪除音訊檔案"""
-        file_path = "test_audio.m4a"
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('os.remove') as mock_remove, \
-             patch('src.services.chat.logger') as mock_logger:
-            
-            chat_service._delete_audio_file(file_path)
-            
-            mock_remove.assert_called_once_with(file_path)
-            mock_logger.debug.assert_called_once_with("Cleaned up audio file: test_audio.m4a")
-    
-    def test_delete_audio_file_not_exists(self, chat_service):
-        """測試刪除不存在的音訊檔案"""
-        file_path = "test_audio.m4a"
-        
-        with patch('os.path.exists', return_value=False), \
-             patch('os.remove') as mock_remove:
-            
-            chat_service._delete_audio_file(file_path)
-            
-            mock_remove.assert_not_called()
-    
-    def test_delete_audio_file_none_path(self, chat_service):
-        """測試刪除音訊檔案時路徑為 None"""
-        with patch('os.path.exists') as mock_exists, \
-             patch('os.remove') as mock_remove:
-            
-            chat_service._delete_audio_file(None)
-            
-            mock_exists.assert_not_called()
-            mock_remove.assert_not_called()
-    
-    def test_delete_audio_file_failure(self, chat_service):
-        """測試刪除音訊檔案失敗"""
-        file_path = "test_audio.m4a"
-        
-        with patch('os.path.exists', return_value=True), \
-             patch('os.remove', side_effect=OSError("Permission denied")), \
-             patch('src.services.chat.logger') as mock_logger:
-            
-            chat_service._delete_audio_file(file_path)
-            
-            mock_logger.warning.assert_called_once_with(
-                "Failed to clean up audio file test_audio.m4a: Permission denied"
-            )
 
 
-class TestTranscribeAudio:
-    """測試音訊轉錄"""
-    
-    @pytest.fixture
-    def chat_service(self):
-        """創建聊天服務實例"""
-        mock_model = Mock(spec=FullLLMInterface)
-        mock_model.get_provider.return_value = ModelProvider.OPENAI
-        mock_database = Mock(spec=Database)
-        mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
-    
-    def test_transcribe_audio_success(self, chat_service):
-        """測試成功轉錄音訊"""
-        audio_path = "test_audio.m4a"
-        expected_text = "Hello from audio"
-        
-        chat_service.model.transcribe_audio.return_value = (True, expected_text, None)
-        
-        result = chat_service._transcribe_audio(audio_path)
-        
-        assert result == expected_text
-        chat_service.model.transcribe_audio.assert_called_once_with(audio_path)
-    
-    def test_transcribe_audio_failure(self, chat_service):
-        """測試轉錄音訊失敗"""
-        audio_path = "test_audio.m4a"
-        error_message = "Transcription failed"
-        
-        chat_service.model.transcribe_audio.return_value = (False, None, error_message)
-        
-        with pytest.raises(OpenAIError, match=f"Audio transcription failed: {error_message}"):
-            chat_service._transcribe_audio(audio_path)
-    
-    def test_transcribe_audio_exception(self, chat_service):
-        """測試轉錄音訊異常"""
-        audio_path = "test_audio.m4a"
-        
-        chat_service.model.transcribe_audio.side_effect = Exception("Network error")
-        
-        with pytest.raises(OpenAIError, match="Audio transcription error: Network error"):
-            chat_service._transcribe_audio(audio_path)
-    
-    def test_transcribe_audio_openai_error_passthrough(self, chat_service):
-        """測試轉錄音訊時 OpenAIError 直接傳遞"""
-        audio_path = "test_audio.m4a"
-        original_error = OpenAIError("Original error")
-        
-        chat_service.model.transcribe_audio.side_effect = original_error
-        
-        with pytest.raises(OpenAIError, match="Original error"):
-            chat_service._transcribe_audio(audio_path)
+
+
 
 
 class TestWaitForCompletion:
@@ -789,7 +553,7 @@ class TestEdgeCases:
         mock_model.get_provider.return_value = ModelProvider.OPENAI
         mock_database = Mock(spec=Database)
         mock_config = {}
-        return CoreChatService(mock_model, mock_database, mock_config)
+        return ChatService(mock_model, mock_database, mock_config)
     
     @pytest.fixture
     def mock_user(self):
@@ -810,7 +574,7 @@ class TestEdgeCases:
         )
         
         with patch.object(chat_service, '_handle_text_message', return_value=Mock()) as mock_handle:
-            chat_service.process_message(message)
+            chat_service.handle_message(message)
             
             mock_handle.assert_called_once_with(mock_user, "", "line")
     
@@ -825,7 +589,7 @@ class TestEdgeCases:
         )
         
         with patch.object(chat_service, '_handle_text_message', return_value=Mock()) as mock_handle:
-            chat_service.process_message(message)
+            chat_service.handle_message(message)
             
             mock_handle.assert_called_once_with(mock_user, long_content, "line")
     
@@ -840,7 +604,7 @@ class TestEdgeCases:
         )
         
         with patch.object(chat_service, '_handle_text_message', return_value=Mock()) as mock_handle:
-            chat_service.process_message(message)
+            chat_service.handle_message(message)
             
             mock_handle.assert_called_once_with(mock_user, special_content, "line")
     
@@ -861,7 +625,7 @@ class TestEdgeCases:
             )
             
             with patch.object(chat_service, '_handle_text_message', return_value=Mock()) as mock_handle:
-                chat_service.process_message(message)
+                chat_service.handle_message(message)
                 
                 mock_handle.assert_called_once_with(user, "Hello", platform_type.value)
 

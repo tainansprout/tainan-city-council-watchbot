@@ -4,6 +4,8 @@
 
 本專案是一個**多平台聊天機器人**，支援 LINE、Discord、Telegram 等多個平台，整合了多種 AI 模型提供商（OpenAI、Anthropic Claude、Google Gemini、Ollama）。機器人採用模組化架構設計，部署在 Google Cloud Run 上，並使用 Google Cloud SQL 進行對話歷史管理。
 
+**🆕 v2.1 核心基礎設施整合升級**：高效能日誌系統與安全模組整合，優化效能並簡化維護。
+
 ## 核心特色
 
 🤖 **多 AI 模型支援**: 統一介面整合 OpenAI、Anthropic、Gemini、Ollama  
@@ -291,7 +293,7 @@ vim config/config.yml
 # 應用程式資訊
 app:
   name: "Multi-Platform Chat Bot"
-  version: "2.0.0"
+  version: "2.1.0"
 
 # AI 模型設定（選擇一個作為主要提供商）
 llm:
@@ -603,6 +605,29 @@ auth:
 
 ## 系統架構
 
+### 🎯 **核心模組整合 (v2.1)**
+
+為提升效能與維護性，核心基礎設施已完成整合升級：
+
+#### 整合模組說明
+- **src/core/logger.py**: 整合高效能日誌系統（移除 optimized_logger.py）
+  - 預編譯正則表達式敏感資料過濾
+  - 異步日誌處理避免 I/O 阻塞
+  - 結構化日誌格式與彩色控制台輸出
+  - 效能監控與統計功能
+
+- **src/core/security.py**: 整合安全模組（移除 optimized_security.py）
+  - O(1) 複雜度速率限制器
+  - 預編譯正則表達式輸入驗證
+  - 安全配置管理與中間件
+  - 快取機制提升清理效能
+
+#### 架構優化成果
+- ✅ **檔案數量減少**: 移除重複的 optimized_* 檔案
+- ✅ **效能提升**: 預編譯正則表達式、異步處理、快取機制
+- ✅ **維護簡化**: 統一模組介面，降低複雜度
+- ✅ **向後兼容**: 保持現有 API 介面不變
+
 ### 核心組件
 
 ```
@@ -620,10 +645,10 @@ auth:
                     ┌──────────────────────────┐
                     │        服務層            │
                     ├──────────────────────────┤
-                    │ • chat.py (聊天服務)    │
+                    │ • chat.py (文字聊天)    │
+                    │ • audio.py (音訊轉錄)   │
                     │ • conversation.py (對話) │
                     │ • response.py (回應格式) │
-                    │ • audio.py (音訊處理)   │
                     └──────────────────────────┘
                                   │
                     ┌──────────────────────────┐
@@ -641,22 +666,39 @@ auth:
 ```
 src/
 ├── services/           # 服務層
-│   ├── chat.py        # 核心聊天服務
+│   ├── chat.py        # 文字聊天服務
+│   ├── audio.py       # 音訊轉錄服務
 │   ├── conversation.py # 對話管理
-│   ├── response.py    # 回應格式化
-│   └── audio.py       # 音訊處理
+│   └── response.py    # 回應格式化
 ├── database/          # 資料庫層
 │   ├── connection.py  # 資料庫連接
 │   ├── models.py      # 資料模型
 │   ├── operations.py  # 資料庫操作工具
 │   └── init_db.py     # 資料庫初始化
+├── core/              # 核心基礎設施 (v2.1 整合版)
+│   ├── config.py      # 配置管理器
+│   ├── logger.py      # 整合高效能日誌系統
+│   ├── security.py    # 整合安全模組
+│   ├── error_handler.py # 錯誤處理
+│   ├── auth.py        # 認證系統
+│   └── memory.py      # 記憶體管理
+├── platforms/         # 平台支援
+│   ├── base.py        # 平台抽象介面
+│   ├── factory.py     # 平台工廠
+│   └── line_handler.py # LINE 平台處理器
+├── models/           # AI 模型整合
+│   ├── base.py       # 模型抽象介面
+│   ├── factory.py    # 模型工廠
+│   ├── openai_model.py # OpenAI 整合
+│   ├── anthropic_model.py # Anthropic 整合
+│   ├── gemini_model.py # Gemini 整合
+│   └── ollama_model.py # Ollama 整合
 ├── templates/         # 網頁模板
 │   ├── chat.html
 │   └── login.html
-├── platforms/         # 平台支援
-├── models/           # AI 模型整合
-├── core/             # 核心模組
 └── utils/            # 工具模組
+    ├── main.py       # 文字處理工具
+    └── retry.py      # 重試機制
 
 scripts/
 └── setup_database.py # 一鍵資料庫設置
@@ -672,7 +714,15 @@ alembic/               # 資料庫遷移管理
 
 所有 AI 模型的文檔引用都通過 `ResponseFormatter` 統一處理：
 
-**處理流程**：
+**訊息處理流程**：
+
+**文字訊息流程**：
+1. **平台輸入** → ChatService → AI 模型 → ResponseFormatter → **平台輸出**
+
+**音訊訊息流程**：
+1. **平台輸入** → AudioService（轉錄）→ app.py（協調）→ ChatService → AI 模型 → ResponseFormatter → **平台輸出**
+
+**引用處理流程**：
 1. **AI 模型回應** → 包含 RAGResponse (answer + sources)
 2. **ResponseFormatter** → 統一格式化 sources 為可讀引用
 3. **最終回應** → 一致的引用格式 `[1]: 文檔名稱`

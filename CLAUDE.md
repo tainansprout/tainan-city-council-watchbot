@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a **Multi-Platform Chatbot** supporting LINE, Discord, Telegram and other platforms. The system features a modular architecture with multiple AI model providers (OpenAI, Anthropic Claude, Google Gemini, Ollama) and comprehensive conversation management. The application is deployed on Google Cloud Run with Google Cloud SQL for conversation storage and supports both text and audio message processing.
 
+**v2.1 Core Infrastructure Integration**: Integrated high-performance logging and security modules for optimal performance and simplified maintenance.
+
 ## Development Commands
 
 ### Local Development
@@ -71,13 +73,15 @@ curl https://{service-url}/health
 
 ## Architecture
 
-### 🎯 **New Architecture Highlights (v2.0)**
+### 🎯 **New Architecture Highlights (v2.1 整合升級)**
 
-1. **Unified Entry Point**: `main.py` automatically detects environment and switches between development/production modes
-2. **Backward Compatibility**: All existing import paths and WSGI configurations continue to work
-3. **Multi-Platform Ready**: Factory pattern enables easy addition of new platforms (Discord, Telegram, etc.)
-4. **Environment Auto-Detection**: No manual configuration needed for development vs production
-5. **Comprehensive Testing**: New test architecture with proper separation and fixtures
+1. **Core Module Integration**: Unified high-performance logging and security modules
+2. **Performance Optimization**: Pre-compiled regex patterns, async processing, and caching mechanisms
+3. **Simplified Maintenance**: Reduced file count, unified interfaces, backward compatibility
+4. **Unified Entry Point**: `main.py` automatically detects environment and switches between development/production modes
+5. **Multi-Platform Ready**: Factory pattern enables easy addition of new platforms (Discord, Telegram, etc.)
+6. **Environment Auto-Detection**: No manual configuration needed for development vs production
+7. **Comprehensive Testing**: Updated test architecture reflecting integrated modules
 
 ### Core Components
 
@@ -92,18 +96,32 @@ curl https://{service-url}/health
 
 #### Service Layer (重構後)
 - **src/services/chat.py**: Platform-agnostic core conversation logic (原 core_chat_service.py)
+  - **統一介面**: `ChatService.handle_message()` 處理文字訊息
+  - **專責文字處理**: 聊天邏輯、命令處理、AI 模型交互
+- **src/services/audio.py**: Audio transcription service (原 audio_service.py)  
+  - **統一介面**: `AudioService.handle_message()` 處理音訊轉錄
+  - **專責音訊轉錄**: 音訊檔案 → 文字轉錄，不涉及 AI 對話處理
 - **src/services/conversation.py**: Conversation history management (整合版)
 - **src/services/response.py**: Unified response formatting (原 response_formatter.py)
-- **src/services/audio.py**: Audio processing service (原 audio_service.py)
 
-#### Core Infrastructure (v2.0)
+#### Core Infrastructure (v2.1 整合版)
 - **src/core/config.py**: ConfigManager singleton with thread-safe configuration caching
-- **src/core/security.py**: Unified security module with configuration, validation, rate limiting, and middleware
+- **src/core/logger.py**: **整合高效能日誌系統** (unified optimized logging)
+  - Pre-compiled regex patterns for sensitive data filtering
+  - Asynchronous log processing with queue-based handling
+  - Structured formatter with colored console output
+  - Performance monitoring and cache statistics
+  - Removed: `optimized_logger.py` (功能已整合)
+- **src/core/security.py**: **整合安全模組** (unified security module)
+  - O(1) complexity rate limiter with sliding window
+  - Pre-compiled regex patterns for input validation
+  - Security configuration management and middleware
+  - Caching mechanisms for improved performance
+  - Removed: `optimized_security.py` (功能已整合)
 - **src/core/auth.py**: Authentication and authorization management
 - **src/core/memory.py**: In-memory conversation management
 - **src/core/error_handler.py**: Centralized error handling and user-friendly messages
 - **src/core/exceptions.py**: Custom exception hierarchy for different error types
-- **src/core/logger.py**: Comprehensive logging system with structured output
 
 #### Model Layer (Factory Pattern)
 - **src/models/base.py**: Abstract model interfaces and data structures
@@ -136,7 +154,9 @@ curl https://{service-url}/health
 1. **Multi-Platform Support**: Unified conversation management across LINE, Discord, Telegram
 2. **Model Agnostic**: Support for OpenAI, Anthropic, Gemini, and Ollama models
 3. **Conversation Persistence**: Platform-aware conversation history with composite keys
-4. **Message Flow**: Platform Input → Core Service → Model Provider → Response Formatter → Platform Output
+4. **Message Flow**: 
+   - **Text Messages**: Platform Input → ChatService → Model Provider → Response Formatter → Platform Output
+   - **Audio Messages**: Platform Input → AudioService (轉錄) → ChatService → Model Provider → Response Formatter → Platform Output
 5. **Error Handling**: Comprehensive error handling with platform-specific error messages
 
 ### Configuration Structure
@@ -146,7 +166,7 @@ curl https://{service-url}/health
 # Application metadata
 app:
   name: "Multi-Platform Chat Bot"
-  version: "2.0.0"
+  version: "2.1.0"
 
 # Model configuration
 llm:
@@ -393,6 +413,29 @@ tests/
 - **Auto-Initialization**: Lazy loading with double-checked locking pattern
 - **Memory Efficient**: Single instance shared across all threads
 
+### 🔧 **Core Module Integration (v2.1 重要更新)**
+
+#### 整合後模組架構
+- **src/core/logger.py**: 完整整合高效能日誌系統
+  - ✅ 移除 `optimized_logger.py` 重複檔案
+  - ✅ 預編譯正則表達式，提升敏感資料過濾效能
+  - ✅ 異步日誌處理，避免 I/O 阻塞主程式
+  - ✅ 快取機制，減少重複計算
+  - ✅ 效能監控與統計功能
+
+- **src/core/security.py**: 完整整合安全模組
+  - ✅ 移除 `optimized_security.py` 重複檔案  
+  - ✅ O(1) 複雜度速率限制器，使用滑動窗口演算法
+  - ✅ 預編譯正則表達式，加速輸入驗證
+  - ✅ 快取機制，提升文本清理效能
+  - ✅ 線程安全的配置管理
+
+#### 開發者重要提醒
+1. **Import 路徑**: 所有 logger 和 security 功能現已統一，無需引用 optimized_* 版本
+2. **效能改善**: 新整合版本在高並發環境下效能顯著提升
+3. **向後兼容**: 現有 API 介面完全不變，升級無痛
+4. **測試更新**: 相關單元測試已更新，反映整合後的模組結構
+
 ### 🏗️ **Platform Architecture & File Structure**
 
 The system is built with clear separation of concerns and modular design:
@@ -437,7 +480,7 @@ src/models/
 ```
 src/services/
 ├── chat.py                    # 核心聊天服務 (原 core_chat_service.py)
-│   └── CoreChatService        # 平台無關的聊天邏輯
+│   └── ChatService        # 平台無關的聊天邏輯
 ├── response.py                # 統一回應格式化 (原 response_formatter.py)
 │   └── ResponseFormatter      # 跨模型的引用處理
 ├── conversation.py            # 對話歷史管理 (整合版)
@@ -465,7 +508,7 @@ class FullLLMInterface:
     def transcribe_audio(self, audio_file_path: str) -> Tuple[bool, str, str]
 ```
 
-### 📝 **Key Changes for Developers (Updated v2.1)**
+### 📝 **Key Changes for Developers (Updated v2.1 整合版)**
 1. `main.py` is now the primary entry point for all environments
 2. Platform configurations use new nested structure (`platforms.{platform}`)
 3. Health endpoints return enhanced information with platform status
@@ -478,6 +521,9 @@ class FullLLMInterface:
 10. **Error Handling** - Dual-layer error messages (detailed for testing, simplified for users)
 11. **簡化平台接口** - 移除了 `validate_signature` 抽象方法，簽名驗證成為各平台的內部實作細節
 12. **最佳化 Logging** - INFO 級別只保留最必要的訊息（收到/發送內容），其餘改為 DEBUG
+13. **🔧 核心模組整合** - `logger.py` 和 `security.py` 已整合優化功能，移除重複檔案
+14. **⚡ 效能提升** - 預編譯正則表達式、異步處理、快取機制大幅提升效能
+15. **🧹 架構簡化** - 減少檔案數量，統一介面，簡化維護工作
 
 ## Dependencies
 

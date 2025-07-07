@@ -166,7 +166,7 @@ class TestMultiPlatformChatBot:
         
         with patch.object(MultiPlatformChatBot, '_initialize_app'), \
              patch('src.services.response.ResponseFormatter') as mock_response_formatter, \
-             patch('src.app.CoreChatService') as mock_core_chat_service, \
+             patch('src.app.ChatService') as mock_core_chat_service, \
              patch('src.app.logger') as mock_logger:
             
             mock_formatter = Mock()
@@ -186,9 +186,9 @@ class TestMultiPlatformChatBot:
                 config=mock_config
             )
             assert bot.response_formatter == mock_formatter
-            assert bot.core_chat_service == mock_service
+            assert bot.chat_service == mock_service
             mock_logger.info.assert_any_call("Initializing core chat service...")
-            mock_logger.info.assert_any_call("Core chat service initialized successfully")
+            mock_logger.info.assert_any_call("Core chat service and audio service initialized successfully")
     
     @patch('src.app.load_config')
     def test_initialize_platforms(self, mock_load_config, mock_config):
@@ -466,7 +466,7 @@ class TestMultiPlatformChatBotWebhook:
             
             bot = MultiPlatformChatBot()
             bot.platform_manager = Mock()
-            bot.core_chat_service = Mock()
+            bot.chat_service = Mock()
             
             return bot
     
@@ -493,7 +493,7 @@ class TestMultiPlatformChatBotWebhook:
         # 模擬 platform_manager 的方法
         bot.platform_manager.get_enabled_platforms.return_value = [PlatformType.LINE]
         bot.platform_manager.handle_platform_webhook.return_value = [mock_message]
-        bot.core_chat_service.process_message.return_value = mock_response
+        bot.chat_service.handle_message.return_value = mock_response
         
         mock_handler = Mock()
         mock_handler.send_response.return_value = True
@@ -505,7 +505,7 @@ class TestMultiPlatformChatBotWebhook:
             
             assert result == 'OK'
             bot.platform_manager.handle_platform_webhook.assert_called_once()
-            bot.core_chat_service.process_message.assert_called_once_with(mock_message)
+            bot.chat_service.handle_message.assert_called_once_with(mock_message)
             mock_handler.send_response.assert_called_once_with(mock_response, mock_message)
     
     def test_handle_webhook_unknown_platform(self, chatbot_with_mocks):
@@ -882,4 +882,81 @@ class TestMultiPlatformChatBotAuthenticationRoutes:
                                  json={'message': 'Hello'},
                                  content_type='application/json')
             
+            bot.response_formatter.json_response.assert_called()
+
+
+class TestMultiPlatformChatBotMemoryMonitoring:
+    """測試記憶體監控功能"""
+    
+    @pytest.fixture
+    def chatbot_with_mocks(self):
+        """創建帶有模擬組件的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.response_formatter = Mock()
+            return bot
+    
+    def test_initialize_memory_monitoring_success(self, chatbot_with_mocks):
+        """測試成功初始化記憶體監控"""
+        bot = chatbot_with_mocks
+        
+        mock_memory_monitor = Mock()
+        mock_smart_gc = Mock()
+        
+        with patch('src.app.setup_memory_monitoring', return_value=(mock_memory_monitor, mock_smart_gc)) as mock_setup, \
+             patch('src.app.logger') as mock_logger:
+            
+            bot._initialize_memory_monitoring()
+            
+            mock_setup.assert_called_once_with(bot.app)
+            assert bot.memory_monitor == mock_memory_monitor
+            assert bot.smart_gc == mock_smart_gc
+            mock_logger.info.assert_any_call("Initializing memory monitoring...")
+            mock_logger.info.assert_any_call("Memory monitoring initialized successfully")
+    
+    def test_initialize_memory_monitoring_failure(self, chatbot_with_mocks):
+        """測試記憶體監控初始化失敗"""
+        bot = chatbot_with_mocks
+        
+        with patch('src.core.memory_monitor.setup_memory_monitoring', side_effect=ImportError("Memory monitoring not available")) as mock_setup, \
+             patch('src.app.logger') as mock_logger:
+            
+            # 不應該拋出異常
+            bot._initialize_memory_monitoring()
+            
+            mock_logger.error.assert_called_with("Failed to initialize memory monitoring: Memory monitoring not available")
+    
+    def test_memory_stats_endpoint(self, chatbot_with_mocks):
+        """測試記憶體統計端點"""
+        bot = chatbot_with_mocks
+        bot.memory_monitor = Mock()
+        bot.memory_monitor.get_detailed_report.return_value = {'memory_usage': '100MB'}
+        bot.response_formatter.json_response.return_value = {'status': 'ok'}
+        
+        # 註冊路由
+        bot._register_routes()
+        
+        with bot.app.test_client() as client:
+            response = client.get('/memory-stats')
+            
+            assert response.status_code == 200
+            bot.memory_monitor.get_detailed_report.assert_called_once()
+            bot.response_formatter.json_response.assert_called()
+    
+    def test_memory_stats_endpoint_error(self, chatbot_with_mocks):
+        """測試記憶體統計端點錯誤"""
+        bot = chatbot_with_mocks
+        bot.memory_monitor = Mock()
+        bot.memory_monitor.get_detailed_report.side_effect = Exception("Memory error")
+        bot.response_formatter.json_response.return_value = {'error': 'Memory error'}
+        
+        # 註冊路由
+        bot._register_routes()
+        
+        with bot.app.test_client() as client:
+            response = client.get('/memory-stats')
+            
+            assert response.status_code == 500
             bot.response_formatter.json_response.assert_called()

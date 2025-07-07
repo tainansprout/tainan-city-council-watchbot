@@ -18,7 +18,8 @@ from .core.error_handler import ErrorHandler
 # 模型和服務
 from .models.factory import ModelFactory
 from .database.connection import Database
-from .services.chat import CoreChatService
+from .services.chat import ChatService
+from .services.audio import AudioService
 
 # 平台架構
 from .platforms.factory import get_platform_factory, get_config_validator
@@ -44,7 +45,7 @@ class MultiPlatformChatBot:
         self.error_handler = ErrorHandler()
         self.database = None
         self.model = None
-        self.core_chat_service = None
+        self.chat_service = None
         
         # 平台管理
         self.platform_factory = get_platform_factory()
@@ -155,12 +156,18 @@ class MultiPlatformChatBot:
         self.response_formatter = ResponseFormatter(self.config)
         
         # 初始化核心聊天服務
-        self.core_chat_service = CoreChatService(
+        self.chat_service = ChatService(
             model=self.model,
             database=self.database,
             config=self.config
         )
-        logger.info("Core chat service initialized successfully")
+        
+        # 初始化音訊服務
+        self.audio_service = AudioService(
+            model=self.model
+        )
+        
+        logger.info("Core chat service and audio service initialized successfully")
     
     def _initialize_platforms(self):
         """初始化平台處理器"""
@@ -190,25 +197,28 @@ class MultiPlatformChatBot:
             # 設置 Flask 應用的記憶體監控
             self.memory_monitor, self.smart_gc = setup_memory_monitoring(self.app)
             
-            # 添加記憶體統計端點
-            @self.app.route("/memory-stats")
-            def memory_stats():
-                """記憶體統計端點"""
-                try:
-                    stats = self.memory_monitor.get_detailed_report()
-                    return self.response_formatter.json_response(stats)
-                except Exception as e:
-                    logger.error(f"Error getting memory stats: {e}")
-                    return self.response_formatter.json_response({
-                        'error': 'Failed to get memory stats',
-                        'message': str(e)
-                    }, 500)
-            
             logger.info("Memory monitoring initialized successfully")
             
         except Exception as e:
             logger.error(f"Failed to initialize memory monitoring: {e}")
             # 不拋出異常，允許應用程式繼續運行
+        
+        # 添加記憶體統計端點
+        @self.app.route("/memory-stats")
+        def memory_stats():
+            """記憶體統計端點"""
+            try:
+                # 檢查 memory_monitor 是否已初始化
+                if not hasattr(self, 'memory_monitor') or self.memory_monitor is None:
+                    raise RuntimeError("Memory monitor not initialized")
+                stats = self.memory_monitor.get_detailed_report()
+                return self.response_formatter.json_response(stats)
+            except Exception as e:
+                logger.error(f"Error getting memory stats: {e}")
+                return self.response_formatter.json_response({
+                    'error': 'Failed to get memory stats',
+                    'message': str(e)
+                }, 500)
     
     def _register_routes(self):
         """註冊 Flask 路由"""
@@ -378,7 +388,7 @@ class MultiPlatformChatBot:
                 )
                 
                 # 使用核心聊天服務處理訊息
-                response = self.core_chat_service.process_message(test_message)
+                response = self.chat_service.handle_message(test_message)
                 
                 # 清理回應內容以防止 XSS
                 if hasattr(response, 'content'):
@@ -447,9 +457,53 @@ class MultiPlatformChatBot:
                     logger.info(f"[WEBHOOK] Received - User: {getattr(message.user, 'user_id', 'unknown')}, Content: {str(message.content)[:100]}{'...' if len(str(message.content)) > 100 else ''}")
                     logger.debug(f"[WEBHOOK] Processing message {i+1}/{len(messages)} - ID: {getattr(message, 'message_id', 'unknown')}, Type: {getattr(message, 'message_type', 'unknown')}")
                     
-                    # 使用核心聊天服務處理訊息
-                    logger.debug(f"[WEBHOOK] Processing with core chat service")
-                    response = self.core_chat_service.process_message(message)
+                    # 根據訊息類型選擇合適的服務處理
+                    if message.message_type == "audio":
+                        logger.debug(f"[WEBHOOK] Processing audio message with audio service")
+                        
+                        # 步驟 1: 使用音訊服務進行轉錄
+                        audio_result = self.audio_service.handle_message(
+                            user_id=message.user.user_id,
+                            audio_content=message.raw_data,
+                            platform=message.user.platform.value
+                        )
+                        
+                        if not audio_result['success']:
+                            # 轉錄失敗，返回錯誤訊息
+                            error_response = self.error_handler.get_error_message(
+                                Exception(audio_result['error_message']), 
+                                use_detailed=False
+                            )
+                            from .platforms.base import PlatformResponse
+                            response = PlatformResponse(
+                                content=error_response,
+                                response_type='text'
+                            )
+                            logger.error(f"[WEBHOOK] Audio transcription failed for user {message.user.user_id}")
+                        else:
+                            # 步驟 2: 轉錄成功，創建文字訊息並交給 ChatService 處理
+                            logger.debug(f"[WEBHOOK] Audio transcription successful, processing with chat service")
+                            transcribed_text = audio_result['transcribed_text']
+                            
+                            # 創建文字訊息
+                            from .platforms.base import PlatformMessage
+                            text_message = PlatformMessage(
+                                message_id=f"audio_transcribed_{message.user.user_id}",
+                                user=message.user,
+                                content=transcribed_text,
+                                message_type="text",
+                                reply_token=getattr(message, 'reply_token', None)
+                            )
+                            
+                            # 使用 ChatService 處理轉錄文字
+                            response = self.chat_service.handle_message(text_message)
+                            logger.info(f"[WEBHOOK] Audio processing completed successfully")
+                            
+                    else:
+                        # 使用核心聊天服務處理文字訊息
+                        logger.debug(f"[WEBHOOK] Processing text message with chat service")
+                        response = self.chat_service.handle_message(message)
+                    
                     logger.info(f"[WEBHOOK] Sending - Content: {str(getattr(response, 'content', 'No content'))[:100]}{'...' if hasattr(response, 'content') and len(str(response.content)) > 100 else ''}")
                     logger.debug(f"[WEBHOOK] Response type: {getattr(response, 'response_type', 'unknown')}")
                     
