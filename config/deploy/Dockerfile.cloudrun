@@ -1,46 +1,60 @@
-# 使用較小的 Python 基礎映像
-FROM python:3.12-slim
+# --- STAGE 1: Builder ---
+# This stage installs all dependencies.
+FROM python:3.12-slim as builder
 
-# 設定環境變數
 ENV PYTHONUNBUFFERED=True \
     PYTHONDONTWRITEBYTECODE=True \
     PIP_NO_CACHE_DIR=True \
     PIP_DISABLE_PIP_VERSION_CHECK=True
 
-# 安裝系統依賴
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y \
+# Install system dependencies required for building some Python packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     libpq-dev \
-    gcc \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 建立應用程式目錄
 WORKDIR /app
 
-# 先複製依賴檔案，利用 Docker 快取
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 建立非 root 使用者
-RUN useradd --create-home --shell /bin/bash app
+# --- STAGE 2: Final ---
+# This stage builds the final, lean image.
+FROM python:3.12-slim
 
-# 複製應用程式代碼
-COPY . .
+ENV PYTHONUNBUFFERED=True \
+    PYTHONDONTWRITEBYTECODE=True \
+    PYTHONPATH=/app \
+    PORT=8080 \
+    FLASK_ENV=production
 
-# 移除不必要的檔案
-RUN find . -name "*.ipynb" -exec rm {} + && \
-    find . -name "*.pyc" -exec rm {} + && \
-    find . -name "__pycache__" -type d -exec rm -rf {} + || true
+# Install only necessary runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
-# 修改文件所有權給 app 用戶
+WORKDIR /app
+
+# Create a non-root user to run the application
+RUN useradd --create-home --shell /bin/bash --uid 1000 app
+
+# Copy installed dependencies from the builder stage
+COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
+
+# Copy application code
+COPY --chown=app:app . .
+
+# Create the logs directory and set ownership for the 'app' user
+RUN mkdir -p /app/logs 
 RUN chown -R app:app /app
 
-# 切換到非 root 使用者
+# Switch to the non-root user
 USER app
 
-# 健康檢查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:$PORT/health || exit 1
+# Expose the port the app runs on
+EXPOSE $PORT
 
-# 使用 Gunicorn 啟動，配置適合 Cloud Run
+# The command to run the application directly with Gunicorn
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "main:application"]
