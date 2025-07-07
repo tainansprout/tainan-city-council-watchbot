@@ -677,9 +677,143 @@ def get_security_middleware() -> SecurityMiddleware:
     return _security_middleware
 
 
+class SecurityHeaders:
+    """安全標頭管理類"""
+    
+    @staticmethod
+    def get_security_headers(config=None) -> Dict[str, str]:
+        """取得安全標頭配置"""
+        # 從環境變數或配置取得設定
+        enable_security_headers = os.getenv('ENABLE_SECURITY_HEADERS', 'true').lower() == 'true'
+        
+        if not enable_security_headers:
+            return {}
+        
+        # CSP 配置
+        csp_policy = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+            "https://cdn.jsdelivr.net https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' "
+            "https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'; "
+            "base-uri 'self'"
+        )
+        
+        return {
+            # Content Security Policy
+            'Content-Security-Policy': csp_policy,
+            
+            # HTTP Strict Transport Security
+            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+            
+            # X-Frame-Options (防止 clickjacking)
+            'X-Frame-Options': 'DENY',
+            
+            # X-Content-Type-Options (防止 MIME sniffing)
+            'X-Content-Type-Options': 'nosniff',
+            
+            # X-XSS-Protection
+            'X-XSS-Protection': '1; mode=block',
+            
+            # Referrer Policy
+            'Referrer-Policy': 'strict-origin-when-cross-origin',
+            
+            # Feature Policy / Permissions Policy
+            'Permissions-Policy': (
+                'geolocation=(), '
+                'microphone=(), '
+                'camera=(), '
+                'payment=(), '
+                'usb=(), '
+                'magnetometer=(), '
+                'gyroscope=(), '
+                'speaker=()'
+            ),
+            
+            # X-Permitted-Cross-Domain-Policies
+            'X-Permitted-Cross-Domain-Policies': 'none',
+            
+            # Clear-Site-Data (在登出時使用)
+            # 'Clear-Site-Data': '"cache", "cookies", "storage", "executionContexts"',
+            
+            # Cross-Origin-Embedder-Policy
+            'Cross-Origin-Embedder-Policy': 'require-corp',
+            
+            # Cross-Origin-Opener-Policy
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            
+            # Cross-Origin-Resource-Policy
+            'Cross-Origin-Resource-Policy': 'same-site',
+            
+            # Cache Control for sensitive pages
+            'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        }
+    
+    @staticmethod
+    def apply_security_headers(response, endpoint=None):
+        """應用安全標頭到回應"""
+        headers = SecurityHeaders.get_security_headers()
+        
+        # 根據端點類型調整標頭
+        if endpoint:
+            if endpoint in ['health', 'metrics']:
+                # API 端點不需要某些瀏覽器安全標頭
+                headers.pop('X-Frame-Options', None)
+                headers.pop('X-XSS-Protection', None)
+            elif endpoint == 'logout':
+                # 登出時清除站點資料
+                headers['Clear-Site-Data'] = '"cache", "cookies", "storage"'
+        
+        # 應用標頭
+        for header, value in headers.items():
+            response.headers[header] = value
+        
+        return response
+
 def init_security(app, config=None):
     """初始化安全性配置"""
     security_middleware.init_app(app)
-    logger.info("安全性中間件已初始化")
+    
+    # 註冊安全標頭中間件
+    @app.after_request
+    def add_security_headers(response):
+        """為所有回應添加安全標頭"""
+        endpoint = request.endpoint
+        return SecurityHeaders.apply_security_headers(response, endpoint)
+    
+    # 註冊 CORS 配置（如果需要）
+    cors_enabled = os.getenv('ENABLE_CORS', 'false').lower() == 'true'
+    if cors_enabled:
+        allowed_origins = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+        allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
+        
+        @app.after_request
+        def add_cors_headers(response):
+            """添加 CORS 標頭"""
+            origin = request.headers.get('Origin')
+            if origin and (not allowed_origins or origin in allowed_origins or '*' in allowed_origins):
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Max-Age'] = '86400'
+            return response
+        
+        # 處理 OPTIONS 請求
+        @app.before_request
+        def handle_preflight():
+            """處理 CORS 預檢請求"""
+            if request.method == 'OPTIONS':
+                response = current_app.make_default_options_response()
+                return add_cors_headers(response)
+    
+    logger.info("安全性中間件和安全標頭已初始化")
 
 

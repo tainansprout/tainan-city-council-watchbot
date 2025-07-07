@@ -579,7 +579,32 @@ class FullLLMInterface:
 
 ## Migration and Database Management
 
-### Database Initialization (重構後)
+### 🚀 **統一資料庫管理系統** (v2.1 新增)
+
+本系統提供了三種資料庫初始化和遷移管理方式，全部相容且互補：
+
+#### 方法 1: 新的遷移管理器 (推薦)
+```bash
+# 自動設置遷移環境並初始化資料庫
+python scripts/db_migration.py auto-setup
+
+# 手動初始化 Alembic (僅首次使用)
+python scripts/db_migration.py init
+
+# 升級資料庫到最新版本
+python scripts/db_migration.py upgrade
+
+# 查看目前版本
+python scripts/db_migration.py current
+
+# 驗證遷移檔案
+python scripts/db_migration.py validate
+
+# 創建新的遷移檔案
+python scripts/db_migration.py create -m "新增功能"
+```
+
+#### 方法 2: 傳統資料庫設置腳本 (向後相容)
 ```bash
 # 一鍵完整資料庫結構設置
 python scripts/setup_database.py setup
@@ -589,31 +614,103 @@ python scripts/setup_database.py status
 
 # 執行健康檢查
 python scripts/setup_database.py health
-
-# Initialize Alembic migrations (manual method)
-alembic init alembic
-
-# Create initial migration
-alembic revision --autogenerate -m "Initial multi-platform schema"
-
-# Apply migrations
-alembic upgrade head
 ```
 
-### Platform Migration Commands (重構後)
+#### 方法 3: 直接使用 Alembic (進階用戶)
 ```bash
-# Run consolidated database setup script
-python scripts/setup_database.py setup
+# 初始化 Alembic (僅首次使用)
+alembic init alembic
 
-# Check migration status
+# 升級資料庫
+alembic upgrade head
+
+# 查看遷移狀態
 alembic current
 alembic history
 
-# Upgrade to latest version
-alembic upgrade head
+# 創建新的遷移檔案
+alembic revision --autogenerate -m "新增功能"
+```
 
-# Check database operations health
-python scripts/setup_database.py health
+### 🔄 **遷移管理器功能特色**
+
+- **自動環境檢測**: 自動讀取配置檔案和環境變數
+- **配置驗證**: 檢查資料庫連線設定是否正確
+- **安全操作**: 支援預覽 SQL 不執行、驗證遷移檔案
+- **統一介面**: 提供一致的命令列介面
+- **錯誤處理**: 完整的錯誤訊息和回滾機制
+
+### 📦 **Docker 環境中的資料庫初始化**
+
+#### Docker Compose 自動初始化
+```bash
+# 使用 Docker Compose (包含 PostgreSQL 自動初始化)
+docker-compose up --build
+
+# 登入容器執行遷移
+docker-compose exec app python scripts/db_migration.py auto-setup
+```
+
+#### Cloud Run 部署前初始化
+```bash
+# 本地連線 Cloud SQL 執行初始化
+gcloud sql connect chatgpt-line-bot-db --user=chatgpt_user
+
+# 或使用本地管理工具
+python scripts/db_migration.py auto-setup
+```
+
+### 🚁 **生產環境部署流程**
+
+#### Google Cloud Run 部署前資料庫設置
+```bash
+# 1. 連線到 Cloud SQL
+export DATABASE_URL="postgresql://user:password@host:5432/dbname"
+
+# 2. 執行遷移
+python scripts/db_migration.py auto-setup
+
+# 3. 驗證資料庫狀態
+python scripts/db_migration.py validate
+```
+
+#### 部署後驗證
+```bash
+# 檢查 Cloud Run 服務的資料庫連線
+curl https://your-service-url/health
+
+# 檢查資料庫版本
+gcloud run services logs read --service=chatgpt-line-bot
+```
+
+### 🔧 **常用維護命令**
+
+```bash
+# 日常管理
+python scripts/db_migration.py current          # 查看目前版本
+python scripts/db_migration.py history          # 查看遷移歷史
+python scripts/db_migration.py validate         # 驗證遷移檔案
+
+# 開發環境
+python scripts/db_migration.py create -m "功能名稱"  # 創建遷移
+python scripts/db_migration.py upgrade                    # 升級資料庫
+python scripts/db_migration.py sql --revision head       # 預覽 SQL
+
+# 緊急情況
+python scripts/db_migration.py downgrade <revision>      # 回滾版本
+python scripts/db_migration.py stamp <revision>          # 標記版本
+```
+
+### 📊 **遷移系統測試**
+
+新的遷移管理器包含完整的測試套件：
+
+```bash
+# 執行遷移系統測試
+python -m pytest tests/unit/test_database_migration.py -v
+
+# 執行資料庫整合測試
+python -m pytest tests/integration/test_database_integration.py -v
 ```
 
 ## Testing

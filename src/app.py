@@ -654,13 +654,66 @@ class MultiPlatformChatBot:
         return self.app
 
 
-def create_app(config_path: str = None) -> Flask:
+def create_app(config_path: str = None, migration_mode: bool = False) -> Flask:
     """
     工廠函數 - 創建 Flask 應用程式實例
-    用於生產部署 (如 Gunicorn)
+    用於生產部署 (如 Gunicorn) 和資料庫遷移
+    
+    Args:
+        config_path: 配置檔案路徑
+        migration_mode: 是否為遷移模式（只初始化資料庫相關組件）
     """
-    bot = MultiPlatformChatBot(config_path or "config/config.yml")
-    return bot.get_flask_app()
+    import os
+    
+    # 檢查是否為遷移模式
+    migration_mode = migration_mode or os.getenv('MIGRATION_MODE', '').lower() == 'true'
+    
+    if migration_mode:
+        # 遷移模式：只創建最小 Flask 應用程式和資料庫配置
+        from flask import Flask
+        from .core.config import load_config
+        from .database.models import db
+        from .database.migrate_config import init_migrate
+        
+        # 創建最小 Flask 應用程式
+        app = Flask(__name__)
+        
+        # 載入配置
+        config = load_config(config_path or "config/config.yml")
+        
+        # 設定資料庫 URI
+        db_config = config.get('db', {})
+        database_url = os.getenv('DATABASE_URL')
+        
+        if not database_url:
+            # 從配置建構 URL
+            host = db_config.get('host', 'localhost')
+            port = db_config.get('port', 5432)
+            database = db_config.get('db_name', 'chatbot')
+            username = db_config.get('user', 'postgres')
+            password = db_config.get('password', 'password')
+            
+            # SSL 配置
+            ssl_params = ""
+            if 'sslmode' in db_config:
+                ssl_params = f"?sslmode={db_config['sslmode']}"
+                if 'sslrootcert' in db_config:
+                    ssl_params += f"&sslrootcert={db_config['sslrootcert']}"
+            
+            database_url = f"postgresql://{username}:{password}@{host}:{port}/{database}{ssl_params}"
+        
+        app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        
+        # 初始化資料庫和遷移
+        db.init_app(app)
+        init_migrate(app)
+        
+        return app
+    else:
+        # 正常模式：創建完整應用程式
+        bot = MultiPlatformChatBot(config_path or "config/config.yml")
+        return bot.get_flask_app()
 
 
 # 為了向後兼容，保留原有的全域變數和函數

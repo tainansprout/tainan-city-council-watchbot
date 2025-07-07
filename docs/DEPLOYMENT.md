@@ -92,6 +92,20 @@ gcloud sql users create chatgpt_user \
 #### 選項 B: 外部資料庫
 確保你的 PostgreSQL 資料庫可以從 Google Cloud 存取，並且已經建立了必要的資料庫和使用者。
 
+#### 資料庫結構初始化
+無論使用哪種資料庫選項，都需要初始化資料庫結構：
+
+```bash
+# 方法 1: 使用新的遷移管理器（推薦）
+python scripts/db_migration.py auto-setup
+
+# 方法 2: 使用傳統設置腳本（向後相容）
+python scripts/setup_database.py setup
+
+# 方法 3: 直接使用 Alembic（進階用戶）
+alembic upgrade head
+```
+
 ### 步驟 3: 敏感資訊管理
 
 ```bash
@@ -115,6 +129,8 @@ echo -n "$TEST_PASSWORD" | gcloud secrets create test-password --data-file=-
 ```bash
 # 載入環境變數
 source config/deploy/.env
+
+echo "PROJECT_ID: $PROJECT_ID"
 
 # 設定project
 gcloud config set project $PROJECT_ID

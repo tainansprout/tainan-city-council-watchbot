@@ -1,9 +1,140 @@
-version: "3"
+# Docker Compose 配置 - 遵循 2024 年最佳實踐
+# 用於本地開發和測試，Cloud Run 不使用此檔案
+version: "3.8"
 
 services:
-  app:
-    container_name: ChatGPT-Line-Bot
-    build: .
-    restart: always
+  # 資料庫服務 - 優先啟動
+  db:
+    image: postgres:13-alpine
+    container_name: chatgpt-line-bot-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-chatgpt_line_bot}
+      - POSTGRES_USER=${DB_USER:-chatgpt_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-secure_password_123}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=en_US.UTF-8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 移除自動初始化 SQL，讓遷移系統處理
+    networks:
+      - app-network
     ports:
-      - "${APP_PORT}:${APP_PORT}"
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-chatgpt_user} -d ${DB_NAME:-chatgpt_line_bot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
+
+  # 遷移服務 - 最佳實踐：將遷移與應用啟動解耦
+  migrate:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatgpt-line-bot-migrate
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-chatgpt_user}:${DB_PASSWORD:-secure_password_123}@db:5432/${DB_NAME:-chatgpt_line_bot}
+      - MIGRATION_MODE=true
+    env_file:
+      - .env.local
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    command: ["migrate-only"]  # 只執行遷移
+    volumes:
+      - ./config:/app/config:ro
+      - ./migrations:/app/migrations  # 持久化遷移檔案
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+
+  # 主應用程式服務
+  app:
+    container_name: chatgpt-line-bot-app
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      - PORT=8080
+      - FLASK_ENV=${FLASK_ENV:-development}
+      - DATABASE_URL=postgresql://${DB_USER:-chatgpt_user}:${DB_PASSWORD:-secure_password_123}@db:5432/${DB_NAME:-chatgpt_line_bot}
+      - SKIP_MIGRATIONS=true  # 跳過遷移，因為已由 migrate 服務處理
+    env_file:
+      - .env.local
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+    command: ["app-only"]  # 只啟動應用程式
+    volumes:
+      - ./config:/app/config:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+
+  # 開發工具服務（可選）
+  dev-tools:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatgpt-line-bot-tools
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER:-chatgpt_user}:${DB_PASSWORD:-secure_password_123}@db:5432/${DB_NAME:-chatgpt_line_bot}
+    env_file:
+      - .env.local
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    command: ["bash"]  # 進入 shell 用於開發
+    volumes:
+      - .:/app  # 掛載整個專案目錄用於開發
+    profiles:
+      - dev  # 只在開發模式啟動
+    tty: true
+    stdin_open: true
+    security_opt:
+      - no-new-privileges:true
+    user: "1000:1000"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
