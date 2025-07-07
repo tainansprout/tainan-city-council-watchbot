@@ -821,22 +821,52 @@ The system uses PostgreSQL database with multi-platform conversation management.
 - **Conversation History**: Stores conversation records for non-OpenAI models
 - **Multi-Platform Support**: All tables support LINE, Discord, Telegram, and other platforms
 
-### Database Initialization
+### Database Initialization and Migrations
+
+This project uses Alembic to manage database migrations. This allows you to version control your database schema and easily upgrade it as your models change.
+
+**1. Initializing the Database**
+
+For the first time, you can set up the complete database schema with a single command:
 
 ```bash
-# One-click complete database structure setup
+# One-click setup for the initial schema
 python scripts/setup_database.py setup
-
-# Check database status
-python scripts/setup_database.py status
-
-# Run health check
-python scripts/setup_database.py health
-
-# Use Alembic directly (advanced users)
-alembic upgrade head  # Execute database migrations
-alembic current       # Check current version
 ```
+
+**2. Creating a New Migration**
+
+When you change your SQLAlchemy models in `src/database/models.py` (e.g., add a new table or a new column), you need to create a new migration script.
+
+```bash
+# Automatically detect model changes and generate a new migration script
+alembic revision --autogenerate -m "Describe your changes here"
+```
+
+This will create a new file in `alembic/versions/`.
+
+**3. Applying Migrations**
+
+To apply the latest migrations to your database, run:
+
+```bash
+# Upgrade the database to the latest version
+alembic upgrade head
+```
+
+**4. Checking Database Status**
+
+You can check the current status of your database migrations with:
+
+```bash
+# Show the current migration version
+alembic current
+
+# Check for any unapplied migrations
+alembic check
+```
+
+</details>
 
 ### Install Test Dependencies
 

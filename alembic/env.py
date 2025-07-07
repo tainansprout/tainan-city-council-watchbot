@@ -1,5 +1,6 @@
 """
 Alembic Environment Configuration for ChatGPT-Line-Bot
+This file is the entry point for all Alembic operations.
 """
 import os
 import sys
@@ -7,11 +8,20 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Add project root to path
+# --- Project-specific setup ---
+# This is the most important part of the setup.
+# We need to make sure Alembic can find our application's models.
+
+# 1. Add the project's root directory to the Python path.
+# This allows us to import modules from the `src` directory.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import your models
+# 2. Import the Base model from our application.
+# All of our SQLAlchemy models inherit from this Base, so it holds the
+# complete schema information (metadata).
 from src.database.models import Base
+
+# --- Alembic standard setup ---
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -22,18 +32,23 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
+# 3. Set the target metadata.
+# This tells Alembic what the target database schema should look like.
+# For autogenerate to work, this must be set to our application's Base.metadata.
 target_metadata = Base.metadata
 
 def get_database_url():
-    """Get database URL from environment or config"""
-    # Try environment variable first (for production)
+    """
+    Dynamically get the database URL from the application's configuration.
+    This is a best practice to ensure migrations run against the same
+    database as the application.
+    """
+    # Try environment variable first (for production/CI)
     database_url = os.getenv('DATABASE_URL')
     if database_url:
         return database_url
     
-    # Try to load from config file
+    # If not found, load from the application's config file (config.yml)
     try:
         from src.core.config import load_config
         app_config = load_config()
@@ -45,20 +60,27 @@ def get_database_url():
         username = db_config.get('user', 'postgres')
         password = db_config.get('password', 'password')
         
-        # SSL 配置
-        ssl_params = ""
-        if 'sslmode' in db_config:
-            ssl_params += f"?sslmode={db_config['sslmode']}"
-            if 'sslrootcert' in db_config:
-                ssl_params += f"&sslrootcert={db_config['sslrootcert']}"
-            if 'sslcert' in db_config:
-                ssl_params += f"&sslcert={db_config['sslcert']}"
-            if 'sslkey' in db_config:
-                ssl_params += f"&sslkey={db_config['sslkey']}"
+        # Build the connection string
+        url = f"postgresql://{username}:{password}@{host}:{port}/{database}"
         
-        return f"postgresql://{username}:{password}@{host}:{port}/{database}{ssl_params}"
+        # Handle SSL parameters if they exist
+        ssl_params = []
+        if 'sslmode' in db_config:
+            ssl_params.append(f"sslmode={db_config['sslmode']}")
+        if 'sslrootcert' in db_config:
+            ssl_params.append(f"sslrootcert={db_config['sslrootcert']}")
+        if 'sslcert' in db_config:
+            ssl_params.append(f"sslcert={db_config['sslcert']}")
+        if 'sslkey' in db_config:
+            ssl_params.append(f"sslkey={db_config['sslkey']}")
+        
+        if ssl_params:
+            url += "?" + "&".join(ssl_params)
+            
+        return url
+        
     except Exception as e:
-        print(f"Warning: Could not load config, using default: {e}")
+        print(f"Warning: Could not load application config to get DB URL. Falling back to default. Error: {e}")
         return "postgresql://postgres:password@localhost:5432/chatbot"
 
 def run_migrations_offline() -> None:
@@ -91,10 +113,11 @@ def run_migrations_online() -> None:
     In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    # Get database URL
+    # Get the database URL from our dynamic function
     database_url = get_database_url()
     
-    # Override the sqlalchemy.url in the alembic config
+    # Create a configuration dictionary for the engine
+    # and override the sqlalchemy.url from alembic.ini
     configuration = config.get_section(config.config_ini_section)
     configuration['sqlalchemy.url'] = database_url
     
@@ -115,6 +138,7 @@ def run_migrations_online() -> None:
         with context.begin_transaction():
             context.run_migrations()
 
+# --- Main execution logic ---
 if context.is_offline_mode():
     run_migrations_offline()
 else:

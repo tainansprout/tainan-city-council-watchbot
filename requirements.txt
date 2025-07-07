@@ -19,7 +19,7 @@ opencc-python-reimplemented>=0.1.6,<1.0.0
 pyyaml>=6.0,<7.0
 psycopg2-binary>=2.9.0,<3.0.0
 SQLAlchemy>=2.0.0,<3.0.0
-alembic>=1.16.0,<2.0.0
+Flask-Migrate>=4.0.0,<5.0.0  # Modern Flask DB migration best practice (includes Alembic)
 
 # HTTP requests
 requests>=2.31.0,<3.0.0
