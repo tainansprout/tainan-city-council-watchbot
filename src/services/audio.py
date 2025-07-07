@@ -103,7 +103,7 @@ class AudioHandler:
         try:
             # 🔥 關鍵優化：使用 BytesIO 模擬檔案
             audio_file_obj = io.BytesIO(audio_content)
-            audio_file_obj.name = f"audio_{uuid.uuid4().hex}.wav"  # 某些 API 需要檔名
+            audio_file_obj.name = f"audio_{uuid.uuid4().hex}.m4a"  # 某些 API 需要檔名，使用 m4a 格式以符合容器實際內容
             
             # 直接傳遞檔案物件給轉錄 API
             success, transcription, error = self._transcribe_audio_memory(audio_file_obj, model_handler)
@@ -127,7 +127,7 @@ class AudioHandler:
         """
         # 🔥 使用系統暫存目錄
         temp_dir = tempfile.gettempdir()
-        temp_file_path = os.path.join(temp_dir, f"chatbot_audio_{uuid.uuid4().hex}.wav")
+        temp_file_path = os.path.join(temp_dir, f"chatbot_audio_{uuid.uuid4().hex}.m4a")
         
         # 🔥 優化：使用 with 語句確保檔案正確關閉
         try:
