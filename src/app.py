@@ -202,23 +202,6 @@ class MultiPlatformChatBot:
         except Exception as e:
             logger.error(f"Failed to initialize memory monitoring: {e}")
             # 不拋出異常，允許應用程式繼續運行
-        
-        # 添加記憶體統計端點
-        @self.app.route("/memory-stats")
-        def memory_stats():
-            """記憶體統計端點"""
-            try:
-                # 檢查 memory_monitor 是否已初始化
-                if not hasattr(self, 'memory_monitor') or self.memory_monitor is None:
-                    raise RuntimeError("Memory monitor not initialized")
-                stats = self.memory_monitor.get_detailed_report()
-                return self.response_formatter.json_response(stats)
-            except Exception as e:
-                logger.error(f"Error getting memory stats: {e}")
-                return self.response_formatter.json_response({
-                    'error': 'Failed to get memory stats',
-                    'message': str(e)
-                }, 500)
     
     def _register_routes(self):
         """註冊 Flask 路由"""
@@ -267,6 +250,23 @@ class MultiPlatformChatBot:
         @self.app.route("/metrics")
         def metrics():
             return self._get_metrics()
+        
+        # 記憶體統計端點
+        @self.app.route("/memory-stats")
+        def memory_stats():
+            """記憶體統計端點"""
+            try:
+                # 檢查 memory_monitor 是否已初始化
+                if not hasattr(self, 'memory_monitor') or self.memory_monitor is None:
+                    raise RuntimeError("Memory monitor not initialized")
+                stats = self.memory_monitor.get_detailed_report()
+                return self.response_formatter.json_response(stats)
+            except Exception as e:
+                logger.error(f"Error getting memory stats: {e}")
+                return self.response_formatter.json_response({
+                    'error': 'Failed to get memory stats',
+                    'message': str(e)
+                }, 500)
         
         # 聊天介面 - 僅支援 JSON
         @self.app.route('/chat', methods=['GET', 'POST'])

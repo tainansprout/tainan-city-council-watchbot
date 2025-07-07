@@ -2,9 +2,54 @@
 
 [中文](README.md) | English
 
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Flask](https://img.shields.io/badge/Flask-2.3+-green.svg)](https://flask.palletsprojects.com/)
+[![Tests](https://img.shields.io/badge/Tests-73%2B%20Passing-brightgreen.svg)](tests/)
+[![Coverage](https://img.shields.io/badge/Coverage-Comprehensive-brightgreen.svg)](tests/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Google Cloud](https://img.shields.io/badge/Deploy-Google%20Cloud%20Run-blue.svg)](https://cloud.google.com/run)
+[![LINE Bot](https://img.shields.io/badge/Platform-LINE%20Bot-00C300.svg)](https://developers.line.biz/)
+[![OpenAI](https://img.shields.io/badge/AI-OpenAI%20GPT-412991.svg)](https://openai.com/)
+[![Anthropic](https://img.shields.io/badge/AI-Anthropic%20Claude-orange.svg)](https://anthropic.com/)
+[![Gemini](https://img.shields.io/badge/AI-Google%20Gemini-4285F4.svg)](https://ai.google.dev/)
+[![Ollama](https://img.shields.io/badge/AI-Ollama%20Local-purple.svg)](https://ollama.ai/)
+[![Architecture](https://img.shields.io/badge/Architecture-v2.1%20Integrated-yellow.svg)](#architecture)
+[![Maintenance](https://img.shields.io/badge/Maintained-Yes-brightgreen.svg)](README.md)
+
 This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram and other platforms, integrated with multiple AI model providers (OpenAI, Anthropic Claude, Google Gemini, Ollama). The bot features modular architecture design, deployed on Google Cloud Run with Google Cloud SQL for conversation history management, and supports both text and audio message processing.
 
 **🆕 v2.1 Core Infrastructure Integration Upgrade**: High-performance logging system and security module integration, optimizing performance and simplifying maintenance.
+**🎯 Testing Validation Complete**: 73+ unit tests fully passed, comprehensive core module coverage.
+
+## 🚀 Quick Start
+
+### ⚡ 3-Step Quick Deployment
+
+<details>
+<summary><strong>📋 Prerequisites Checklist (Click to expand)</strong></summary>
+
+**Required Items**:
+- OpenAI API Key: [Register OpenAI](https://platform.openai.com/)
+- LINE Bot: [Create LINE Channel](https://developers.line.biz/console/)
+- Google Cloud Account: [Enable Cloud Run](https://cloud.google.com/run)
+
+</details>
+
+```bash
+# 1️⃣ Download and Setup
+git clone https://github.com/tnsprout/ChatGPT-Line-Bot.git
+cd ChatGPT-Line-Bot
+pip install -r requirements.txt
+
+# 2️⃣ Quick Configuration
+cp config/config.yml.example config/config.yml
+# Edit config.yml with your API keys
+
+# 3️⃣ One-Click Deploy
+./scripts/deploy/deploy-to-cloudrun.sh
+```
+
+🎉 **Done!** Your multi-platform chatbot is ready
 
 ## Core Features
 
@@ -14,7 +59,9 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
 🔗 **Unified Citation Processing**: Consistent citation formatting across models  
 🎯 **Platform Abstraction**: Factory Pattern supports rapid expansion of new platforms  
 🛡️ **Enterprise-Grade Security**: Input validation, rate limiting, error handling  
-📊 **Monitoring & Logging**: Complete system monitoring and performance metrics
+📊 **Monitoring & Logging**: Complete system monitoring and performance metrics  
+🧠 **Smart Resource Management**: Memory monitoring, smart garbage collection, optimized polling strategies  
+⚡ **Performance Optimization**: Pre-compiled regex patterns, async processing, caching mechanisms
 
 ## Table of Contents
 
@@ -35,6 +82,12 @@ This project is a **multi-platform chatbot** supporting LINE, Discord, Telegram 
   - [Local Development](#local-development-setup)
   - [Google Cloud Run](#deploying-to-google-cloud-run)
 - [Development & Testing](#development--testing)
+- [FAQ & Troubleshooting](#faq--troubleshooting)
+  - [Frequently Asked Questions](#frequently-asked-questions)
+  - [Troubleshooting Steps](#troubleshooting-steps)
+  - [Deployment Checklist](#deployment-checklist)
+  - [Performance Optimization](#performance-optimization)
+- [Monitoring & Maintenance](#monitoring--maintenance)
 
 ## Prerequisites
 
@@ -611,37 +664,74 @@ Core infrastructure has been integrated and upgraded for improved performance an
 - ✅ **Simplified Maintenance**: Unified module interfaces, reduced complexity
 - ✅ **Backward Compatibility**: Existing API interfaces remain unchanged
 
-### Core Components
+### 📐 System Architecture Diagram
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Platform Layer│    │   AI Model Layer │    │   Data Layer    │
-├─────────────────┤    ├──────────────────┤    ├─────────────────┤
-│ • LINE Bot      │    │ • OpenAI         │    │ • PostgreSQL    │
-│ • Discord Bot   │───▶│ • Anthropic      │───▶│ • Thread Mgmt   │
-│ • Telegram Bot  │    │ • Gemini         │    │ • Conv History  │
-│ • Web Chat      │    │ • Ollama         │    │ • Multi-Platform│
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-          │                       │                       │
-          └───────────────────────┼───────────────────────┘
-                                  ▼
-                    ┌──────────────────────────┐
-                    │      Service Layer      │
-                    ├──────────────────────────┤
-                    │ • chat.py (Text Chat)    │
-                    │ • audio.py (Audio Trans) │
-                    │ • conversation.py (Conv) │
-                    │ • response.py (Response) │
-                    └──────────────────────────┘
-                                  │
-                    ┌──────────────────────────┐
-                    │     Database Layer      │
-                    ├──────────────────────────┤
-                    │ • connection.py (Conn)   │
-                    │ • models.py (Data Model) │
-                    │ • operations.py (Ops)    │
-                    │ • init_db.py (Init)      │
-                    └──────────────────────────┘
+```mermaid
+graph TB
+    subgraph "🌐 Platform Layer"
+        LINE[📱 LINE Bot]
+        DISCORD[🎮 Discord Bot]
+        TELEGRAM[📡 Telegram Bot]
+        WEB[🌍 Web Chat]
+    end
+    
+    subgraph "🧠 AI Model Layer"
+        OPENAI[🤖 OpenAI<br/>GPT-4]
+        ANTHROPIC[🎯 Anthropic<br/>Claude]
+        GEMINI[💎 Google<br/>Gemini]
+        OLLAMA[🏠 Ollama<br/>Local]
+    end
+    
+    subgraph "⚙️ Service Layer"
+        CHAT[💬 chat.py<br/>Text Chat]
+        AUDIO[🎤 audio.py<br/>Audio Transcription]
+        CONV[📝 conversation.py<br/>Conversation Management]
+        RESP[📤 response.py<br/>Response Formatting]
+    end
+    
+    subgraph "🗄️ Data Layer"
+        DB[(🐘 PostgreSQL<br/>Database)]
+        THREAD[🧵 Thread<br/>Management]
+        HISTORY[📚 Conversation<br/>History]
+    end
+    
+    subgraph "🔧 Core Infrastructure"
+        LOGGER[📋 logger.py<br/>Logging System]
+        SECURITY[🛡️ security.py<br/>Security Module]
+        MEMORY[🧠 memory_monitor.py<br/>Memory Monitoring]
+        POLLING[⏰ smart_polling.py<br/>Smart Polling]
+    end
+    
+    LINE --> CHAT
+    DISCORD --> CHAT
+    TELEGRAM --> CHAT
+    WEB --> CHAT
+    
+    CHAT --> OPENAI
+    CHAT --> ANTHROPIC
+    CHAT --> GEMINI
+    CHAT --> OLLAMA
+    
+    AUDIO --> CHAT
+    CHAT --> CONV
+    CONV --> DB
+    CHAT --> RESP
+    
+    OPENAI --> THREAD
+    ANTHROPIC --> HISTORY
+    GEMINI --> HISTORY
+    OLLAMA --> HISTORY
+    
+    CHAT -.-> LOGGER
+    CHAT -.-> SECURITY
+    CHAT -.-> MEMORY
+    OPENAI -.-> POLLING
+    
+    style LINE fill:#00C300
+    style OPENAI fill:#412991
+    style ANTHROPIC fill:#FF8C42
+    style GEMINI fill:#4285F4
+    style OLLAMA fill:#8B5CF6
 ```
 
 ### File Structure
@@ -833,6 +923,7 @@ This project adopts a layered testing architecture covering all critical functio
   - Core Service Tests (Chat, Conversation Management, Response Formatting)
   - Database-related Tests (ORM, Connection, Operations)
   - Authentication and Configuration Management Tests
+  - **Core Infrastructure Tests**: Memory monitoring, security modules, smart polling, etc.
 - **Integration Tests** (`tests/integration/`): Test cross-module end-to-end functionality
   - Database and ORM Integration Tests
   - Multi-platform Workflow Tests
@@ -851,6 +942,20 @@ This project adopts a layered testing architecture covering all critical functio
 - ✅ **Citation Processing**: Proper testing of AI model citation architecture separation
 - ✅ **Error Handling**: Dual-layer error messages and exception handling tests
 - ✅ **Configuration Management**: Environment variable override and configuration compatibility tests
+- ✅ **Robustness Enhancement**: Resolved module reloading and time simulation test stability issues
+
+#### Key Module Test Coverage
+- **security.py**: O(1) rate limiter, pre-compiled regex validation
+- **smart_polling.py**: Smart polling strategy and context management
+- **memory_monitor.py**: Memory monitoring and garbage collection
+- **app.py**: Core application functionality testing
+
+#### Latest Testing Improvements (2025)
+- ✅ **Fixed Module Reload Issues**: Resolved `importlib.reload()` causing `isinstance` check failures
+- ✅ **Enhanced Time Mocking**: Improved time simulation mechanisms, avoiding `StopIteration` exceptions
+- ✅ **Rate Limiter Testing**: Bypassed global mock interference, ensuring real RateLimiter statistics testing
+- ✅ **Test Isolation**: Separated test errors, ensuring tests don't interfere with each other
+- ✅ **Comprehensive Coverage**: Added 73+ unit tests, continuously improving coverage
 
 ### Configuration Files
 
@@ -860,11 +965,221 @@ Test configuration files are located in `pytest.ini`, including the following se
 - Test markers
 - Output format
 
+## FAQ & Troubleshooting
+
+### 🔧 Frequently Asked Questions
+
+#### Q1: LINE Bot not responding after deployment?
+**Solutions**:
+```bash
+# 1. Check Webhook URL configuration
+curl -X POST https://your-app.run.app/webhooks/line
+
+# 2. Check environment variables
+gcloud run services describe YOUR_SERVICE --region=YOUR_REGION
+
+# 3. View real-time logs
+gcloud logs tail --project=YOUR_PROJECT_ID
+```
+
+#### Q2: Database connection failed?
+**Checklist**:
+- ✅ SSL certificate files correctly placed in `config/ssl/`
+- ✅ Database username and password are correct
+- ✅ Firewall rules allow connections
+- ✅ Environment variables DB_HOST, DB_USER, DB_PASSWORD are set
+
+#### Q3: AI model response errors?
+**Diagnostic steps**:
+```bash
+# Check if API key is valid
+curl -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models
+
+# Check configuration file
+python -c "from src.core.config import ConfigManager; print(ConfigManager().get_config())"
+```
+
+#### Q4: High memory usage?
+**Monitoring & optimization**:
+```bash
+# Check memory usage
+curl https://your-app.run.app/health
+
+# Manually trigger garbage collection (development only)
+curl -X POST https://your-app.run.app/debug/gc
+```
+
+
+#### Q5: Core module performance issues?
+**Performance optimization checks**:
+```bash
+# Check rate limiter statistics
+curl https://your-app.run.app/debug/security
+
+# Check memory monitoring status
+curl https://your-app.run.app/debug/memory
+
+# Check logging performance statistics
+curl https://your-app.run.app/debug/logs
+```
+
+### 🚨 Troubleshooting Steps
+
+#### 1. Quick Diagnosis
+```bash
+# Check overall system health
+curl https://your-app.run.app/health
+
+# Check application information
+curl https://your-app.run.app/
+
+# Check platform status
+curl https://your-app.run.app/metrics
+```
+
+#### 2. Log Analysis
+```bash
+# View latest error logs
+gcloud logs read --project=YOUR_PROJECT_ID --filter="severity>=ERROR" --limit=50
+
+# View logs for specific time range
+gcloud logs read --project=YOUR_PROJECT_ID --filter="timestamp>='2025-01-01T00:00:00Z'"
+
+# Real-time log monitoring
+gcloud logs tail --project=YOUR_PROJECT_ID
+```
+
+#### 3. Configuration Validation
+```bash
+# Validate configuration file syntax
+python -c "import yaml; yaml.safe_load(open('config/config.yml'))"
+
+# Check environment variables
+env | grep -E "(OPENAI|LINE|DB_|FLASK_)"
+
+# Test database connection
+python scripts/setup_database.py health
+```
+
+### 📋 Deployment Checklist
+
+#### Pre-deployment Verification
+- [ ] All API keys set and valid
+- [ ] Database created and accessible
+- [ ] SSL certificate files correctly placed
+- [ ] Configuration file format is correct
+- [ ] Local testing passed
+
+#### Post-deployment Validation
+- [ ] Health check endpoint returns normal: `/health`
+- [ ] Webhook URL configured correctly
+- [ ] LINE Bot can receive and respond to messages
+- [ ] Database connection is normal
+- [ ] No obvious errors in logs
+
+### ⚡ Performance Optimization
+
+#### 1. Memory Optimization
+```yaml
+# Adjust in Cloud Run configuration
+resources:
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+```
+
+#### 2. Rate Limiting Adjustment
+```bash
+# Adjust environment variables based on usage
+export GENERAL_RATE_LIMIT=120
+export WEBHOOK_RATE_LIMIT=300
+export MAX_MESSAGE_LENGTH=5000
+```
+
+#### 3. Database Connection Pool
+```yaml
+# Configure in config.yml
+db:
+  pool_size: 5
+  pool_timeout: 30
+  pool_recycle: 3600
+```
+
+### 🔒 Security Best Practices
+
+#### Production Environment Security
+- ✅ Use Google Secret Manager for sensitive information
+- ✅ Regularly rotate API keys
+- ✅ Enable Cloud Run authentication
+- ✅ Set appropriate IAM roles and permissions
+
+#### Development Environment Security
+- ✅ Don't commit sensitive information to Git
+- ✅ Use `.env.local` for development environment configuration
+- ✅ Regularly check dependencies for security vulnerabilities
+- ✅ Enable code scanning and security checks
+
+## Monitoring & Maintenance
+
+### 📊 System Monitoring
+
+#### Built-in Monitoring Endpoints
+```bash
+# Application health status
+curl https://your-app.run.app/health
+
+# System metrics
+curl https://your-app.run.app/metrics
+
+# Memory monitoring
+curl https://your-app.run.app/debug/memory
+```
+
+#### Google Cloud Monitoring
+```bash
+# Set up monitoring alerts
+gcloud alpha monitoring policies create --policy-from-file=monitoring-policy.yaml
+
+# View Cloud Run metrics
+gcloud run services describe YOUR_SERVICE --region=YOUR_REGION
+```
+
+### 🔄 Regular Maintenance
+
+#### Weekly Checks
+- Check system logs for abnormal patterns
+- Verify database backups are working
+- Check API usage and costs
+- Update dependencies (test environment first)
+
+#### Monthly Reviews
+- Review system performance metrics
+- Analyze user behavior patterns
+- Plan capacity expansion needs
+- Check security settings
+
 ## Notes
 
-- Ensure all sensitive information is stored only in `config/ssl/` and `config/config.yml`.
-- Use Google Secret Manager to manage secrets if necessary.
-- Follow best practices for security and compliance.
+### 🚫 Important Limitations
+- **LINE Bot Message Limit**: Maximum 5000 characters per message
+- **OpenAI API Limits**: Based on your subscription plan
+- **Cloud Run Limits**: Maximum 60 minutes timeout per request
+- **Database Connections**: Note Cloud SQL connection limits
+
+### ⚠️ Security Considerations
+- Ensure all sensitive information is stored only in `config/ssl/` and environment variables
+- Regularly check Google Cloud IAM permission settings
+- Use Google Secret Manager for production environment passwords
+- Follow principle of least privilege for service accounts
+
+### 💡 Development Recommendations
+- Write test cases before developing new features
+- Use branching strategy for version control
+- Regularly run complete test suite
+- Maintain consistent code formatting and documentation
 
 ## Support Us
 

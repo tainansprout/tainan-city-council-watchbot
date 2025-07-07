@@ -4,14 +4,16 @@ Flask>=2.3.0,<3.0.0
 Werkzeug>=2.3.0,<3.0.0
 
 # AI model integrations
+# Note: Direct API integration via requests for better control
 openai>=1.0.0,<2.0.0
 anthropic>=0.25.0,<1.0.0
 google-generativeai>=0.4.0,<1.0.0
+# ollama>=0.2.0,<1.0.0  # Local model, no SDK needed
 
 # Text processing
 opencc-python-reimplemented>=0.1.6,<1.0.0
-beautifulsoup4>=4.12.0,<5.0.0
-youtube-transcript-api>=0.6.0,<1.0.0
+# beautifulsoup4>=4.12.0,<5.0.0  # Not used
+# youtube-transcript-api>=0.6.0,<1.0.0  # Not used
 
 # Configuration and data
 pyyaml>=6.0,<7.0
@@ -29,4 +31,25 @@ gunicorn>=21.0.0,<22.0.0
 cryptography>=41.0.0,<42.0.0
 python-dateutil>=2.8.0,<3.0.0
 
-psutil
+# System resource monitoring
+psutil>=5.9.0,<6.0.0
+
+# Audio processing for voice message transcription
+pydub>=0.25.0,<1.0.0
+ffmpeg-python>=0.2.0,<1.0.0
+
+# Environment variable management for development
+python-dotenv>=1.0.0,<2.0.0
+
+# Additional platform integrations (optional)
+# discord.py>=2.3.0,<3.0.0
+# python-telegram-bot>=20.0,<21.0
+
+# Type checking and development tools
+mypy>=1.5.0,<2.0.0
+black>=23.0.0,<24.0.0
+flake8>=6.0.0,<7.0.0
+isort>=5.12.0,<6.0.0
+
+# Additional utilities
+requests-toolbelt>=1.0.0,<2.0.0

@@ -463,16 +463,24 @@ class TestRateLimiter:
     
     def test_reset_method(self):
         """測試重置方法"""
-        mock_time = lambda: 1000.0
-        limiter = self._create_test_rate_limiter(time_func=mock_time)
+        # 在這個測試中，我們需要停用全域的 RateLimiter mock
+        import importlib
+        from src.core import security
+        importlib.reload(security)  # 重新載入模組以獲得真實的 RateLimiter
+        
+        limiter = security.RateLimiter()
         
         # 添加一些記錄
-        limiter.is_allowed("client_1", max_requests=10)
-        limiter.is_allowed("client_2", max_requests=10)
+        result1 = limiter.is_allowed("client_1", max_requests=10)
+        result2 = limiter.is_allowed("client_2", max_requests=10)
+        
+        # 確保請求被處理
+        assert result1 is True
+        assert result2 is True
         
         # 驗證有請求記錄
         stats_before = limiter.get_stats()
-        assert stats_before['total_requests'] > 0
+        assert stats_before['total_requests'] == 2
         
         # 重置
         limiter.reset()
@@ -539,7 +547,8 @@ class TestSecurityMiddleware:
         
         assert middleware.app is None
         assert middleware.config == {}
-        assert isinstance(middleware.rate_limiter, RateLimiter)
+        # 使用類名比較而不是 isinstance，避免模組重載問題
+        assert middleware.rate_limiter.__class__.__name__ == 'RateLimiter'
     
     def test_init_app(self, app):
         """測試初始化 Flask 應用"""
@@ -811,14 +820,16 @@ class TestGlobalInstances:
         """測試全域 security_config 實例"""
         from src.core.security import security_config
         
-        assert isinstance(security_config, SecurityConfig)
+        # 使用類名比較而不是 isinstance，避免模組重載問題
+        assert security_config.__class__.__name__ == 'SecurityConfig'
         assert hasattr(security_config, 'config')
     
     def test_security_middleware_global_instance(self):
         """測試全域 security_middleware 實例"""
         from src.core.security import security_middleware
         
-        assert isinstance(security_middleware, SecurityMiddleware)
+        # 使用類名比較而不是 isinstance，避免模組重載問題  
+        assert security_middleware.__class__.__name__ == 'SecurityMiddleware'
         assert hasattr(security_middleware, 'rate_limiter')
     
     def test_init_security_function(self):
@@ -858,8 +869,12 @@ class TestSecurityIntegration:
     
     def test_rate_limiting_logic(self):
         """測試速率限制邏輯"""
-        # 使用測試文件中的輔助方法來創建不受 mock 影響的 RateLimiter
-        rate_limiter = RateLimiter()
+        # 使用真實的 RateLimiter 來測試速率限制邏輯
+        import importlib
+        from src.core import security
+        importlib.reload(security)  # 重新載入模組以獲得真實的 RateLimiter
+        
+        rate_limiter = security.RateLimiter()
         
         # 測試速率限制邏輯
         client_id = "integration_test_client"
@@ -947,9 +962,13 @@ class TestOptimizedFeatures:
     
     def test_optimized_rate_limiter_stats(self):
         """測試優化速率限制器的統計功能"""
-        limiter = RateLimiter()
+        # 使用真實的 RateLimiter 來測試統計功能
+        import importlib
+        from src.core import security
+        importlib.reload(security)  # 重新載入模組以獲得真實的 RateLimiter
         
-        # 發送一些請求
+        limiter = security.RateLimiter()
+        
         # 發送一些請求
         limiter.is_allowed("client_1", max_requests=5)
         limiter.is_allowed("client_2", max_requests=5)

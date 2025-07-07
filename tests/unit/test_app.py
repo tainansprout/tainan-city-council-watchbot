@@ -905,7 +905,7 @@ class TestMultiPlatformChatBotMemoryMonitoring:
         mock_memory_monitor = Mock()
         mock_smart_gc = Mock()
         
-        with patch('src.app.setup_memory_monitoring', return_value=(mock_memory_monitor, mock_smart_gc)) as mock_setup, \
+        with patch('src.core.memory_monitor.setup_memory_monitoring', return_value=(mock_memory_monitor, mock_smart_gc)) as mock_setup, \
              patch('src.app.logger') as mock_logger:
             
             bot._initialize_memory_monitoring()
@@ -933,7 +933,18 @@ class TestMultiPlatformChatBotMemoryMonitoring:
         bot = chatbot_with_mocks
         bot.memory_monitor = Mock()
         bot.memory_monitor.get_detailed_report.return_value = {'memory_usage': '100MB'}
-        bot.response_formatter.json_response.return_value = {'status': 'ok'}
+        
+        # 初始化 response_formatter
+        if not hasattr(bot, 'response_formatter') or bot.response_formatter is None:
+            bot.response_formatter = Mock()
+        
+        # 模擬 response_formatter.json_response 返回 Flask Response
+        mock_response = bot.app.response_class(
+            response='{"memory_usage": "100MB"}',
+            status=200,
+            mimetype='application/json'
+        )
+        bot.response_formatter.json_response.return_value = mock_response
         
         # 註冊路由
         bot._register_routes()
@@ -943,14 +954,25 @@ class TestMultiPlatformChatBotMemoryMonitoring:
             
             assert response.status_code == 200
             bot.memory_monitor.get_detailed_report.assert_called_once()
-            bot.response_formatter.json_response.assert_called()
+            bot.response_formatter.json_response.assert_called_once()
     
     def test_memory_stats_endpoint_error(self, chatbot_with_mocks):
         """測試記憶體統計端點錯誤"""
         bot = chatbot_with_mocks
         bot.memory_monitor = Mock()
         bot.memory_monitor.get_detailed_report.side_effect = Exception("Memory error")
-        bot.response_formatter.json_response.return_value = {'error': 'Memory error'}
+        
+        # 初始化 response_formatter
+        if not hasattr(bot, 'response_formatter') or bot.response_formatter is None:
+            bot.response_formatter = Mock()
+        
+        # 模擬 response_formatter.json_response 返回 Flask Error Response
+        mock_error_response = bot.app.response_class(
+            response='{"error": "Memory error"}',
+            status=500,
+            mimetype='application/json'
+        )
+        bot.response_formatter.json_response.return_value = mock_error_response
         
         # 註冊路由
         bot._register_routes()
@@ -960,3 +982,100 @@ class TestMultiPlatformChatBotMemoryMonitoring:
             
             assert response.status_code == 500
             bot.response_formatter.json_response.assert_called()
+
+
+class TestMultiPlatformChatBotAdvanced:
+    """進階多平台聊天機器人測試"""
+    
+    @pytest.fixture
+    def mock_config_advanced(self):
+        """進階模擬配置"""
+        return {
+            'app': {
+                'name': 'Advanced Test Bot',
+                'version': '2.1.0',
+                'description': 'Advanced multi-platform chat bot'
+            },
+            'llm': {
+                'provider': 'anthropic'
+            },
+            'anthropic': {
+                'api_key': 'test_anthropic_key',
+                'model': 'claude-3-sonnet-20240229'
+            },
+            'gemini': {
+                'api_key': 'test_gemini_key'
+            },
+            'ollama': {
+                'base_url': 'http://localhost:11434'
+            },
+            'db': {
+                'host': 'localhost',
+                'port': 5432,
+                'database': 'advanced_test_db',
+                'username': 'test_user',
+                'password': 'test_pass'
+            },
+            'platforms': {
+                'line': {
+                    'enabled': True,
+                    'channel_access_token': 'advanced_line_token',
+                    'channel_secret': 'advanced_line_secret'
+                },
+                'discord': {
+                    'enabled': True,
+                    'bot_token': 'advanced_discord_token'
+                },
+                'telegram': {
+                    'enabled': False,
+                    'bot_token': 'advanced_telegram_token'
+                }
+            },
+            'text_processing': {
+                'preprocessors': ['date_replacement'],
+                'post_replacements': [{'from': 'old_text', 'to': 'new_text'}]
+            },
+            'auth': {
+                'method': 'basic_auth',
+                'username': 'admin',
+                'password': 'secure_password'
+            }
+        }
+    
+    @patch('src.app.load_config')
+    def test_chatbot_initialization_with_multiple_providers(self, mock_load_config, mock_config_advanced):
+        """測試多個模型提供商的初始化"""
+        mock_load_config.return_value = mock_config_advanced
+        
+        with patch.object(MultiPlatformChatBot, '_initialize_app'):
+            bot = MultiPlatformChatBot()
+            
+            assert bot.config == mock_config_advanced
+            # 驗證 Flask 配置
+            assert bot.app.config['JSON_AS_ASCII'] is False
+            assert 'charset=utf-8' in bot.app.config['JSONIFY_MIMETYPE']
+    
+    @patch('src.app.load_config')
+    def test_initialize_model_with_different_providers(self, mock_load_config, mock_config_advanced):
+        """測試不同模型提供商的初始化"""
+        providers_to_test = ['openai', 'anthropic', 'gemini', 'ollama']
+        
+        for provider in providers_to_test:
+            config = mock_config_advanced.copy()
+            config['llm']['provider'] = provider
+            mock_load_config.return_value = config
+            
+            with patch.object(MultiPlatformChatBot, '_initialize_app'), \
+                 patch('src.app.ModelFactory') as mock_model_factory:
+                
+                mock_model = Mock()
+                mock_model_factory.create_from_config.return_value = mock_model
+                
+                bot = MultiPlatformChatBot()
+                bot._initialize_model()
+                
+                # 驗證模型配置
+                expected_config = config.get(provider, {}).copy()
+                expected_config['provider'] = provider
+                mock_model_factory.create_from_config.assert_called_with(expected_config)
+                assert bot.model == mock_model

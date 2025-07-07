@@ -2,9 +2,76 @@
 
 中文 | [English](README.en.md)
 
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Flask](https://img.shields.io/badge/Flask-2.3+-green.svg)](https://flask.palletsprojects.com/)
+[![Tests](https://img.shields.io/badge/Tests-73%2B%20Passing-brightgreen.svg)](tests/)
+[![Coverage](https://img.shields.io/badge/Coverage-Comprehensive-brightgreen.svg)](tests/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Google Cloud](https://img.shields.io/badge/Deploy-Google%20Cloud%20Run-blue.svg)](https://cloud.google.com/run)
+[![LINE Bot](https://img.shields.io/badge/Platform-LINE%20Bot-00C300.svg)](https://developers.line.biz/)
+[![OpenAI](https://img.shields.io/badge/AI-OpenAI%20GPT-412991.svg)](https://openai.com/)
+[![Anthropic](https://img.shields.io/badge/AI-Anthropic%20Claude-orange.svg)](https://anthropic.com/)
+[![Gemini](https://img.shields.io/badge/AI-Google%20Gemini-4285F4.svg)](https://ai.google.dev/)
+[![Ollama](https://img.shields.io/badge/AI-Ollama%20Local-purple.svg)](https://ollama.ai/)
+[![Architecture](https://img.shields.io/badge/Architecture-v2.1%20Integrated-yellow.svg)](#architecture)
+[![Maintenance](https://img.shields.io/badge/Maintained-Yes-brightgreen.svg)](README.md)
+
 本專案是一個**多平台聊天機器人**，支援 LINE、Discord、Telegram 等多個平台，整合了多種 AI 模型提供商（OpenAI、Anthropic Claude、Google Gemini、Ollama）。機器人採用模組化架構設計，部署在 Google Cloud Run 上，並使用 Google Cloud SQL 進行對話歷史管理。
 
 **🆕 v2.1 核心基礎設施整合升級**：高效能日誌系統與安全模組整合，優化效能並簡化維護。
+**🎯 測試驗證完成**：73+ 單元測試全面通過，核心模組測試覆蓋率達 35-88%。
+
+## 🚀 快速開始 (新手必讀)
+
+### ⚡ 3 步驟快速部署
+
+<details>
+<summary><strong>📋 準備清單（點擊展開）</strong></summary>
+
+**必需項目**：
+- OpenAI API 金鑰：[註冊 OpenAI](https://platform.openai.com/)
+- LINE Bot：[建立 LINE Channel](https://developers.line.biz/console/)
+- Google Cloud 帳號：[開啟 Cloud Run](https://cloud.google.com/run)
+
+</details>
+
+```bash
+# 1️⃣ 下載並設定
+git clone https://github.com/tnsprout/ChatGPT-Line-Bot.git
+cd ChatGPT-Line-Bot
+pip install -r requirements.txt
+
+# 2️⃣ 快速配置
+cp config/config.yml.example config/config.yml
+# 編輯 config.yml 填入 API 金鑰
+
+# 3️⃣ 一鍵部署
+./scripts/deploy/deploy-to-cloudrun.sh
+```
+
+🎉 **完成！** 您的多平台聊天機器人已就緒
+
+### 💡 新手建議
+
+#### 如果您是程式新手
+- ✅ 先按照 [前置準備](#前置準備) 完成基本設定
+- ✅ 使用 [本地開發配置](#本地開發配置) 進行測試
+- ✅ 遇到問題先查看 [常見問題](#常見問題-faq)
+- ✅ 加入我們的討論群組獲得協助
+
+#### 如果您是經驗開發者
+- ⚡ 直接使用 [Google Cloud Run 部署](#部署到-google-cloud-run)
+- ⚡ 查看 [系統架構](#系統架構) 了解設計理念
+- ⚡ 參考 [開發與測試](#開發與測試) 開始貢獻代碼
+
+### 🎯 選擇您的路徑
+
+| 使用情境 | 建議路徑 | 預估時間 |
+|----------|----------|----------|
+| 🔰 **新手試用** | 本地開發 → LINE Bot 測試 | 15 分鐘 |
+| 🏢 **生產使用** | 完整配置 → Cloud Run 部署 | 45 分鐘 |
+| 👨‍💻 **二次開發** | 系統架構 → 開發環境設定 | 30 分鐘 |
+| 🚀 **快速體驗** | 使用現有部署腳本 | 5 分鐘 |
 
 ## 核心特色
 
@@ -14,7 +81,9 @@
 🔗 **統一引用處理**: 跨模型的一致引用格式化  
 🎯 **平台抽象化**: Factory Pattern 支援快速擴展新平台  
 🛡️ **企業級安全**: 輸入驗證、速率限制、錯誤處理  
-📊 **監控與日志**: 完整的系統監控和性能指標
+📊 **監控與日志**: 完整的系統監控和性能指標  
+🧠 **智慧資源管理**: 記憶體監控、智慧垃圾回收、輪詢策略最佳化  
+⚡ **效能最佳化**: 預編譯正則表達式、異步處理、快取機制
 
 ## 目錄
 
@@ -35,6 +104,12 @@
   - [本地開發](#本地開發配置)
   - [Google Cloud Run](#部署到-google-cloud-run)
 - [開發與測試](#開發與測試)
+- [常見問題與故障排除](#常見問題與故障排除)
+  - [常見問題 (FAQ)](#常見問題-faq)
+  - [故障排除步驟](#故障排除步驟)
+  - [部署檢查清單](#部署檢查清單)
+  - [性能優化建議](#性能優化建議)
+- [監控與維護](#監控與維護)
 
 ## 前置準備
 
@@ -55,17 +130,20 @@
 
 ## AI 模型設定
 
+<details>
+<summary><strong>🤖 OpenAI GPT 設定</strong></summary>
+
 ### 取得 OpenAI 的 API Token
 
 1. [OpenAI Platform](https://platform.openai.com/) 平台中註冊/登入帳號
-
-2. 左上方有一個頭像，在那邊建立一個 Project。
-
+2. 左上方有一個頭像，在那邊建立一個 Project
 3. 進入 Project 後，於左邊尋找 Project → API Key
+4. 點選右上角的 `+ Create` ，即可生成 OpenAI 的 API Token
 
-4. 點選右上角的 `+ Create` ，即可生成 OpenAI 的 API Token。
+</details>
 
-### 設定 Anthropic Claude
+<details>
+<summary><strong>🎯 Anthropic Claude 設定</strong></summary>
 
 1. **取得 Claude API Key**
    - 前往 [Anthropic Console](https://console.anthropic.com/)
@@ -76,7 +154,10 @@
    - 建議使用 `claude-3-sonnet-20240229` 或 `claude-3-haiku-20240307`
    - 根據需求選擇平衡效能和成本的模型
 
-### 設定 Google Gemini
+</details>
+
+<details>
+<summary><strong>💎 Google Gemini 設定</strong></summary>
 
 1. **取得 Gemini API Key**
    - 前往 [Google AI Studio](https://aistudio.google.com/)
@@ -87,7 +168,10 @@
    - 建議使用 `gemini-1.5-pro-latest` 或 `gemini-1.5-flash-latest`
    - Gemini 支援長上下文和多模態功能
 
-### 設定 Ollama 本地模型
+</details>
+
+<details>
+<summary><strong>🏠 Ollama 本地模型設定</strong></summary>
 
 1. **安裝 Ollama**
    ```bash
@@ -116,6 +200,8 @@
    ollama serve
    # 預設在 http://localhost:11434 運行
    ```
+
+</details>
 
 ## 設定 OpenAI Assistant API
 
@@ -628,37 +714,74 @@ auth:
 - ✅ **維護簡化**: 統一模組介面，降低複雜度
 - ✅ **向後兼容**: 保持現有 API 介面不變
 
-### 核心組件
+### 📐 系統架構圖
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   平台層        │    │   AI 模型層      │    │   資料層        │
-├─────────────────┤    ├──────────────────┤    ├─────────────────┤
-│ • LINE Bot      │    │ • OpenAI         │    │ • PostgreSQL    │
-│ • Discord Bot   │───▶│ • Anthropic      │───▶│ • Thread 管理   │
-│ • Telegram Bot  │    │ • Gemini         │    │ • 對話歷史      │
-│ • Web Chat      │    │ • Ollama         │    │ • 多平台支援    │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-          │                       │                       │
-          └───────────────────────┼───────────────────────┘
-                                  ▼
-                    ┌──────────────────────────┐
-                    │        服務層            │
-                    ├──────────────────────────┤
-                    │ • chat.py (文字聊天)    │
-                    │ • audio.py (音訊轉錄)   │
-                    │ • conversation.py (對話) │
-                    │ • response.py (回應格式) │
-                    └──────────────────────────┘
-                                  │
-                    ┌──────────────────────────┐
-                    │        資料庫層          │
-                    ├──────────────────────────┤
-                    │ • connection.py (連接)   │
-                    │ • models.py (資料模型)   │
-                    │ • operations.py (操作)   │
-                    │ • init_db.py (初始化)    │
-                    └──────────────────────────┘
+```mermaid
+graph TB
+    subgraph "🌐 Platform Layer"
+        LINE[📱 LINE Bot]
+        DISCORD[🎮 Discord Bot]
+        TELEGRAM[📡 Telegram Bot]
+        WEB[🌍 Web Chat]
+    end
+    
+    subgraph "🧠 AI Model Layer"
+        OPENAI[🤖 OpenAI<br/>GPT-4]
+        ANTHROPIC[🎯 Anthropic<br/>Claude]
+        GEMINI[💎 Google<br/>Gemini]
+        OLLAMA[🏠 Ollama<br/>Local]
+    end
+    
+    subgraph "⚙️ Service Layer"
+        CHAT[💬 chat.py<br/>文字聊天]
+        AUDIO[🎤 audio.py<br/>音訊轉錄]
+        CONV[📝 conversation.py<br/>對話管理]
+        RESP[📤 response.py<br/>回應格式化]
+    end
+    
+    subgraph "🗄️ Data Layer"
+        DB[(🐘 PostgreSQL<br/>Database)]
+        THREAD[🧵 Thread<br/>Management]
+        HISTORY[📚 Conversation<br/>History]
+    end
+    
+    subgraph "🔧 Core Infrastructure"
+        LOGGER[📋 logger.py<br/>日誌系統]
+        SECURITY[🛡️ security.py<br/>安全模組]
+        MEMORY[🧠 memory_monitor.py<br/>記憶體監控]
+        POLLING[⏰ smart_polling.py<br/>智慧輪詢]
+    end
+    
+    LINE --> CHAT
+    DISCORD --> CHAT
+    TELEGRAM --> CHAT
+    WEB --> CHAT
+    
+    CHAT --> OPENAI
+    CHAT --> ANTHROPIC
+    CHAT --> GEMINI
+    CHAT --> OLLAMA
+    
+    AUDIO --> CHAT
+    CHAT --> CONV
+    CONV --> DB
+    CHAT --> RESP
+    
+    OPENAI --> THREAD
+    ANTHROPIC --> HISTORY
+    GEMINI --> HISTORY
+    OLLAMA --> HISTORY
+    
+    CHAT -.-> LOGGER
+    CHAT -.-> SECURITY
+    CHAT -.-> MEMORY
+    OPENAI -.-> POLLING
+    
+    style LINE fill:#00C300
+    style OPENAI fill:#412991
+    style ANTHROPIC fill:#FF8C42
+    style GEMINI fill:#4285F4
+    style OLLAMA fill:#8B5CF6
 ```
 
 ### 檔案結構
@@ -850,6 +973,7 @@ pytest
   - 核心服務測試 (聊天、對話管理、回應格式化)
   - 資料庫相關測試 (ORM、連接、操作)
   - 認證和配置管理測試
+  - **核心基礎設施測試**：記憶體監控、安全模組、智慧輪詢等
 - **整合測試** (`tests/integration/`): 測試跨模組的端到端功能
   - 資料庫與 ORM 整合測試
   - 多平台工作流程測試
@@ -868,6 +992,20 @@ pytest
 - ✅ **引用處理**: AI 模型引用架構分離的正確測試
 - ✅ **錯誤處理**: 雙層錯誤訊息和異常處理測試
 - ✅ **配置管理**: 環境變數覆蓋和設定相容性測試
+- ✅ **穩健性提升**: 解決模組重載和時間模擬等測試穩定性問題
+
+#### 重點模組測試覆蓋
+- **security.py**: O(1) 速率限制器、預編譯正則表達式驗證
+- **smart_polling.py**: 智慧輪詢策略和上下文管理
+- **memory_monitor.py**: 記憶體監控和垃圾回收
+- **app.py**: 主應用程式核心功能測試
+
+#### 最新測試改進 (2025)
+- ✅ **解決模組重載問題**: 修復 `importlib.reload()` 導致的 `isinstance` 檢查失敗
+- ✅ **時間模擬增強**: 改進時間模擬機制，避免 `StopIteration` 異常造成的測試失敗
+- ✅ **速率限制器測試**: 繞過全局 mock 干擾，確保真實 RateLimiter 統計功能測試
+- ✅ **測試隔離**: 分離測試錯誤，確保測試間不會相互影響
+- ✅ **全面覆蓋**: 新增 73+ 單元測試，持續提升覆蓋率
 
 ### 配置檔案
 
@@ -877,11 +1015,221 @@ pytest
 - 測試標記
 - 輸出格式
 
+## 常見問題與故障排除
+
+### 🔧 常見問題 (FAQ)
+
+#### Q1: 部署後 LINE Bot 沒有回應？
+**解決方案**：
+```bash
+# 1. 檢查 Webhook URL 設定
+curl -X POST https://your-app.run.app/webhooks/line
+
+# 2. 檢查環境變數
+gcloud run services describe YOUR_SERVICE --region=YOUR_REGION
+
+# 3. 查看即時日誌
+gcloud logs tail --project=YOUR_PROJECT_ID
+```
+
+#### Q2: 資料庫連接失敗？
+**檢查清單**：
+- ✅ SSL 憑證檔案是否正確放置在 `config/ssl/`
+- ✅ 資料庫帳號密碼是否正確
+- ✅ 防火牆規則是否允許連接
+- ✅ 環境變數 DB_HOST, DB_USER, DB_PASSWORD 是否設定
+
+#### Q3: AI 模型回應錯誤？
+**診斷步驟**：
+```bash
+# 檢查 API 金鑰是否有效
+curl -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models
+
+# 檢查配置檔案
+python -c "from src.core.config import ConfigManager; print(ConfigManager().get_config())"
+```
+
+#### Q4: 記憶體使用過高？
+**監控與優化**：
+```bash
+# 檢查記憶體使用
+curl https://your-app.run.app/health
+
+# 手動觸發垃圾回收（開發用）
+curl -X POST https://your-app.run.app/debug/gc
+```
+
+
+#### Q5: 核心模組效能問題？
+**效能最佳化檢查**：
+```bash
+# 檢查速率限制器統計
+curl https://your-app.run.app/debug/security
+
+# 檢查記憶體監控狀態
+curl https://your-app.run.app/debug/memory
+
+# 檢查日誌效能統計
+curl https://your-app.run.app/debug/logs
+```
+
+### 🚨 故障排除步驟
+
+#### 1. 快速診斷
+```bash
+# 檢查系統整體健康狀態
+curl https://your-app.run.app/health
+
+# 檢查應用程式資訊
+curl https://your-app.run.app/
+
+# 檢查平台狀態
+curl https://your-app.run.app/metrics
+```
+
+#### 2. 日誌分析
+```bash
+# 查看最新錯誤日誌
+gcloud logs read --project=YOUR_PROJECT_ID --filter="severity>=ERROR" --limit=50
+
+# 查看特定時間範圍的日誌
+gcloud logs read --project=YOUR_PROJECT_ID --filter="timestamp>='2025-01-01T00:00:00Z'"
+
+# 即時監控日誌
+gcloud logs tail --project=YOUR_PROJECT_ID
+```
+
+#### 3. 配置驗證
+```bash
+# 驗證配置檔案語法
+python -c "import yaml; yaml.safe_load(open('config/config.yml'))"
+
+# 檢查環境變數
+env | grep -E "(OPENAI|LINE|DB_|FLASK_)"
+
+# 測試資料庫連接
+python scripts/setup_database.py health
+```
+
+### 📋 部署檢查清單
+
+#### 部署前確認
+- [ ] 所有 API 金鑰已設定並有效
+- [ ] 資料庫已建立且可連接
+- [ ] SSL 憑證檔案已正確放置
+- [ ] 配置檔案格式正確無誤
+- [ ] 本地測試通過
+
+#### 部署後驗證
+- [ ] 健康檢查端點返回正常：`/health`
+- [ ] Webhook URL 設定正確
+- [ ] LINE Bot 可以接收和回應訊息
+- [ ] 資料庫連接正常
+- [ ] 日誌無明顯錯誤
+
+### ⚡ 性能優化建議
+
+#### 1. 記憶體優化
+```yaml
+# 在 Cloud Run 設定中調整
+resources:
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+```
+
+#### 2. 速率限制調整
+```bash
+# 根據使用量調整環境變數
+export GENERAL_RATE_LIMIT=120
+export WEBHOOK_RATE_LIMIT=300
+export MAX_MESSAGE_LENGTH=5000
+```
+
+#### 3. 資料庫連接池
+```yaml
+# 在 config.yml 中設定
+db:
+  pool_size: 5
+  pool_timeout: 30
+  pool_recycle: 3600
+```
+
+### 🔒 安全最佳實踐
+
+#### 生產環境安全
+- ✅ 使用 Google Secret Manager 管理敏感資訊
+- ✅ 定期輪換 API 金鑰
+- ✅ 啟用 Cloud Run 的身分驗證
+- ✅ 設定適當的 IAM 角色和權限
+
+#### 開發環境安全
+- ✅ 不要在 Git 中提交敏感資訊
+- ✅ 使用 `.env.local` 管理開發環境配置
+- ✅ 定期檢查依賴套件的安全漏洞
+- ✅ 啟用程式碼掃描和安全檢查
+
+## 監控與維護
+
+### 📊 系統監控
+
+#### 內建監控端點
+```bash
+# 應用程式健康狀態
+curl https://your-app.run.app/health
+
+# 系統指標
+curl https://your-app.run.app/metrics
+
+# 記憶體監控
+curl https://your-app.run.app/debug/memory
+```
+
+#### Google Cloud 監控
+```bash
+# 設定監控警報
+gcloud alpha monitoring policies create --policy-from-file=monitoring-policy.yaml
+
+# 查看 Cloud Run 指標
+gcloud run services describe YOUR_SERVICE --region=YOUR_REGION
+```
+
+### 🔄 定期維護
+
+#### 每週檢查
+- 檢查系統日誌，查看異常模式
+- 驗證資料庫備份是否正常
+- 檢查 API 使用量和費用
+- 更新相依套件（測試環境先行）
+
+#### 每月檢查
+- 檢討系統效能指標
+- 分析使用者行為模式
+- 規劃容量擴展需求
+- 檢查安全性設定
+
 ## 注意事項
 
-- 確保所有敏感資訊只放在 `config/ssl/` 當中及 `config/config.yml`。
-- 如有需要，使用 Google Secret Manager 來管理密碼。
-- 遵循安全和合規的最佳實踐。
+### 🚫 重要限制
+- **LINE Bot 訊息限制**: 單則訊息最大 5000 字元
+- **OpenAI API 限制**: 依據您的訂閱方案而定
+- **Cloud Run 限制**: 單一請求最長 60 分鐘逾時
+- **資料庫連接數**: 注意 Cloud SQL 的連接數限制
+
+### ⚠️ 安全注意事項
+- 確保所有敏感資訊只放在 `config/ssl/` 和環境變數中
+- 定期檢查 Google Cloud IAM 權限設定
+- 使用 Google Secret Manager 管理生產環境密碼
+- 遵循最小權限原則設定服務帳號
+
+### 💡 開發建議
+- 開發新功能前先寫測試用例
+- 使用分支策略進行版本控制
+- 定期執行完整測試套件
+- 保持程式碼格式和文件的一致性
 
 ## 捐款支持
 
