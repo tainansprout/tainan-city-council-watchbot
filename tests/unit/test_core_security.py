@@ -119,7 +119,7 @@ class TestSecurityConfig:
         config = SecurityConfig()
         
         assert config.get_max_message_length(is_test=False) == config.config['max_message_length']
-        assert config.get_max_message_length(is_test=True) == config.config['max_test_message_length']
+        assert config.get_max_message_length(is_test=True) == config.config['max_message_length']
     
     def test_should_log_security_events(self):
         """測試是否記錄安全事件"""
