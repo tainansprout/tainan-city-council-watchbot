@@ -292,3 +292,48 @@ if not monitor.check_memory_usage():
 
 ### Development
 - pytest, mypy, black, flake8
+
+## Collaboration Guidelines
+
+### Communication Preferences
+- **Language**: 中文 (Traditional Chinese) for discussions, English for code comments
+- **Code Style**: Follow existing patterns in the codebase, use descriptive variable names
+- **Commit Messages**: Use conventional commits format (feat:, fix:, docs:, etc.)
+
+### Development Workflow
+- **Testing**: Always run tests before committing changes
+- **Code Quality**: Run linting and type checking before submitting code
+- **Documentation**: Update relevant documentation when adding new features
+- **Error Handling**: Implement proper error handling and user-friendly messages
+- **Git Operations**: Do not perform git restore or git commit operations unless explicitly requested
+
+### Code Quality Standards
+- **Structure**: Ensure clear separation of concerns with well-defined responsibilities for each file
+- **DRY Principle**: Avoid redundant code and refactor duplicated logic into reusable components
+- **Test Coverage**: Add comprehensive tests for all modified code sections
+- **Design Patterns**: Implement appropriate design patterns following current best practices
+- **Modern Practices**: Research latest documentation and best practices for all packages, as they may have evolved
+- **Architecture Review**: Periodically evaluate code architecture and propose refactoring when necessary
+- **Documentation Updates**: Update documentation to reflect any significant changes or architectural modifications
+
+### Task Management
+- **Planning**: Break down complex tasks into smaller, manageable steps
+- **Progress Updates**: Provide regular updates on task completion status
+- **Problem Solving**: Explain approach and reasoning when implementing solutions
+- **Code Review**: Focus on functionality, performance, and maintainability
+
+### Project-Specific Guidelines
+- **Multi-Platform**: Consider impact on all supported platforms (LINE, Discord, Telegram)
+- **AI Models**: Test changes across different model providers (OpenAI, Anthropic, Gemini, Ollama)
+- **Database**: Use migration scripts for schema changes
+- **Security**: Follow security best practices, especially for user input validation
+- **Performance**: Monitor memory usage and optimize for Cloud Run deployment
+- **Package Updates**: When using newer package versions, research current best practices and API changes
+- **Refactoring**: Regularly assess if code structure can be improved for better maintainability
+- **Testing Framework**: Maintain clear test organization matching the source code structure
+
+### Response Style
+- **Conciseness**: Keep responses focused and to the point
+- **Clarity**: Explain complex concepts in simple terms
+- **Practicality**: Provide actionable solutions with working code examples
+- **Context Awareness**: Consider the current state of the codebase and recent changes
