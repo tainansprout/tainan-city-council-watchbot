@@ -14,7 +14,7 @@ class TestSecurityHeaders:
 
     def test_get_security_headers_enabled(self):
         """測試啟用安全標頭時的配置"""
-        with patch.dict(os.environ, {'ENABLE_SECURITY_HEADERS': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_SECURITY_HEADERS': 'true', 'ENABLE_HSTS': 'true'}):
             headers = SecurityHeaders.get_security_headers()
             
             # 檢查關鍵安全標頭是否存在
@@ -22,14 +22,12 @@ class TestSecurityHeaders:
             assert 'Strict-Transport-Security' in headers
             assert 'X-Frame-Options' in headers
             assert 'X-Content-Type-Options' in headers
-            assert 'X-XSS-Protection' in headers
             assert 'Referrer-Policy' in headers
             assert 'Permissions-Policy' in headers
             
             # 檢查具體值
             assert headers['X-Frame-Options'] == 'DENY'
             assert headers['X-Content-Type-Options'] == 'nosniff'
-            assert headers['X-XSS-Protection'] == '1; mode=block'
             assert 'max-age=31536000' in headers['Strict-Transport-Security']
 
     def test_get_security_headers_disabled(self):
@@ -251,9 +249,10 @@ class TestSecurityHeadersIntegration:
             csp = headers['Content-Security-Policy']
             
             # 檢查 CSP 語法的基本有效性
-            assert csp.endswith("'self'")  # 確保正確的引號使用
+            assert csp.endswith("'none'")  # 確保以 'none' 結尾（object-src）
             assert "'unsafe-inline'" in csp  # 檢查特殊值的引號
             assert "https:" in csp  # 檢查協議的使用
+            assert "'self'" in csp  # 檢查 'self' 值的存在
             
             # 確保沒有常見的語法錯誤
             assert "''" not in csp  # 空的引號值

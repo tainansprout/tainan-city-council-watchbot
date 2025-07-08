@@ -1079,3 +1079,451 @@ class TestMultiPlatformChatBotAdvanced:
                 expected_config['provider'] = provider
                 mock_model_factory.create_from_config.assert_called_with(expected_config)
                 assert bot.model == mock_model
+
+
+class TestMultiPlatformChatBotChatInterface:
+    """測試聊天介面路由"""
+    
+    @pytest.fixture
+    def chatbot_with_chat_routes(self):
+        """創建帶有聊天路由的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.config = {
+                'app': {
+                    'name': 'Test Chat Bot',
+                    'description': 'Test Description'
+                }
+            }
+            bot.response_formatter = Mock()
+            bot._register_routes()
+            
+            return bot
+    
+    def test_chat_interface_get_authenticated(self, chatbot_with_chat_routes):
+        """測試已認證用戶的 GET 請求"""
+        bot = chatbot_with_chat_routes
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            # 模擬已認證的 session
+            with client.session_transaction() as sess:
+                sess['test_authenticated'] = True
+            
+            with patch('src.app.render_template') as mock_render:
+                mock_render.return_value = "chat_page"
+                
+                response = client.get('/chat')
+                
+                assert response.status_code == 200
+                mock_render.assert_called_once_with(
+                    'chat.html', 
+                    app_name='Test Chat Bot', 
+                    app_description='Test Description'
+                )
+    
+    def test_chat_interface_get_unauthenticated(self, chatbot_with_chat_routes):
+        """測試未認證用戶的 GET 請求重定向"""
+        bot = chatbot_with_chat_routes
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            response = client.get('/chat')
+            
+            # 應該重定向到登入頁面
+            assert response.status_code == 302
+            assert '/login' in response.location
+    
+    def test_chat_interface_post_non_json(self, chatbot_with_chat_routes):
+        """測試 POST 請求非 JSON 格式"""
+        bot = chatbot_with_chat_routes
+        bot.response_formatter.json_response.return_value = "error_response"
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            response = client.post('/chat', data='not json')
+            
+            bot.response_formatter.json_response.assert_called_with(
+                {'success': False, 'error': '請使用 JSON 格式提交'}, 400
+            )
+    
+    def test_chat_interface_post_invalid_json(self, chatbot_with_chat_routes):
+        """測試 POST 請求無效 JSON"""
+        bot = chatbot_with_chat_routes
+        bot.response_formatter.json_response.return_value = "error_response"
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            response = client.post('/chat', 
+                                 data='invalid json',
+                                 content_type='application/json')
+            
+            bot.response_formatter.json_response.assert_called_with(
+                {'success': False, 'error': '無效的 JSON 格式'}, 400
+            )
+    
+    def test_chat_interface_post_missing_password(self, chatbot_with_chat_routes):
+        """測試 POST 請求缺少密碼"""
+        bot = chatbot_with_chat_routes
+        bot.response_formatter.json_response.return_value = "error_response"
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            response = client.post('/chat', json={})
+            
+            bot.response_formatter.json_response.assert_called_with(
+                {'success': False, 'error': '缺少密碼欄位'}, 400
+            )
+    
+    def test_chat_interface_post_correct_password(self, chatbot_with_chat_routes):
+        """測試 POST 請求正確密碼"""
+        bot = chatbot_with_chat_routes
+        bot.response_formatter.json_response.return_value = "success_response"
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            with patch('src.core.auth.test_auth') as mock_auth:
+                mock_auth.verify_password.return_value = True
+                
+                response = client.post('/chat', json={'password': 'correct'})
+                
+                bot.response_formatter.json_response.assert_called_with(
+                    {'success': True, 'message': '登入成功'}
+                )
+    
+    def test_chat_interface_post_wrong_password(self, chatbot_with_chat_routes):
+        """測試 POST 請求錯誤密碼"""
+        bot = chatbot_with_chat_routes
+        bot.response_formatter.json_response.return_value = "error_response"
+        
+        # Configure Flask app for sessions
+        bot.app.config['SECRET_KEY'] = 'test-secret-key'
+        
+        with bot.app.test_client() as client:
+            with patch('src.core.auth.test_auth') as mock_auth:
+                mock_auth.verify_password.return_value = False
+                
+                response = client.post('/chat', json={'password': 'wrong'})
+                
+                bot.response_formatter.json_response.assert_called_with(
+                    {'success': False, 'error': '密碼錯誤'}, 401
+                )
+
+
+class TestMultiPlatformChatBotLoginInterface:
+    """測試登入介面路由"""
+    
+    @pytest.fixture
+    def chatbot_with_login_routes(self):
+        """創建帶有登入路由的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.config = {
+                'app': {
+                    'name': 'Test Chat Bot'
+                }
+            }
+            bot.response_formatter = Mock()
+            bot._register_routes()
+            
+            return bot
+    
+    def test_login_interface_get(self, chatbot_with_login_routes):
+        """測試登入頁面 GET 請求"""
+        bot = chatbot_with_login_routes
+        
+        with bot.app.test_client() as client:
+            with patch('src.app.render_template') as mock_render:
+                mock_render.return_value = "login_page"
+                
+                response = client.get('/login')
+                
+                assert response.status_code == 200
+                mock_render.assert_called_once_with(
+                    'login.html', 
+                    app_name='Test Chat Bot'
+                )
+
+
+class TestMultiPlatformChatBotAudioHandling:
+    """測試音訊處理功能"""
+    
+    @pytest.fixture
+    def chatbot_with_audio(self):
+        """創建帶有音訊處理功能的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.platform_manager = Mock()
+            bot.chat_service = Mock()
+            bot.audio_service = Mock()
+            bot.error_handler = Mock()
+            
+            return bot
+    
+    def test_handle_webhook_audio_success(self, chatbot_with_audio):
+        """測試成功處理音訊 webhook"""
+        bot = chatbot_with_audio
+        
+        from src.platforms.base import PlatformType, PlatformMessage, PlatformUser, PlatformResponse
+        
+        # 模擬音訊訊息
+        mock_user = PlatformUser(
+            user_id="test_user",
+            display_name="Test User",
+            platform=PlatformType.LINE
+        )
+        mock_audio_message = PlatformMessage(
+            message_id="audio_123",
+            user=mock_user,
+            content="audio_content",
+            message_type="audio",
+            raw_data="audio_binary_data"
+        )
+        
+        # 模擬音訊轉錄成功
+        bot.audio_service.handle_message.return_value = {
+            'success': True,
+            'transcribed_text': 'Hello from audio'
+        }
+        
+        # 模擬聊天服務回應
+        mock_chat_response = PlatformResponse(
+            content="Audio received and processed",
+            response_type="text"
+        )
+        bot.chat_service.handle_message.return_value = mock_chat_response
+        
+        # 模擬平台管理器
+        bot.platform_manager.get_enabled_platforms.return_value = [PlatformType.LINE]
+        bot.platform_manager.handle_platform_webhook.return_value = [mock_audio_message]
+        
+        mock_handler = Mock()
+        mock_handler.send_response.return_value = True
+        bot.platform_manager.get_handler.return_value = mock_handler
+        
+        with bot.app.test_request_context('/webhooks/line', method='POST'):
+            result = bot._handle_webhook('line')
+            
+            assert result == 'OK'
+            bot.audio_service.handle_message.assert_called_once()
+            bot.chat_service.handle_message.assert_called_once()
+    
+    def test_handle_webhook_audio_transcription_failure(self, chatbot_with_audio):
+        """測試音訊轉錄失敗"""
+        bot = chatbot_with_audio
+        
+        from src.platforms.base import PlatformType, PlatformMessage, PlatformUser
+        
+        # 模擬音訊訊息
+        mock_user = PlatformUser(
+            user_id="test_user",
+            display_name="Test User",
+            platform=PlatformType.LINE
+        )
+        mock_audio_message = PlatformMessage(
+            message_id="audio_123",
+            user=mock_user,
+            content="audio_content",
+            message_type="audio",
+            raw_data="audio_binary_data"
+        )
+        
+        # 模擬音訊轉錄失敗
+        bot.audio_service.handle_message.return_value = {
+            'success': False,
+            'error_message': 'Transcription failed'
+        }
+        
+        # 模擬錯誤處理器
+        bot.error_handler.get_error_message.return_value = "音訊處理失敗"
+        
+        # 模擬平台管理器
+        bot.platform_manager.get_enabled_platforms.return_value = [PlatformType.LINE]
+        bot.platform_manager.handle_platform_webhook.return_value = [mock_audio_message]
+        
+        mock_handler = Mock()
+        mock_handler.send_response.return_value = True
+        bot.platform_manager.get_handler.return_value = mock_handler
+        
+        with bot.app.test_request_context('/webhooks/line', method='POST'):
+            result = bot._handle_webhook('line')
+            
+            assert result == 'OK'
+            bot.audio_service.handle_message.assert_called_once()
+            bot.error_handler.get_error_message.assert_called_once()
+
+
+class TestMultiPlatformChatBotHealthCheckDetailed:
+    """詳細健康檢查測試"""
+    
+    @pytest.fixture
+    def chatbot_for_health(self):
+        """創建用於健康檢查的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.config = {'app': {'version': '2.0.0'}}
+            bot.database = Mock()
+            bot.model = Mock()
+            bot.platform_manager = Mock()
+            
+            return bot
+    
+    def test_health_check_model_exception(self, chatbot_for_health):
+        """測試模型檢查拋出異常"""
+        bot = chatbot_for_health
+        
+        # 模擬資料庫健康
+        mock_session = Mock()
+        mock_context_manager = Mock()
+        mock_context_manager.__enter__ = Mock(return_value=mock_session)
+        mock_context_manager.__exit__ = Mock(return_value=None)
+        bot.database.get_session.return_value = mock_context_manager
+        
+        # 模擬模型檢查拋出異常
+        bot.model.check_connection.side_effect = Exception("Model connection error")
+        
+        # 模擬平台健康
+        from src.platforms.base import PlatformType
+        bot.platform_manager.get_enabled_platforms.return_value = [PlatformType.LINE]
+        
+        with patch('src.app.get_auth_status_info') as mock_auth:
+            mock_auth.return_value = {'status': 'enabled'}
+            
+            with bot.app.app_context():
+                response, status_code = bot._health_check()
+                
+                assert status_code == 503
+                result = response.get_json()
+                assert result['status'] == 'unhealthy'
+                assert result['checks']['model']['status'] == 'unhealthy'
+                assert 'Model connection error' in result['checks']['model']['error']
+    
+    def test_health_check_no_platforms(self, chatbot_for_health):
+        """測試沒有啟用平台的情況"""
+        bot = chatbot_for_health
+        
+        # 模擬資料庫健康
+        mock_session = Mock()
+        mock_context_manager = Mock()
+        mock_context_manager.__enter__ = Mock(return_value=mock_session)
+        mock_context_manager.__exit__ = Mock(return_value=None)
+        bot.database.get_session.return_value = mock_context_manager
+        
+        # 模擬模型健康
+        bot.model.check_connection.return_value = (True, None)
+        
+        # 模擬沒有啟用的平台
+        bot.platform_manager.get_enabled_platforms.return_value = []
+        
+        with patch('src.app.get_auth_status_info') as mock_auth:
+            mock_auth.return_value = {'status': 'enabled'}
+            
+            with bot.app.app_context():
+                response, status_code = bot._health_check()
+                
+                result = response.get_json()
+                assert result['checks']['platforms']['status'] == 'no_platforms'
+                assert result['checks']['platforms']['enabled_count'] == 0
+    
+    def test_health_check_general_exception(self, chatbot_for_health):
+        """測試健康檢查整體異常"""
+        bot = chatbot_for_health
+        
+        # 模擬整體異常
+        bot.platform_manager.get_enabled_platforms.side_effect = Exception("General health check error")
+        
+        with bot.app.app_context():
+            result, status_code = bot._health_check()
+            
+            assert status_code == 503
+            assert result['status'] == 'unhealthy'
+            assert 'General health check error' in result['error']
+
+
+class TestMultiPlatformChatBotMemoryStatsEndpoint:
+    """測試記憶體統計端點"""
+    
+    @pytest.fixture
+    def chatbot_with_memory(self):
+        """創建帶有記憶體監控的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.memory_monitor = Mock()
+            bot.response_formatter = Mock()
+            bot._register_routes()
+            
+            return bot
+    
+    def test_memory_stats_not_initialized(self, chatbot_with_memory):
+        """測試記憶體監控未初始化"""
+        bot = chatbot_with_memory
+        bot.memory_monitor = None  # 模擬未初始化
+        bot.response_formatter.json_response.return_value = "error_response"
+        
+        with bot.app.test_client() as client:
+            response = client.get('/memory-stats')
+            
+            bot.response_formatter.json_response.assert_called_with({
+                'error': 'Failed to get memory stats',
+                'message': 'Memory monitor not initialized'
+            }, 500)
+
+
+class TestMultiPlatformChatBotErrorHandling:
+    """測試錯誤處理"""
+    
+    @pytest.fixture
+    def chatbot_with_error_handling(self):
+        """創建帶有錯誤處理的 ChatBot"""
+        with patch('src.app.load_config'), \
+             patch.object(MultiPlatformChatBot, '_initialize_app'):
+            
+            bot = MultiPlatformChatBot()
+            bot.platform_manager = Mock()
+            bot.error_handler = Mock()
+            
+            return bot
+    
+    def test_handle_webhook_platform_exception(self, chatbot_with_error_handling):
+        """測試 webhook 處理平台異常"""
+        bot = chatbot_with_error_handling
+        
+        # 模擬平台管理器拋出異常
+        bot.platform_manager.handle_platform_webhook.side_effect = Exception("Platform webhook error")
+        
+        with bot.app.test_request_context('/webhooks/line', method='POST', 
+                                           data='test_body', 
+                                           headers={'X-Line-Signature': 'test_signature'}):
+            with patch('src.app.logger') as mock_logger:
+                with patch('src.app.abort') as mock_abort:
+                    mock_abort.side_effect = lambda code: None  # Don't actually abort
+                    
+                    try:
+                        result = bot._handle_webhook('line')
+                        # If we get here, abort(500) was called
+                        mock_abort.assert_called_with(500)
+                    except:
+                        # Expected behavior - abort was called
+                        mock_abort.assert_called_with(500)

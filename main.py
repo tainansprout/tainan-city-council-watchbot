@@ -7,7 +7,7 @@ Main application entry point.
 import os
 import atexit
 from src.app import MultiPlatformChatBot
-from src.core.logger import logger
+from src.core.logger import logger, shutdown_logger
 from src.core.config import load_config
 
 def create_app():
@@ -46,9 +46,10 @@ if __name__ == "__main__":
 
 # --- Cleanup Hook ---
 def cleanup():
-    """A hook to run on application shutdown.""""""A hook to run on application shutdown."""
-    logger.info("Application is shutting down.")
+    """A hook to run on application shutdown."""
+    print("Application is shutting down.")
     # Future cleanup logic can go here.
-    logger.info("Cleanup complete.")
+    print("Cleanup complete.")
+    shutdown_logger()
 
 atexit.register(cleanup)

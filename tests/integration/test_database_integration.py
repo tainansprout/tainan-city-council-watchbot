@@ -212,7 +212,7 @@ class TestDatabaseScripts:
         # 檢查檔案內容包含必要的套件
         content = req_path.read_text()
         assert "SQLAlchemy" in content
-        assert "alembic" in content
+        assert "Flask-Migrate" in content or "alembic" in content  # Flask-Migrate 包含 Alembic
         assert "psycopg2" in content
     
     @pytest.mark.skipif(

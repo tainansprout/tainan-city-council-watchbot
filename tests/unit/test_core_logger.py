@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch, mock_open
 from src.core.logger import (
     SensitiveDataFilter, StructuredFormatter, ColoredConsoleFormatter,
     LoggerManager, get_logger, AsyncLogHandler, setup_optimized_logger,
-    get_logger_stats, LoggerPerformanceMonitor
+    get_logger_stats, LoggerPerformanceMonitor, shutdown_logger
 )
 
 
@@ -331,6 +331,101 @@ class TestLoggerManager:
                 
                 assert manager.config == new_config
                 mock_setup.assert_called_once()
+    
+    def test_shutdown_logger_manager(self):
+        """測試日誌管理器的關閉功能"""
+        with patch('src.core.logger.LoggerManager._load_default_config') as mock_load:
+            mock_load.return_value = {
+                'version': 1,
+                'level': 'INFO',
+                'handlers': ['console']
+            }
+            
+            manager = LoggerManager()
+            logger = manager.get_logger()
+            
+            # 確保 logger 初始狀態是啟用的
+            assert logger.disabled is False
+            assert len(logger.handlers) > 0
+            
+            # 模擬一些處理器
+            mock_handler1 = Mock()
+            mock_handler2 = Mock()
+            logger.addHandler(mock_handler1)
+            logger.addHandler(mock_handler2)
+            
+            # 測試 shutdown
+            manager.shutdown()
+            
+            # 驗證 logger 被禁用
+            assert logger.disabled is True
+            
+            # 驗證所有處理器被關閉
+            mock_handler1.close.assert_called_once()
+            mock_handler2.close.assert_called_once()
+            
+            # 驗證處理器列表被清空
+            assert len(logger.handlers) == 0
+    
+    def test_shutdown_with_async_handler(self):
+        """測試關閉包含異步處理器的日誌管理器"""
+        with patch('src.core.logger.LoggerManager._load_default_config') as mock_load:
+            mock_load.return_value = {
+                'version': 1,
+                'level': 'INFO',
+                'handlers': ['console']
+            }
+            
+            manager = LoggerManager()
+            logger = manager.get_logger()
+            
+            # 添加異步處理器
+            mock_target_handler = Mock()
+            async_handler = AsyncLogHandler(mock_target_handler, queue_size=10)
+            logger.addHandler(async_handler)
+            
+            # 確保異步處理器正在運行
+            assert async_handler.worker_thread.is_alive()
+            
+            # 測試 shutdown
+            manager.shutdown()
+            
+            # 驗證 logger 被禁用
+            assert logger.disabled is True
+            
+            # 等待一下讓異步處理器完成關閉
+            import time
+            time.sleep(0.1)
+            
+            # 驗證異步處理器被正確關閉
+            assert async_handler.stop_event.is_set()
+    
+    def test_shutdown_handles_exceptions(self):
+        """測試關閉時處理異常情況"""
+        with patch('src.core.logger.LoggerManager._load_default_config') as mock_load:
+            mock_load.return_value = {
+                'version': 1,
+                'level': 'INFO',
+                'handlers': ['console']
+            }
+            
+            manager = LoggerManager()
+            logger = manager.get_logger()
+            
+            # 添加一個會拋出異常的處理器
+            mock_handler = Mock()
+            mock_handler.close.side_effect = Exception("Handler close error")
+            logger.addHandler(mock_handler)
+            
+            # 測試 shutdown 不會因為異常而失敗
+            with patch('builtins.print') as mock_print:
+                manager.shutdown()
+                
+                # 驗證錯誤被捕獲並打印
+                mock_print.assert_called()
+                
+                # 驗證 logger 仍然被禁用
+                assert logger.disabled is True
 
 
 class TestLoggerIntegration:
@@ -436,6 +531,67 @@ class TestAsyncLogHandler:
         assert 'queue_size' in stats
         assert 'dropped_logs' in stats
         assert 'worker_alive' in stats
+    
+    def test_async_handler_close(self):
+        """測試異步處理器關閉"""
+        target_handler = Mock()
+        async_handler = AsyncLogHandler(target_handler, queue_size=100)
+        
+        # 確保工作執行緒正在運行
+        assert async_handler.worker_thread.is_alive()
+        assert not async_handler.stop_event.is_set()
+        
+        # 關閉處理器
+        async_handler.close()
+        
+        # 驗證停止事件被設置
+        assert async_handler.stop_event.is_set()
+        
+        # 等待工作執行緒結束
+        import time
+        time.sleep(0.1)
+        
+        # 驗證目標處理器的 close 方法被調用
+        target_handler.close.assert_called_once()
+    
+    def test_async_handler_close_with_timeout(self):
+        """測試異步處理器關閉時的超時處理"""
+        target_handler = Mock()
+        async_handler = AsyncLogHandler(target_handler, queue_size=100)
+        
+        # 模擬工作執行緒無法正常結束的情況
+        with patch.object(async_handler.worker_thread, 'join') as mock_join:
+            mock_join.return_value = None  # 模擬超時
+            
+            # 關閉處理器
+            async_handler.close()
+            
+            # 驗證 join 被調用且有超時設置
+            mock_join.assert_called_once_with(timeout=2)
+            
+            # 驗證目標處理器仍然被關閉
+            target_handler.close.assert_called_once()
+    
+    def test_async_handler_queue_full_handling(self):
+        """測試異步處理器佇列滿時的處理"""
+        target_handler = Mock()
+        async_handler = AsyncLogHandler(target_handler, queue_size=1)
+        
+        # 填滿佇列
+        record1 = logging.LogRecord(
+            name='test', level=logging.INFO, pathname='test.py',
+            lineno=1, msg='message 1', args=(), exc_info=None
+        )
+        record2 = logging.LogRecord(
+            name='test', level=logging.INFO, pathname='test.py',
+            lineno=2, msg='message 2', args=(), exc_info=None
+        )
+        
+        async_handler.emit(record1)
+        async_handler.emit(record2)  # 這個應該被丟棄
+        
+        # 驗證丟棄計數
+        assert async_handler.dropped_logs > 0
 
 
 class TestOptimizedFeatures:
@@ -487,3 +643,94 @@ class TestCoreIntegration:
         # 測試異步處理器
         async_handler = AsyncLogHandler(Mock())
         assert hasattr(async_handler, 'get_stats')
+
+
+class TestGlobalShutdown:
+    """測試全域關閉功能"""
+    
+    def test_shutdown_logger_function(self):
+        """測試全域 shutdown_logger 函數"""
+        # 模擬全域日誌管理器
+        with patch('src.core.logger._logger_manager') as mock_manager:
+            mock_manager.shutdown = Mock()
+            
+            # 模擬 Python 內建的 logging.shutdown
+            with patch('logging.shutdown') as mock_logging_shutdown:
+                # 調用全域 shutdown_logger
+                shutdown_logger()
+                
+                # 驗證管理器的 shutdown 方法被調用
+                mock_manager.shutdown.assert_called_once()
+                
+                # 驗證內建的 logging.shutdown 被調用
+                mock_logging_shutdown.assert_called_once()
+    
+    def test_shutdown_logger_with_none_manager(self):
+        """測試當全域管理器為 None 時的處理"""
+        with patch('src.core.logger._logger_manager', None):
+            # 模擬 Python 內建的 logging.shutdown
+            with patch('logging.shutdown') as mock_logging_shutdown:
+                # 調用全域 shutdown_logger 不應該出錯
+                shutdown_logger()
+                
+                # 驗證內建的 logging.shutdown 仍然被調用
+                mock_logging_shutdown.assert_called_once()
+    
+    def test_shutdown_logger_integration(self):
+        """測試 shutdown_logger 整合功能"""
+        # 創建一個真實的日誌管理器實例
+        manager = LoggerManager()
+        logger = manager.get_logger()
+        
+        # 確保 logger 處於啟用狀態
+        logger.disabled = False
+        
+        # 添加一些處理器
+        mock_handler = Mock()
+        logger.addHandler(mock_handler)
+        
+        # 確保初始狀態
+        assert logger.disabled is False
+        assert len(logger.handlers) > 0
+        
+        # 模擬全域管理器
+        with patch('src.core.logger._logger_manager', manager):
+            with patch('logging.shutdown') as mock_logging_shutdown:
+                # 調用全域 shutdown
+                shutdown_logger()
+                
+                # 驗證 logger 被禁用
+                assert logger.disabled is True
+                
+                # 驗證處理器被關閉
+                mock_handler.close.assert_called_once()
+                
+                # 驗證內建 shutdown 被調用
+                mock_logging_shutdown.assert_called_once()
+    
+    def test_shutdown_logger_prevents_new_logs(self):
+        """測試 shutdown 後阻止新的日誌訊息"""
+        # 創建一個真實的日誌管理器實例
+        manager = LoggerManager()
+        logger = manager.get_logger()
+        
+        # 添加一個 mock handler 來捕獲日誌
+        mock_handler = Mock()
+        logger.addHandler(mock_handler)
+        
+        # 在 shutdown 前記錄一條日誌
+        logger.info("Before shutdown")
+        
+        # 模擬全域管理器並執行 shutdown
+        with patch('src.core.logger._logger_manager', manager):
+            with patch('logging.shutdown'):
+                shutdown_logger()
+        
+        # 嘗試在 shutdown 後記錄日誌
+        logger.info("After shutdown")
+        
+        # 驗證 logger 被禁用
+        assert logger.disabled is True
+        
+        # 驗證 isEnabledFor 返回 False
+        assert not logger.isEnabledFor(logging.INFO)

@@ -8,16 +8,16 @@ app:
 platforms:
   line:
     enabled: true
-    channel_access_token: 
-    channel_secret: 
+    channel_access_token: ${LINE_CHANNEL_ACCESS_TOKEN}
+    channel_secret: ${LINE_CHANNEL_SECRET}
   
   discord:
     enabled: false
-    bot_token: 
+    bot_token: ${DISCORD_BOT_TOKEN}
   
   telegram:
     enabled: false
-    bot_token: 
+    bot_token: ${TELEGRAM_BOT_TOKEN} 
 
 # AI 模型配置
 llm:
@@ -79,15 +79,15 @@ features:
   multi_provider: false 
 
 db:
-  host: 
-  port: 5432
-  db_name: 
-  user: 
-  password: 
-  sslmode: 
-  sslrootcert: 
-  sslcert: 
-  sslkey: 
+  host: ${DB_HOST}
+  port: ${DB_PORT}
+  db_name: ${DB_NAME}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+  sslmode: ${DB_SSLMODE}
+  sslrootcert: ${DB_SSLROOTCERT}
+  sslcert: ${DB_SSLCERT}
+  sslkey: ${DB_SSLKEY} 
 
 text_processing:
   post-replacements:
@@ -98,7 +98,10 @@ text_processing:
   preprocessors:
     - type: "replace_date_string"
 
-logfile: ./logs/linebot.log
+# 日誌配置
+log_level: DEBUG  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_format: simple  # simple 或 structured
+logfile: ./logs/chatbot.log
 
 # 測試介面認證設定
 # Security Best Practices (安全最佳實踐):
@@ -159,7 +162,7 @@ security:
   content:
     max_message_length: 5000  # 一般訊息最大長度
     max_test_message_length: 1000  # 測試訊息最大長度
-    enable_input_sanitization: true  # 啟用輸入清理
+    enable_input_sanitization: true  # 啟用針對輸入內容之惡意程式碼之清理機制
     
   # 監控和日誌
   monitoring:
@@ -173,6 +176,7 @@ log_format: simple  # simple 或 structured
 logfile: ./logs/chatbot.log
 
 commands:
-  help: "這裡是台南市議會聊天機器人，目前已經輸入了台南市議會第四屆公開議事錄中的會議逐字稿，請輸入您的問題，以便我檢索逐字稿內容來回應您。若您希望重設聊天內容，請輸入「/reset」以重置聊天。"
-  
-...
+  help: "這裡是台南議會觀測機器人，目前已經輸入了台南市議會第四屆公開議事錄中的會議逐字稿，請輸入您的問題，以便我檢索逐字稿內容來回應您。\n\n其他命令：\n- 重設聊天內容：/reset\n- 查詢捐款資訊：/donate\n- 分享本聊天機器人：/share\n- 查看原始碼：/sourcecode"
+  donate: "歡迎捐款支持台南新芽，捐款網址：\nhttps://bit.ly/3RBvPyZ"
+  share: "歡迎分享本聊天機器人給朋友玩玩看：\nhttps://line.me/R/ti/p/%40343rptda"
+  sourcecode: "本機器人原始碼：\nhttps://github.com/tainansprout/tainan-city-council-watchbot/"

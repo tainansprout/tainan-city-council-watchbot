@@ -49,14 +49,13 @@ class TestMainApplication:
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
-            from main import application, get_wsgi_application
+            from main import application, create_app
             
-            # application 是 LazyWSGIApp 實例，應該可以調用
+            # application 是 Flask app 實例
             assert application is not None
-            assert callable(application)
             
-            # get_wsgi_application() 返回 Flask app，應該有 test_client
-            flask_app = get_wsgi_application()
+            # create_app() 返回 Flask app，應該有 test_client
+            flask_app = create_app()
             assert hasattr(flask_app, 'test_client')
     
     def test_environment_detection_development(self):
@@ -131,16 +130,12 @@ class TestWSGICompatibility:
             
             # 測試主要的導入路徑
             from main import application as main_app
-            from main import create_app, get_wsgi_application
+            from main import create_app
             
             # 驗證對象存在且有效
             assert main_app is not None
             assert create_app is not None
-            assert callable(main_app)  # LazyWSGIApp 是 callable
-            
-            # test_client 在實際的 Flask app 上
-            flask_app = get_wsgi_application()
-            assert hasattr(flask_app, 'test_client')
+            assert hasattr(main_app, 'test_client')  # Flask app 有 test_client
     
     def test_application_compatibility(self):
         """測試應用程式兼容性"""
@@ -153,17 +148,13 @@ class TestWSGICompatibility:
             }
             
             # 測試主要導入方式
-            from main import create_app, application, get_wsgi_application
+            from main import create_app, application
             
             assert create_app is not None
             assert application is not None
-            assert callable(application)  # LazyWSGIApp 是 callable
+            assert hasattr(application, 'test_client')  # Flask app 有 test_client
             
-            # test_client 在實際的 Flask app 上
-            flask_app = get_wsgi_application()
-            assert hasattr(flask_app, 'test_client')
-            
-            # 測試工廠函數創建的應用與預設應用兼容
+            # 測試工廠函數創建新的應用實例
             test_app = create_app()
             assert test_app is not None
             assert hasattr(test_app, 'test_client')
@@ -172,85 +163,76 @@ class TestWSGICompatibility:
 class TestProductionMode:
     """測試生產模式功能"""
     
-    @patch('subprocess.run')
-    @patch('os.path.exists')
-    def test_production_server_start_with_config(self, mock_exists, mock_subprocess):
-        """測試生產服務器啟動（有配置文件）"""
-        mock_exists.return_value = True  # gunicorn.conf.py 存在
-        
-        # Mock subprocess.run to not actually start server
-        mock_subprocess.return_value = None
-        
-        from main import start_production_server
-        
-        # 不期望 SystemExit，因為我們已經 mock 了 subprocess.run
-        start_production_server()
-        
-        # 驗證調用了正確的指令
-        mock_subprocess.assert_called_once()
-        call_args = mock_subprocess.call_args[0][0]
-        assert 'gunicorn' in call_args
-        assert '-c' in call_args
-        assert 'gunicorn.conf.py' in call_args
-        assert 'main:application' in call_args
-    
-    @patch('subprocess.run')
-    @patch('os.path.exists')
-    def test_production_server_start_without_config(self, mock_exists, mock_subprocess):
-        """測試生產服務器啟動（無配置文件）"""
-        mock_exists.return_value = False  # gunicorn.conf.py 不存在
-        
-        # Mock subprocess.run to not actually start server
-        mock_subprocess.return_value = None
-        
-        from main import start_production_server
-        
-        # 不期望 SystemExit，因為我們已經 mock 了 subprocess.run
-        start_production_server()
-        
-        # 驗證調用了默認配置
-        mock_subprocess.assert_called_once()
-        call_args = mock_subprocess.call_args[0][0]
-        assert 'gunicorn' in call_args
-        assert '--bind' in call_args
-        assert '--workers' in call_args
-        assert 'main:application' in call_args
-    
-    def test_production_server_missing_gunicorn(self):
-        """測試 Gunicorn 未安裝的情況"""
-        # 直接 patch start_production_server 函數內部的 import gunicorn
-        with patch('sys.exit') as mock_exit, \
-             patch('subprocess.run') as mock_subprocess:
+    def test_wsgi_application_availability(self):
+        """測試 WSGI 應用可用性"""
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
             
-            # 模擬 import gunicorn 失敗
+            # 測試 WSGI 應用實例
+            from main import application
+            
+            assert application is not None
+            assert hasattr(application, 'wsgi_app')  # Flask 的 WSGI 介面
+            assert callable(application)  # 應該是可調用的 WSGI 應用
+    
+    def test_gunicorn_integration(self):
+        """測試與 Gunicorn 的整合兼容性"""
+        with patch('src.core.config.load_config') as mock_config:
+            mock_config.return_value = {
+                'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
+                'llm': {'provider': 'openai'},
+                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
+            }
+            
+            # 驗證 main:application 可以被 Gunicorn 使用
             import main
             
-            # 臨時替換函數來模擬 gunicorn 不存在
-            original_func = main.start_production_server
+            # 檢查 main 模組有 application 屬性
+            assert hasattr(main, 'application')
             
-            def mock_start_production_server():
-                print("🚀 啟動生產服務器...")
+            # 檢查 application 是有效的 WSGI 應用
+            app = main.application
+            assert app is not None
+            assert hasattr(app, 'wsgi_app')  # Flask 應用特徵
+
+
+class TestApplicationLifecycle:
+    """測試應用程式生命週期管理"""
+    
+    def test_cleanup_function(self):
+        """測試 cleanup 函數"""
+        with patch('main.shutdown_logger') as mock_shutdown:
+            with patch('builtins.print') as mock_print:
+                from main import cleanup
                 
-                # 模擬檢查 gunicorn 時失敗
-                try:
-                    raise ImportError("No module named 'gunicorn'")
-                except ImportError:
-                    print("❌ 錯誤: 未安裝 gunicorn")
-                    print("請運行: pip install gunicorn")
-                    import sys
-                    sys.exit(1)
+                # 調用 cleanup 函數
+                cleanup()
+                
+                # 驗證 print 被調用
+                mock_print.assert_any_call("Application is shutting down.")
+                mock_print.assert_any_call("Cleanup complete.")
+                
+                # 驗證 shutdown_logger 被調用
+                mock_shutdown.assert_called_once()
+    
+    def test_atexit_registration(self):
+        """測試 atexit 註冊"""
+        # 這個測試驗證 atexit.register 被正確調用
+        with patch('atexit.register') as mock_register:
+            # 重新導入 main 模組來觸發註冊
+            import importlib
+            import main
+            importlib.reload(main)
             
-            # 替換函數並測試
-            main.start_production_server = mock_start_production_server
+            # 驗證 atexit.register 被調用且參數是 cleanup 函數
+            mock_register.assert_called()
             
-            try:
-                main.start_production_server()
-            finally:
-                # 恢復原始函數
-                main.start_production_server = original_func
-            
-            # 驗證 sys.exit(1) 被呼叫
-            mock_exit.assert_called_once_with(1)
-            
-            # 確保 subprocess 沒有被呼叫
-            mock_subprocess.assert_not_called()
+            # 檢查是否有調用包含 cleanup 函數的註冊
+            called_functions = [call[0][0].__name__ for call in mock_register.call_args_list if call[0]]
+            assert 'cleanup' in called_functions, "cleanup 函數應該已註冊到 atexit"

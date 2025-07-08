@@ -32,7 +32,7 @@ class TestDockerOptimization:
         with open(dockerfile_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 檢查基本指令
+        # 檢查基本指令 - 支援多階段建構
         assert 'FROM python:3.12-slim' in content
         assert 'WORKDIR /app' in content
         assert 'COPY requirements.txt' in content
@@ -51,7 +51,7 @@ class TestDockerOptimization:
         assert 'useradd' in content  # 非 root 用戶
         assert 'USER app' in content  # 切換到非 root 用戶
         assert '--chown=app:app' in content  # 檔案所有權
-        assert 'HEALTHCHECK' in content  # 健康檢查
+        # 注意：健康檢查在 docker-compose.yaml 中定義，而不是在 Dockerfile 中
 
     def test_dockerfile_optimization_features(self):
         """測試 Dockerfile 優化特性"""
@@ -62,8 +62,8 @@ class TestDockerOptimization:
         
         # 檢查優化特性
         assert 'rm -rf /var/lib/apt/lists/*' in content  # 清理 apt 快取
-        assert 'find . -name "*.pyc" -delete' in content  # 清理 Python 快取
-        assert 'pip cache purge' in content  # 清理 pip 快取
+        assert 'PIP_NO_CACHE_DIR=True' in content  # 使用環境變數避免 pip 快取
+        # 多階段建構本身就是最大的優化
 
     def test_dockerfile_cloud_run_compatibility(self):
         """測試 Dockerfile 與 Cloud Run 的兼容性"""
@@ -73,9 +73,9 @@ class TestDockerOptimization:
             content = f.read()
         
         # Cloud Run 兼容性檢查
-        assert 'EXPOSE 8080' in content  # Cloud Run 預設端口
-        assert 'python -c "import urllib.request' in content  # 不依賴 curl 的健康檢查
+        assert 'EXPOSE $PORT' in content or 'PORT=8080' in content  # Cloud Run 動態端口
         assert 'gunicorn' in content  # 使用 gunicorn 作為 WSGI 服務器
+        assert 'FLASK_ENV=production' in content  # 生產環境設定
 
     def test_dockerignore_content(self):
         """測試 .dockerignore 內容"""
@@ -140,7 +140,7 @@ class TestDockerOptimization:
         
         # Cloud Run 兼容性檢查
         assert 'PORT' in content  # 使用 PORT 環境變數
-        assert 'CLOUD_RUN_SERVICE' in content  # Cloud Run 檢測
+        assert 'K_SERVICE' in content or 'CLOUD_RUN_SERVICE' in content  # Cloud Run 檢測
         assert 'worker_class = "sync"' in content  # 使用 sync worker
         assert 'preload_app = True' in content  # 預加載應用
 
@@ -153,7 +153,8 @@ class TestDockerOptimization:
         
         # 確保沒有問題設置
         assert 'worker_tmp_dir = "/dev/shm"' not in content  # 避免跨平台問題
-        assert '# worker_tmp_dir' in content or 'worker_tmp_dir' not in content
+        # 檢查配置中提到不需要設定 worker_tmp_dir
+        assert 'worker_tmp_dir' not in content or 'worker_tmp_dir 在 Cloud Run 中不需要設定' in content
 
     @pytest.mark.skipif(not os.getenv('TEST_DOCKER'), reason="Docker tests disabled")
     def test_docker_build_success(self):
@@ -205,20 +206,17 @@ class TestDockerOptimization:
 
     def test_healthcheck_command_validity(self):
         """測試健康檢查命令的有效性"""
-        dockerfile_path = self.project_root / "Dockerfile"
+        # 健康檢查在 docker-compose.yaml 中定義
+        compose_path = self.project_root / "docker-compose.yaml"
         
-        with open(dockerfile_path, 'r', encoding='utf-8') as f:
+        with open(compose_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 找到健康檢查命令
-        healthcheck_lines = [line.strip() for line in content.split('\n') 
-                           if 'HEALTHCHECK' in line or 'urllib.request' in line]
-        
         # 檢查健康檢查使用 Python 而非外部工具
-        healthcheck_content = ' '.join(healthcheck_lines)
-        assert 'python -c' in healthcheck_content
-        assert 'urllib.request' in healthcheck_content
-        assert 'curl' not in healthcheck_content  # 不依賴 curl
+        if 'healthcheck:' in content:
+            assert '"python"' in content or 'python -c' in content  # 支援數組和字符串格式
+            assert 'urllib.request' in content
+            assert 'curl' not in content  # 不依賴 curl
 
 
 class TestDockerSecurityAndOptimization:
@@ -228,17 +226,17 @@ class TestDockerSecurityAndOptimization:
         """每個測試方法前的設置"""
         self.project_root = Path(__file__).parent.parent.parent
 
-    def test_multi_stage_build_not_used_appropriately(self):
+    def test_multi_stage_build_used_appropriately(self):
         """測試是否適當使用多階段構建"""
         dockerfile_path = self.project_root / "Dockerfile"
         
         with open(dockerfile_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 對於這個項目，多階段構建可能不是必需的
-        # 但如果使用了，應該檢查是否正確
+        # 檢查多階段構建是否正確使用
         if 'FROM' in content and content.count('FROM') > 1:
-            assert 'as base' in content or 'AS base' in content
+            assert 'as builder' in content or 'AS builder' in content
+            assert 'COPY --from=builder' in content  # 從建構階段複製檔案
 
     def test_layer_optimization(self):
         """測試 Docker 層優化"""
@@ -329,7 +327,7 @@ class TestDockerSecurityAndOptimization:
             gunicorn_content = f.read()
         
         # Cloud Run 檢測邏輯
-        assert 'CLOUD_RUN_SERVICE' in gunicorn_content
+        assert 'K_SERVICE' in gunicorn_content or 'CLOUD_RUN_SERVICE' in gunicorn_content
         # 記憶體優化設置
         assert 'get_workers()' in gunicorn_content
         

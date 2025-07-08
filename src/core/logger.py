@@ -350,6 +350,10 @@ class AsyncLogHandler(logging.Handler):
         if self.worker_thread and self.worker_thread.is_alive():
             self.worker_thread.join(timeout=2)
         
+        # 關閉目標處理器
+        if hasattr(self.target_handler, 'close'):
+            self.target_handler.close()
+        
         super().close()
 
 
@@ -501,6 +505,28 @@ class LoggerManager:
             stats['async_handlers'] = async_stats
         
         return stats
+    
+    def shutdown(self):
+        """關閉日誌管理器"""
+        try:
+            # 先禁用 logger，防止新的日誌訊息進入
+            self.logger.disabled = True
+            
+            # 關閉所有處理器
+            for handler in self.logger.handlers[:]:
+                try:
+                    if hasattr(handler, 'close'):
+                        handler.close()
+                    self.logger.removeHandler(handler)
+                except Exception as e:
+                    # 避免在關閉時出現錯誤
+                    print(f"Warning: Error closing handler: {e}")
+            
+            # 清空 handler 列表
+            self.logger.handlers.clear()
+            
+        except Exception as e:
+            print(f"Warning: Error during logger shutdown: {e}")
 
 
 class LoggerPerformanceMonitor:
@@ -574,6 +600,17 @@ def get_logger_stats() -> Dict[str, Any]:
         'performance': _performance_monitor.get_stats(),
         'manager': _logger_manager.get_stats()
     }
+
+
+def shutdown_logger():
+    """關閉全域日誌系統"""
+    global _logger_manager
+    if _logger_manager:
+        _logger_manager.shutdown()
+    
+    # 同時呼叫 Python 內建的 logging.shutdown()
+    import logging
+    logging.shutdown()
 
 
 def setup_request_logging(app):
