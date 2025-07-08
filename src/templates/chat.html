@@ -14,14 +14,14 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #3EB166 0%, #2ecc71 100%);
+            background: linear-gradient(135deg, #00252c 0%, #003c47 100%);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
         .header {
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(225, 206, 161, 0.95);
             backdrop-filter: blur(10px);
             padding: 1rem 2rem;
             box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
@@ -31,7 +31,7 @@
         }
 
         .header h1 {
-            color: #2c3e50;
+            color: #00252c;
             font-size: 1.5rem;
             font-weight: 600;
             display: flex;
@@ -40,7 +40,7 @@
         }
 
         .header .logo {
-            color: #3EB166;
+            color: #A7403B;
             font-size: 1.8rem;
         }
 
@@ -84,7 +84,7 @@
             max-width: 900px;
             width: 90%;
             margin: 2rem auto;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(225, 206, 161, 0.95);
             border-radius: 20px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
             overflow: hidden;
@@ -97,6 +97,7 @@
             overflow-y: auto;
             max-height: 60vh;
             min-height: 400px;
+            background: white;
         }
 
         .message {
@@ -149,16 +150,16 @@
         }
 
         .message.user .message-content {
-            background: linear-gradient(135deg, #3EB166 0%, #2ecc71 100%);
-            color: white;
+            background: #00252c;
+            color: #e1cea1;
             border-top-right-radius: 5px;
         }
 
         .message.bot .message-content {
-            background: #f8f9fa;
+            background: #E1CEA1;
             color: #2c3e50;
-            border: 1px solid #e9ecef;
-            border-bottom-left-radius: 5px;
+            border: 1px solid #d4c09a;
+            border-top-left-radius: 5px;
         }
 
         .message.error .message-content {
@@ -181,20 +182,20 @@
         }
 
         .message.user .message-avatar {
-            background: linear-gradient(135deg, #3EB166 0%, #2ecc71 100%);
-            color: white;
+            background: #00252c;
+            color: #e1cea1;
             order: 2;
         }
 
         .message.bot .message-avatar {
-            background: #e9ecef;
-            color: #6c757d;
+            background: #A7403B;
+            color: #E1CEA1;
         }
 
         .input-container {
             padding: 2rem;
-            background: #f8f9fa;
-            border-top: 1px solid #e9ecef;
+            background: #E1CEA1;
+            border-top: 1px solid #d4c09a;
         }
 
         .input-wrapper {
@@ -218,15 +219,15 @@
         }
 
         .input-field:focus {
-            border-color: #3EB166;
-            box-shadow: 0 0 0 3px rgba(62, 177, 102, 0.1);
+            border-color: #A7403B;
+            box-shadow: 0 0 0 3px rgba(167, 64, 59, 0.2);
         }
 
         .send-button {
             width: 60px;
             height: 60px;
-            background: linear-gradient(135deg, #3EB166 0%, #2ecc71 100%);
-            color: white;
+            background: #00252c;
+            color: #e1cea1;
             border: none;
             border-radius: 50%;
             cursor: pointer;
@@ -235,12 +236,13 @@
             justify-content: center;
             font-size: 1.2rem;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(62, 177, 102, 0.3);
+            box-shadow: 0 4px 15px rgba(0, 37, 44, 0.3);
         }
 
         .send-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(62, 177, 102, 0.4);
+            background: #003c47;
+            box-shadow: 0 6px 20px rgba(0, 37, 44, 0.4);
         }
 
         .send-button:active {
@@ -260,6 +262,7 @@
             gap: 0.5rem;
             padding: 1rem;
             color: #6c757d;
+            background: white;
         }
 
         .loading.show {
@@ -270,7 +273,7 @@
             width: 20px;
             height: 20px;
             border: 2px solid #e9ecef;
-            border-top: 2px solid #3EB166;
+            border-top: 2px solid #e1cea1;
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -394,7 +397,7 @@
     <div class="chat-container">
         <div class="chat-messages" id="chatMessages">
             <div class="welcome-message">
-                <i class="fas fa-comments" style="font-size: 2rem; color: #3EB166; margin-bottom: 1rem; display: block;"></i>
+                <i class="fas fa-comments" style="font-size: 2rem; color: #A7403B; margin-bottom: 1rem; display: block;"></i>
                 歡迎使用{{ app_name }}！<br>
                 {{ app_description }}，請輸入您的問題。<br>
                 <small style="color: #8a8a8a; margin-top: 0.5rem; display: block;">

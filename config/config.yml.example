@@ -160,8 +160,7 @@ security:
     
   # 內容安全配置
   content:
-    max_message_length: 5000  # 一般訊息最大長度
-    max_test_message_length: 1000  # 測試訊息最大長度
+    max_message_length: 5000  # 訊息最大長度（測試和一般訊息相同）
     enable_input_sanitization: true  # 啟用針對輸入內容之惡意程式碼之清理機制
     
   # 監控和日誌

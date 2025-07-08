@@ -39,6 +39,10 @@ class SecurityConfig:
     
     def __init__(self, app_config=None):
         self.app_config = app_config or {}
+        logger.debug(f"SecurityConfig init - app_config type: {type(app_config)}")
+        logger.debug(f"SecurityConfig init - has security key: {'security' in (app_config or {})}")
+        if app_config and 'security' in app_config:
+            logger.debug(f"SecurityConfig init - security config keys: {list(app_config['security'].keys())}")
         self.config = self._load_security_config()
     
     def _load_security_config(self) -> Dict[str, Any]:
@@ -75,10 +79,6 @@ class SecurityConfig:
             'max_message_length': self._get_int_config(
                 'MAX_MESSAGE_LENGTH',
                 content_config.get('max_message_length', 5000)
-            ),
-            'max_test_message_length': self._get_int_config(
-                'MAX_TEST_MESSAGE_LENGTH',
-                content_config.get('max_test_message_length', 1000)
             ),
             
             # 安全標頭
@@ -185,9 +185,7 @@ class SecurityConfig:
         return rate_limits.get(endpoint_type, self.config['general_rate_limit'])
     
     def get_max_message_length(self, is_test: bool = False) -> int:
-        """獲取訊息長度限制"""
-        if is_test:
-            return self.config['max_test_message_length']
+        """獲取訊息長度限制（測試和一般訊息使用相同限制）"""
         return self.config['max_message_length']
     
     def should_log_security_events(self) -> bool:
@@ -1094,7 +1092,21 @@ def init_security(app, config=None):
     """
     # 初始化全域 security_config
     global security_config
-    security_config = SecurityConfig(config)
+    try:
+        logger.debug(f"init_security called with config type: {type(config)}")
+        logger.debug(f"init_security config has security: {'security' in (config or {})}")
+        security_config = SecurityConfig(config)
+        logger.info("Security config initialized successfully")
+        logger.debug(f"Security config type: {type(security_config)}")
+        if hasattr(security_config, 'get_max_message_length'):
+            logger.debug(f"Message max length: {security_config.get_max_message_length()}")
+    except Exception as e:
+        logger.error(f"Failed to initialize security config: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        # 使用預設的 SecurityConfig
+        security_config = SecurityConfig({})
+        logger.warning("Using default security config")
     
     # 初始化安全中間件
     security_middleware.init_app(app)

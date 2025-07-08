@@ -11,7 +11,6 @@ from .core.config import load_config
 from .core.logger import get_logger
 logger = get_logger(__name__)
 from .core.security import init_security, InputValidator, require_json_input
-from .core.security import security_config
 from .core.auth import init_test_auth_with_config, get_auth_status_info, require_test_auth, init_test_auth
 from .core.error_handler import ErrorHandler
 
@@ -78,7 +77,7 @@ class MultiPlatformChatBot:
             self._validate_config()
             
             # 2. 初始化安全性
-            init_security(self.app)
+            init_security(self.app, self.config)
             init_test_auth_with_config(self.config)
             init_test_auth(self.app)
             
@@ -358,17 +357,28 @@ class MultiPlatformChatBot:
             if 'test_authenticated' not in __import__('flask').session or not __import__('flask').session['test_authenticated']:
                 return self.response_formatter.json_response({'error': '需要先登入'}, 401)
             
+            # 初始化變數在 try 區塊外
+            test_user_id = "U" + "0" * 32  # 固定的測試用戶 ID
+            user_message = ""
+            
             try:
                 # 獲取清理後的輸入
                 user_message = request.validated_json['message']
                 
                 # 長度檢查 - 在生產環境中限制更嚴格以防止濫用
-                max_length = security_config.get_max_message_length(is_test=True)
+                # 動態導入 security_config
+                from .core.security import security_config
+                
+                # 安全 fallback：如果 security_config 為 None，使用預設值
+                if security_config is not None:
+                    max_length = security_config.get_max_message_length(is_test=True)
+                else:
+                    # 從配置中直接獲取，或使用預設值
+                    max_length = self.config.get('security', {}).get('content', {}).get('max_message_length', 5000)
+                    logger.warning("security_config is None, using fallback max_length: %d", max_length)
+                
                 if len(user_message) > max_length:
                     return self.response_formatter.json_response({'error': f'測試訊息長度不能超過 {max_length} 字符'}, 400)
-                
-                # 使用固定的測試用戶 ID
-                test_user_id = "U" + "0" * 32  # 固定的測試用戶 ID
                 
                 # 創建測試訊息對象
                 from .platforms.base import PlatformMessage, PlatformUser, PlatformType
