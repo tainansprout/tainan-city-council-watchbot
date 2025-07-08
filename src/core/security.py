@@ -37,36 +37,128 @@ logger = get_logger(__name__)
 class SecurityConfig:
     """安全配置管理類 - 統一管理所有安全相關配置"""
     
-    def __init__(self):
+    def __init__(self, app_config=None):
+        self.app_config = app_config or {}
         self.config = self._load_security_config()
     
     def _load_security_config(self) -> Dict[str, Any]:
-        """載入安全配置"""
+        """載入安全配置 - 優先使用 config.yml，環境變數覆蓋"""
+        # 從 app_config 取得安全配置
+        security_config = self.app_config.get('security', {})
+        
+        # 安全標頭配置
+        headers_config = security_config.get('headers', {})
+        cors_config = security_config.get('cors', {})
+        rate_limiting_config = security_config.get('rate_limiting', {})
+        content_config = security_config.get('content', {})
+        monitoring_config = security_config.get('monitoring', {})
+        
         return {
             # 測試端點配置
-            'enable_test_endpoints': os.getenv('ENABLE_TEST_ENDPOINTS', 'true').lower() == 'true',
-            'test_endpoint_rate_limit': int(os.getenv('TEST_ENDPOINT_RATE_LIMIT', '10')),  # 每分鐘請求數
+            'enable_test_endpoints': self._get_bool_config('ENABLE_TEST_ENDPOINTS', True),
+            'test_endpoint_rate_limit': self._get_int_config(
+                'TEST_ENDPOINT_RATE_LIMIT', 
+                rate_limiting_config.get('test_endpoint_rate_limit', 10)
+            ),
             
             # 一般速率限制
-            'general_rate_limit': int(os.getenv('GENERAL_RATE_LIMIT', '60')),  # 每分鐘請求數
-            'webhook_rate_limit': int(os.getenv('WEBHOOK_RATE_LIMIT', '300')),  # Line webhook 每分鐘請求數
+            'general_rate_limit': self._get_int_config(
+                'GENERAL_RATE_LIMIT',
+                rate_limiting_config.get('general_rate_limit', 60)
+            ),
+            'webhook_rate_limit': self._get_int_config(
+                'WEBHOOK_RATE_LIMIT',
+                rate_limiting_config.get('webhook_rate_limit', 300)
+            ),
             
             # 內容限制
-            'max_message_length': int(os.getenv('MAX_MESSAGE_LENGTH', '5000')),
-            'max_test_message_length': int(os.getenv('MAX_TEST_MESSAGE_LENGTH', '1000')),
+            'max_message_length': self._get_int_config(
+                'MAX_MESSAGE_LENGTH',
+                content_config.get('max_message_length', 5000)
+            ),
+            'max_test_message_length': self._get_int_config(
+                'MAX_TEST_MESSAGE_LENGTH',
+                content_config.get('max_test_message_length', 1000)
+            ),
             
             # 安全標頭
-            'enable_security_headers': os.getenv('ENABLE_SECURITY_HEADERS', 'true').lower() == 'true',
-            'enable_cors': os.getenv('ENABLE_CORS', 'false').lower() == 'true',
+            'enable_security_headers': self._get_bool_config(
+                'ENABLE_SECURITY_HEADERS',
+                headers_config.get('enabled', True)
+            ),
+            'force_https': self._get_bool_config(
+                'FORCE_HTTPS',
+                headers_config.get('force_https', False)
+            ),
+            'enable_hsts': self._get_bool_config(
+                'ENABLE_HSTS',
+                headers_config.get('enable_hsts', False)
+            ),
+            'debug_headers': self._get_bool_config(
+                'DEBUG_SECURITY_HEADERS',
+                headers_config.get('debug_headers', False)
+            ),
+            
+            # CORS 配置
+            'enable_cors': self._get_bool_config(
+                'ENABLE_CORS',
+                cors_config.get('enabled', False)
+            ),
+            'cors_allowed_origins': self._get_list_config(
+                'CORS_ALLOWED_ORIGINS',
+                cors_config.get('allowed_origins', [])
+            ),
+            'cors_allowed_methods': cors_config.get('allowed_methods', 
+                ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+            ),
+            'cors_allowed_headers': cors_config.get('allowed_headers',
+                ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"]
+            ),
+            'cors_allow_credentials': cors_config.get('allow_credentials', True),
+            'cors_max_age': cors_config.get('max_age', 86400),
             
             # 監控和日誌
-            'log_security_events': os.getenv('LOG_SECURITY_EVENTS', 'true').lower() == 'true',
-            'enable_request_logging': os.getenv('ENABLE_REQUEST_LOGGING', 'true').lower() == 'true',
+            'log_security_events': self._get_bool_config(
+                'LOG_SECURITY_EVENTS',
+                monitoring_config.get('log_security_events', True)
+            ),
+            'enable_request_logging': self._get_bool_config(
+                'ENABLE_REQUEST_LOGGING',
+                monitoring_config.get('enable_request_logging', True)
+            ),
+            'enable_security_report': self._get_bool_config(
+                'ENABLE_SECURITY_REPORT',
+                monitoring_config.get('enable_security_report', True)
+            ),
             
             # 環境檢測
             'environment': os.getenv('FLASK_ENV', os.getenv('ENVIRONMENT', 'production')),
             'debug_mode': os.getenv('FLASK_DEBUG', 'false').lower() == 'true',
         }
+    
+    def _get_bool_config(self, env_key: str, default_value: bool) -> bool:
+        """從環境變數取得布林值，環境變數優先於配置檔案"""
+        env_value = os.getenv(env_key)
+        if env_value is not None:
+            return env_value.lower() == 'true'
+        return default_value
+    
+    def _get_int_config(self, env_key: str, default_value: int) -> int:
+        """從環境變數取得整數值，環境變數優先於配置檔案"""
+        env_value = os.getenv(env_key)
+        if env_value is not None:
+            try:
+                return int(env_value)
+            except ValueError:
+                logger.warning(f"Invalid integer value for {env_key}: {env_value}, using default: {default_value}")
+        return default_value
+    
+    def _get_list_config(self, env_key: str, default_value: List[str]) -> List[str]:
+        """從環境變數取得列表值，環境變數優先於配置檔案"""
+        env_value = os.getenv(env_key)
+        if env_value is not None:
+            return [item.strip() for item in env_value.split(',') if item.strip()]
+        return default_value
     
     def is_development(self) -> bool:
         """檢查是否為開發環境"""
@@ -660,7 +752,7 @@ def sanitize_output(data: Union[str, Dict, List]) -> Union[str, Dict, List]:
 
 
 # 全域實例
-security_config = SecurityConfig()
+security_config = None  # 將在 init_security 中初始化
 security_middleware = SecurityMiddleware()
 
 # 全域安全中間件實例
@@ -678,38 +770,72 @@ def get_security_middleware() -> SecurityMiddleware:
 
 
 class SecurityHeaders:
-    """安全標頭管理類"""
+    """安全標頭管理類 - 2024 年最佳實踐"""
     
     @staticmethod
-    def get_security_headers(config=None) -> Dict[str, str]:
-        """取得安全標頭配置"""
-        # 從環境變數或配置取得設定
-        enable_security_headers = os.getenv('ENABLE_SECURITY_HEADERS', 'true').lower() == 'true'
+    def get_security_headers(config=None, endpoint=None, environment='production', sec_config=None) -> Dict[str, str]:
+        """
+        取得安全標頭配置 - 根據環境和端點類型動態調整
         
-        if not enable_security_headers:
+        Args:
+            config: 配置對象
+            endpoint: 端點名稱
+            environment: 環境類型 (development/production)
+            sec_config: SecurityConfig 實例
+        """
+        # 如果沒有傳入 security_config，創建預設實例
+        if sec_config is None:
+            sec_config = SecurityConfig(config)
+        
+        # 檢查是否啟用安全標頭
+        if not sec_config.config.get('enable_security_headers', True):
             return {}
         
-        # CSP 配置
-        csp_policy = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
-            "https://cdn.jsdelivr.net https://unpkg.com; "
-            "style-src 'self' 'unsafe-inline' "
-            "https://cdn.jsdelivr.net https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self'; "
-            "frame-ancestors 'none'; "
-            "form-action 'self'; "
-            "base-uri 'self'"
-        )
+        # 檢測環境
+        is_development = environment in ['development', 'dev', 'local']
+        is_production = environment in ['production', 'prod']
         
-        return {
-            # Content Security Policy
+        # 基礎 CSP 配置 - 根據環境調整
+        if is_development:
+            # 開發環境：較寬鬆的 CSP 用於開發便利性
+            csp_policy = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+                "https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; "
+                "style-src 'self' 'unsafe-inline' "
+                "https://cdn.jsdelivr.net https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+                "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+                "img-src 'self' data: https: blob:; "
+                "connect-src 'self' ws: wss:; "  # WebSocket 支援用於開發
+                "media-src 'self' data: blob:; "
+                "frame-ancestors 'none'; "
+                "form-action 'self'; "
+                "base-uri 'self'; "
+                "object-src 'none'"
+            )
+        else:
+            # 生產環境：嚴格的 CSP （但允許 HTTP 用於測試）
+            csp_policy = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' "  # 聊天介面需要內聯腳本
+                "https://cdn.jsdelivr.net https://unpkg.com; "
+                "style-src 'self' 'unsafe-inline' "
+                "https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self'; "
+                "media-src 'self' blob:; "
+                "frame-ancestors 'none'; "
+                "form-action 'self'; "
+                "base-uri 'self'; "
+                "object-src 'none'"
+                # 移除 upgrade-insecure-requests 以允許 HTTP 測試環境
+            )
+        
+        # 基礎安全標頭
+        headers = {
+            # Content Security Policy - 2024 最佳實踐
             'Content-Security-Policy': csp_policy,
-            
-            # HTTP Strict Transport Security
-            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
             
             # X-Frame-Options (防止 clickjacking)
             'X-Frame-Options': 'DENY',
@@ -717,103 +843,356 @@ class SecurityHeaders:
             # X-Content-Type-Options (防止 MIME sniffing)
             'X-Content-Type-Options': 'nosniff',
             
-            # X-XSS-Protection
-            'X-XSS-Protection': '1; mode=block',
-            
-            # Referrer Policy
+            # Referrer Policy - 平衡隱私和功能
             'Referrer-Policy': 'strict-origin-when-cross-origin',
             
-            # Feature Policy / Permissions Policy
+            # Permissions Policy (替代 Feature Policy) - 2024 標準
             'Permissions-Policy': (
-                'geolocation=(), '
-                'microphone=(), '
+                'accelerometer=(), '
+                'ambient-light-sensor=(), '
+                'autoplay=(), '
+                'battery=(), '
                 'camera=(), '
-                'payment=(), '
-                'usb=(), '
-                'magnetometer=(), '
+                'cross-origin-isolated=(), '
+                'display-capture=(), '
+                'document-domain=(), '
+                'encrypted-media=(), '
+                'execution-while-not-rendered=(), '
+                'execution-while-out-of-viewport=(), '
+                'fullscreen=(), '
+                'geolocation=(), '
                 'gyroscope=(), '
-                'speaker=()'
+                'keyboard-map=(), '
+                'magnetometer=(), '
+                'microphone=(), '
+                'midi=(), '
+                'navigation-override=(), '
+                'payment=(), '
+                'picture-in-picture=(), '
+                'publickey-credentials-get=(), '
+                'screen-wake-lock=(), '
+                'sync-xhr=(), '
+                'usb=(), '
+                'web-share=(), '
+                'xr-spatial-tracking=()'
             ),
             
             # X-Permitted-Cross-Domain-Policies
             'X-Permitted-Cross-Domain-Policies': 'none',
             
-            # Clear-Site-Data (在登出時使用)
-            # 'Clear-Site-Data': '"cache", "cookies", "storage", "executionContexts"',
-            
-            # Cross-Origin-Embedder-Policy
-            'Cross-Origin-Embedder-Policy': 'require-corp',
-            
-            # Cross-Origin-Opener-Policy
+            # Cross-Origin 安全標頭 - 2024 最佳實踐
+            'Cross-Origin-Embedder-Policy': 'credentialless',  # 更彈性的 COEP
             'Cross-Origin-Opener-Policy': 'same-origin',
-            
-            # Cross-Origin-Resource-Policy
             'Cross-Origin-Resource-Policy': 'same-site',
             
-            # Cache Control for sensitive pages
-            'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-            'Pragma': 'no-cache',
-            'Expires': '0'
+            # 移除過時的 X-XSS-Protection (現代瀏覽器已內建更好的保護)
+            # 'X-XSS-Protection': '0',  # 明確禁用可能有問題的舊版保護
         }
-    
-    @staticmethod
-    def apply_security_headers(response, endpoint=None):
-        """應用安全標頭到回應"""
-        headers = SecurityHeaders.get_security_headers()
+        
+        # HSTS - 僅在明確要求 HTTPS 時啟用（允許測試環境使用 HTTP）
+        force_https = sec_config.config.get('force_https', False)
+        enable_hsts = sec_config.config.get('enable_hsts', False)
+        
+        if force_https or enable_hsts:
+            headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
         
         # 根據端點類型調整標頭
         if endpoint:
-            if endpoint in ['health', 'metrics']:
-                # API 端點不需要某些瀏覽器安全標頭
+            if endpoint in ['health', 'metrics', 'memory-stats']:
+                # API 端點：較寬鬆的快取政策
+                headers['Cache-Control'] = 'no-cache, max-age=60'
+                headers['Pragma'] = 'no-cache'
+                # API 端點不需要某些瀏覽器特定標頭
                 headers.pop('X-Frame-Options', None)
-                headers.pop('X-XSS-Protection', None)
-            elif endpoint == 'logout':
-                # 登出時清除站點資料
-                headers['Clear-Site-Data'] = '"cache", "cookies", "storage"'
+                
+            elif endpoint in ['login', 'logout', 'chat']:
+                # 認證相關頁面：嚴格的快取控制
+                headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+                headers['Pragma'] = 'no-cache'
+                headers['Expires'] = '0'
+                
+                # 登出頁面額外清除資料
+                if endpoint == 'logout':
+                    headers['Clear-Site-Data'] = '"cache", "cookies", "storage"'
+                    
+            elif endpoint in ['callback', 'webhooks_line', 'webhook_handler']:
+                # Webhook 端點：最小化標頭以避免干擾第三方服務
+                webhook_headers = {
+                    'X-Content-Type-Options': 'nosniff',
+                    'X-Frame-Options': 'DENY',
+                    'Cache-Control': 'no-store, no-cache, must-revalidate'
+                }
+                return webhook_headers
+                
+            elif endpoint == 'home':
+                # 首頁：適度快取
+                headers['Cache-Control'] = 'public, max-age=300'  # 5分鐘快取
+                
+        else:
+            # 預設：安全的快取政策
+            headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+            headers['Pragma'] = 'no-cache'
+            headers['Expires'] = '0'
+        
+        return headers
+    
+    @staticmethod
+    def apply_security_headers(response, endpoint=None, config=None):
+        """
+        應用安全標頭到回應 - 2024 年最佳實踐
+        
+        Args:
+            response: Flask response 對象
+            endpoint: 端點名稱
+            config: 配置對象
+        """
+        # 檢測環境
+        environment = os.getenv('FLASK_ENV', 'production')
+        
+        # 取得適合的安全標頭
+        headers = SecurityHeaders.get_security_headers(
+            config=config, 
+            endpoint=endpoint, 
+            environment=environment,
+            sec_config=security_config
+        )
         
         # 應用標頭
         for header, value in headers.items():
             response.headers[header] = value
         
+        # 記錄安全標頭應用（僅在開發環境）
+        if environment in ['development', 'dev'] and os.getenv('DEBUG_SECURITY_HEADERS', 'false').lower() == 'true':
+            logger.debug(f"Applied {len(headers)} security headers to endpoint '{endpoint}': {list(headers.keys())}")
+        
         return response
+    
+    @staticmethod
+    def get_security_report() -> Dict[str, Any]:
+        """
+        產生安全配置報告
+        
+        Returns:
+            包含安全配置摘要的字典
+        """
+        environment = os.getenv('FLASK_ENV', 'production')
+        enable_security_headers = os.getenv('ENABLE_SECURITY_HEADERS', 'true').lower() == 'true'
+        
+        # 取得範例標頭配置
+        sample_headers = SecurityHeaders.get_security_headers(environment=environment)
+        
+        return {
+            'environment': environment,
+            'security_headers_enabled': enable_security_headers,
+            'total_headers_count': len(sample_headers),
+            'security_features': {
+                'content_security_policy': 'Content-Security-Policy' in sample_headers,
+                'strict_transport_security': 'Strict-Transport-Security' in sample_headers,
+                'cross_origin_policies': all(h in sample_headers for h in [
+                    'Cross-Origin-Embedder-Policy',
+                    'Cross-Origin-Opener-Policy', 
+                    'Cross-Origin-Resource-Policy'
+                ]),
+                'permissions_policy': 'Permissions-Policy' in sample_headers,
+                'frame_protection': 'X-Frame-Options' in sample_headers,
+                'content_type_protection': 'X-Content-Type-Options' in sample_headers,
+            },
+            'environment_specific_features': {
+                'development_mode': environment in ['development', 'dev', 'local'],
+                'websocket_support': 'ws:' in sample_headers.get('Content-Security-Policy', ''),
+                'eval_allowed': "'unsafe-eval'" in sample_headers.get('Content-Security-Policy', ''),
+                'upgrade_insecure_requests': 'upgrade-insecure-requests' in sample_headers.get('Content-Security-Policy', ''),
+            },
+            'header_list': list(sample_headers.keys()),
+            'timestamp': time.time()
+        }
+    
+    @staticmethod
+    def validate_security_configuration() -> Dict[str, Any]:
+        """
+        驗證安全配置是否符合最佳實踐
+        
+        Returns:
+            驗證結果字典
+        """
+        results = {
+            'is_secure': True,
+            'warnings': [],
+            'recommendations': [],
+            'score': 100
+        }
+        
+        environment = os.getenv('FLASK_ENV', 'production')
+        headers = SecurityHeaders.get_security_headers(environment=environment)
+        
+        # 檢查關鍵安全標頭
+        critical_headers = [
+            'Content-Security-Policy',
+            'X-Frame-Options', 
+            'X-Content-Type-Options',
+            'Cross-Origin-Opener-Policy'
+        ]
+        
+        missing_critical = [h for h in critical_headers if h not in headers]
+        if missing_critical:
+            results['is_secure'] = False
+            results['warnings'].append(f"缺少關鍵安全標頭: {', '.join(missing_critical)}")
+            results['score'] -= len(missing_critical) * 15
+        
+        # 檢查生產環境特定配置
+        if environment in ['production', 'prod']:
+            # 只有在明確要求 HTTPS 時才檢查 HSTS
+            force_https = os.getenv('FORCE_HTTPS', 'false').lower() == 'true'
+            enable_hsts = os.getenv('ENABLE_HSTS', 'false').lower() == 'true'
+            
+            if (force_https or enable_hsts) and 'Strict-Transport-Security' not in headers:
+                results['warnings'].append("已啟用 HTTPS 強制但缺少 HSTS 標頭")
+                results['score'] -= 10
+            elif not force_https and not enable_hsts:
+                results['recommendations'].append("生產環境建議考慮啟用 HSTS (設定 ENABLE_HSTS=true)")
+                
+            csp = headers.get('Content-Security-Policy', '')
+            if "'unsafe-eval'" in csp:
+                results['warnings'].append("生產環境不建議使用 'unsafe-eval'")
+                results['score'] -= 15
+                
+        # 檢查開發環境特定配置
+        elif environment in ['development', 'dev', 'local']:
+            if 'ws:' not in headers.get('Content-Security-Policy', ''):
+                results['recommendations'].append("開發環境可考慮啟用 WebSocket 支援")
+        
+        # 檢查 CSP 配置品質
+        csp = headers.get('Content-Security-Policy', '')
+        if csp:
+            if 'default-src' not in csp:
+                results['warnings'].append("CSP 缺少 default-src 指令")
+                results['score'] -= 10
+                
+            if "'unsafe-inline'" in csp and "'strict-dynamic'" not in csp:
+                results['recommendations'].append("考慮使用 'strict-dynamic' 來改善 CSP 安全性")
+        
+        # 整體評級
+        if results['score'] >= 90:
+            results['grade'] = 'A'
+        elif results['score'] >= 80:
+            results['grade'] = 'B'
+        elif results['score'] >= 70:
+            results['grade'] = 'C'
+        else:
+            results['grade'] = 'D'
+            results['is_secure'] = False
+        
+        return results
 
 def init_security(app, config=None):
-    """初始化安全性配置"""
+    """
+    初始化安全性配置 - 2024 年最佳實踐
+    
+    Args:
+        app: Flask 應用程式實例
+        config: 配置對象
+    """
+    # 初始化全域 security_config
+    global security_config
+    security_config = SecurityConfig(config)
+    
+    # 初始化安全中間件
     security_middleware.init_app(app)
     
-    # 註冊安全標頭中間件
+    # 註冊增強版安全標頭中間件
     @app.after_request
     def add_security_headers(response):
-        """為所有回應添加安全標頭"""
+        """為所有回應添加安全標頭 - 2024 年最佳實踐"""
         endpoint = request.endpoint
-        return SecurityHeaders.apply_security_headers(response, endpoint)
+        return SecurityHeaders.apply_security_headers(response, endpoint, config)
+    
+    # 註冊安全端點
+    @app.route('/security-report')
+    def security_report():
+        """安全配置報告端點（僅開發環境）"""
+        if os.getenv('FLASK_ENV', 'production') not in ['development', 'dev', 'local']:
+            from flask import abort
+            abort(404)  # 生產環境隱藏此端點
+        
+        from flask import jsonify
+        report = SecurityHeaders.get_security_report()
+        validation = SecurityHeaders.validate_security_configuration()
+        
+        return jsonify({
+            'security_report': report,
+            'security_validation': validation,
+            'middleware_stats': get_security_middleware().get_security_stats()
+        })
     
     # 註冊 CORS 配置（如果需要）
-    cors_enabled = os.getenv('ENABLE_CORS', 'false').lower() == 'true'
+    cors_enabled = security_config.config.get('enable_cors', False)
     if cors_enabled:
-        allowed_origins = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
-        allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
+        allowed_origins = security_config.config.get('cors_allowed_origins', [])
+        allowed_methods = security_config.config.get('cors_allowed_methods', ["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+        allowed_headers = security_config.config.get('cors_allowed_headers', ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"])
+        allow_credentials = security_config.config.get('cors_allow_credentials', True)
+        max_age = security_config.config.get('cors_max_age', 86400)
+        
+        # 記錄 CORS 配置
+        logger.info(f"CORS 已啟用，允許的來源: {allowed_origins if allowed_origins else ['*']}")
         
         @app.after_request
         def add_cors_headers(response):
-            """添加 CORS 標頭"""
+            """添加 CORS 標頭 - 增強版"""
             origin = request.headers.get('Origin')
+            
+            # 檢查來源是否被允許
             if origin and (not allowed_origins or origin in allowed_origins or '*' in allowed_origins):
                 response.headers['Access-Control-Allow-Origin'] = origin
-                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-                response.headers['Access-Control-Allow-Credentials'] = 'true'
-                response.headers['Access-Control-Max-Age'] = '86400'
+                response.headers['Access-Control-Allow-Methods'] = ', '.join(allowed_methods)
+                response.headers['Access-Control-Allow-Headers'] = ', '.join(allowed_headers)
+                response.headers['Access-Control-Allow-Credentials'] = 'true' if allow_credentials else 'false'
+                response.headers['Access-Control-Max-Age'] = str(max_age)
+                
+                # 開發環境額外標頭
+                if os.getenv('FLASK_ENV', 'production') in ['development', 'dev']:
+                    response.headers['Access-Control-Expose-Headers'] = 'X-Total-Count, X-Rate-Limit-Remaining'
+            
             return response
         
-        # 處理 OPTIONS 請求
+        # 處理 OPTIONS 預檢請求
         @app.before_request
         def handle_preflight():
-            """處理 CORS 預檢請求"""
+            """處理 CORS 預檢請求 - 增強版"""
             if request.method == 'OPTIONS':
+                from flask import current_app
                 response = current_app.make_default_options_response()
                 return add_cors_headers(response)
     
-    logger.info("安全性中間件和安全標頭已初始化")
+    # 記錄安全配置
+    environment = os.getenv('FLASK_ENV', 'production')
+    security_features = []
+    
+    if os.getenv('ENABLE_SECURITY_HEADERS', 'true').lower() == 'true':
+        security_features.append('Security Headers')
+    if cors_enabled:
+        security_features.append('CORS')
+    
+    logger.info(f"安全性系統已初始化 (環境: {environment})")
+    logger.info(f"啟用的安全功能: {', '.join(security_features) if security_features else '無'}")
+    
+    # 開發環境安全提醒
+    if environment in ['development', 'dev', 'local']:
+        logger.info("開發環境安全提醒:")
+        logger.info("- 安全標頭配置較寬鬆以便開發")
+        logger.info("- 安全報告端點可用: /security-report")
+        logger.info("- 設定 DEBUG_SECURITY_HEADERS=true 可啟用詳細日誌")
+    
+    # 生產環境安全檢查
+    elif environment in ['production', 'prod']:
+        validation = SecurityHeaders.validate_security_configuration()
+        if not validation['is_secure']:
+            logger.warning("安全配置檢查發現問題:")
+            for warning in validation['warnings']:
+                logger.warning(f"  - {warning}")
+        else:
+            logger.info(f"安全配置檢查通過 (評級: {validation['grade']})")
+    
+    return app
 
 

@@ -101,18 +101,71 @@ text_processing:
 logfile: ./logs/linebot.log
 
 # 測試介面認證設定
+# Security Best Practices (安全最佳實踐):
+# 1. Development (開發環境): 可使用簡單密碼進行測試
+# 2. Production (生產環境): 強烈建議使用環境變數設定安全密碼
+#    設定方式：
+#    - Linux/Mac: export TEST_PASSWORD="your_secure_password_here"
+#    - Windows: set TEST_PASSWORD=your_secure_password_here
+#    - Docker: -e TEST_PASSWORD="your_secure_password_here"
+#    - 在生產環境中絕不要在配置文件中使用明文密碼！
 auth:
   # 認證方式: simple_password, basic_auth, token
   method: simple_password
-  # 簡單密碼認證
+  
+  # 簡單密碼認證 (開發環境用)
+  # 生產環境請使用環境變數 TEST_PASSWORD 覆蓋此設定
   password: test123
+  
   # HTTP Basic Auth 設定
   username: admin
+  
   # API Token 認證
+  # 生產環境請使用環境變數 TEST_API_TOKEN 覆蓋此設定
   api_token: your_secure_api_token_here
+  
   # Session 設定
+  # 生產環境請使用環境變數 TEST_SECRET_KEY 覆蓋此設定
   secret_key: your_secret_key_for_sessions_here
   token_expiry: 3600  # Token 有效期（秒）
+
+# 安全配置 - 2024 年最佳實踐
+security:
+  # 安全標頭配置
+  headers:
+    enabled: true  # 啟用安全標頭
+    force_https: false  # 不強制 HTTPS（支援測試環境）
+    enable_hsts: false  # 不啟用 HSTS（測試友善）
+    debug_headers: false  # 是否記錄詳細的安全標頭日誌
+    
+  # CORS 跨域配置
+  cors:
+    enabled: false  # 啟用 CORS 支援
+    allowed_origins: []  # 允許的來源，空陣列表示不限制
+    # 範例: ["https://example.com", "https://app.example.com"]
+    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allowed_headers: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"]
+    allow_credentials: true
+    max_age: 86400  # 預檢請求快取時間（秒）
+    
+  # 速率限制配置
+  rate_limiting:
+    enabled: true
+    general_rate_limit: 60  # 一般端點每分鐘請求數
+    webhook_rate_limit: 300  # Webhook 端點每分鐘請求數
+    test_endpoint_rate_limit: 10  # 測試端點每分鐘請求數
+    
+  # 內容安全配置
+  content:
+    max_message_length: 5000  # 一般訊息最大長度
+    max_test_message_length: 1000  # 測試訊息最大長度
+    enable_input_sanitization: true  # 啟用輸入清理
+    
+  # 監控和日誌
+  monitoring:
+    log_security_events: true  # 記錄安全事件
+    enable_request_logging: true  # 啟用請求日誌
+    enable_security_report: true  # 開發環境啟用安全報告端點
 
 # 日誌配置
 log_level: DEBUG  # DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -121,10 +174,5 @@ logfile: ./logs/chatbot.log
 
 commands:
   help: "這裡是台南市議會聊天機器人，目前已經輸入了台南市議會第四屆公開議事錄中的會議逐字稿，請輸入您的問題，以便我檢索逐字稿內容來回應您。若您希望重設聊天內容，請輸入「/reset」以重置聊天。"
-
-# Web 測試介面認證設定 (v2.0)
-auth:
-  method: simple_password  # simple_password, basic_auth, token
-  password: your_test_password_here  # 生產環境請使用環境變數 TEST_PASSWORD
   
 ...
