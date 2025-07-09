@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 import time
+import base64
 
 from src.models.gemini_model import GeminiModel
 from src.models.base import FileInfo, RAGResponse, ChatMessage, ChatResponse, ThreadInfo, ModelProvider
@@ -278,43 +279,19 @@ class TestGeminiModel:
         assert "語義檢索" in system_content
         assert "100萬 token" in system_content
     
-    @patch('src.models.gemini_model.requests.post')
-    def test_query_with_rag_no_corpus(self, mock_post, gemini_model):
+    @patch('src.models.gemini_model.GeminiModel._fallback_chat_completion')
+    def test_query_with_rag_no_corpus(self, mock_fallback, gemini_model):
         """測試沒有語料庫時的 RAG 查詢"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'candidates': [{
-                'content': {
-                    'parts': [{'text': 'I can help you with general questions.'}]
-                },
-                'finishReason': 'STOP'
-            }]
-        }
-        mock_post.return_value = mock_response
-        
-        # 測試長上下文
-        context_messages = [
-            ChatMessage(role='system', content='You are a helpful assistant.'),
-            ChatMessage(role='user', content='Previous question'),
-            ChatMessage(role='assistant', content='Previous answer'),
-            ChatMessage(role='user', content='Current question')
-        ]
-        
+        gemini_model.corpora.get = Mock(return_value=None)
+        mock_fallback.return_value = (True, RAGResponse(answer="Fallback response", sources=[]), None)
+
         is_successful, rag_response, error = gemini_model.query_with_rag(
-            query="What can you help me with?",
-            context_messages=context_messages
+            query="What can you help me with?"
         )
         
         assert is_successful == True
-        assert rag_response.answer == 'I can help you with general questions.'
-        assert rag_response.metadata['no_sources'] == True
-        assert rag_response.metadata['context_messages_count'] == 4
-        
-        # 驗證使用了上下文訊息
-        call_args = mock_post.call_args
-        request_body = call_args[1]['json']
-        assert len(request_body['contents']) == 3  # user-assistant-user (系統指令分別處理)
+        assert rag_response.answer == 'Fallback response'
+        mock_fallback.assert_called_once()
     
     @patch('src.models.gemini_model.requests.post')
     def test_error_handling(self, mock_post, gemini_model):
@@ -344,3 +321,66 @@ class TestGeminiModel:
         assert '100萬 token' in system_prompt
         assert 'Google Semantic Retrieval API' in system_prompt
         assert '如我們之前討論的' in system_prompt  # 長上下文引用示例
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_transcribe_audio_success(self, mock_post, gemini_model, tmp_path):
+        """測試音訊轉錄成功"""
+        # 建立一個假的音訊檔案
+        audio_content = b'fake_audio_data'
+        audio_file = tmp_path / "test.wav"
+        audio_file.write_bytes(audio_content)
+
+        # 模擬 API 回應
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'candidates': [{
+                'content': {
+                    'parts': [{'text': 'This is the transcribed text.'}]
+                }
+            }]
+        }
+        mock_post.return_value = mock_response
+
+        is_successful, text, error = gemini_model.transcribe_audio(str(audio_file))
+
+        assert is_successful is True
+        assert text == 'This is the transcribed text.'
+        assert error is None
+
+        # 驗證請求內容
+        call_args = mock_post.call_args
+        request_body = call_args[1]['json']
+        assert 'contents' in request_body
+        parts = request_body['contents'][0]['parts']
+        assert len(parts) == 2
+        assert '請將這段音訊轉錄成文字' in parts[0]['text']
+        assert parts[1]['inline_data']['mime_type'] == 'audio/wav'
+        assert parts[1]['inline_data']['data'] == base64.b64encode(audio_content).decode('utf-8')
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_transcribe_audio_api_error(self, mock_post, gemini_model, tmp_path):
+        """測試音訊轉錄時 API 回傳錯誤"""
+        audio_file = tmp_path / "test.mp3"
+        audio_file.write_bytes(b'fake_audio_data')
+
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {
+            'error': {'message': 'Invalid audio format'}
+        }
+        mock_post.return_value = mock_response
+
+        is_successful, text, error = gemini_model.transcribe_audio(str(audio_file))
+
+        assert is_successful is False
+        assert text is None
+        assert 'Invalid audio format' in error
+
+    def test_transcribe_audio_file_not_found(self, gemini_model):
+        """測試音訊轉錄時檔案不存在"""
+        is_successful, text, error = gemini_model.transcribe_audio('/non/existent/file.wav')
+
+        assert is_successful is False
+        assert text is None
+        assert 'not found' in error.lower()

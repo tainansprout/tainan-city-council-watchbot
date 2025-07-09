@@ -41,9 +41,16 @@ ffmpeg-python>=0.2.0,<1.0.0
 # Environment variable management for development
 python-dotenv>=1.0.0,<2.0.0
 
-# Additional platform integrations (optional)
-# discord.py>=2.3.0,<3.0.0
-# python-telegram-bot>=20.0,<21.0
+# Additional platform integrations (optional, uncomment to enable)
+# Discord platform support
+# discord.py>=2.4.0,<3.0.0
+
+# Telegram platform support  
+# python-telegram-bot>=22.0,<23.0
+
+# Slack platform support
+# slack-bolt>=1.18.0,<2.0.0
+# slack-sdk>=3.27.0,<4.0.0
 
 # Type checking and development tools
 mypy>=1.5.0,<2.0.0
@@ -53,3 +60,34 @@ isort>=5.12.0,<6.0.0
 
 # Additional utilities
 requests-toolbelt>=1.0.0,<2.0.0
+
+# ==========================================
+# MULTI-PLATFORM SUPPORT INSTALLATION GUIDE
+# ==========================================
+# 
+# To enable additional platforms, uncomment the relevant packages above and run:
+#
+# For Discord support:
+#   pip install "discord.py>=2.4.0,<3.0.0"
+#
+# For Telegram support:
+#   pip install "python-telegram-bot>=22.0,<23.0"
+#
+# For Slack support:
+#   pip install "slack-bolt>=1.18.0,<2.0.0" "slack-sdk>=3.27.0,<4.0.0"
+#
+# Or install all platforms at once:
+#   pip install "discord.py>=2.4.0,<3.0.0" "python-telegram-bot>=22.0,<23.0" "slack-bolt>=1.18.0,<2.0.0" "slack-sdk>=3.27.0,<4.0.0"
+#
+# Then enable the platforms in config/config.yml:
+#   platforms:
+#     discord:
+#       enabled: true
+#       bot_token: "your_discord_bot_token"
+#     telegram:
+#       enabled: true
+#       bot_token: "your_telegram_bot_token"
+#     slack:
+#       enabled: true
+#       bot_token: "your_slack_bot_token"
+#       signing_secret: "your_slack_signing_secret"

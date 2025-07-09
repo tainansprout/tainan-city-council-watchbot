@@ -98,7 +98,7 @@
             font-size: 1rem;
             transition: all 0.3s ease;
             outline: none;
-            background: #E1CEA1;
+            background: #FFFFFF;
         }
 
         input[type="password"]:focus {
@@ -260,7 +260,7 @@
             button.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 0.5rem;"></i>登入中...';
             
             try {
-                const response = await fetch('/chat', {
+                const response = await fetch('/login', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

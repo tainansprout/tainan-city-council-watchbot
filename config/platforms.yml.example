@@ -28,31 +28,33 @@ platforms:
       max_text_length: 5000
       max_audio_duration: 300  # 秒
     
-  # Discord 平台設定 (未來支援)
+  # Discord 平台設定
   discord:
     enabled: false
     bot_token: "YOUR_DISCORD_BOT_TOKEN"
-    application_id: "YOUR_DISCORD_APPLICATION_ID"
+    guild_id: "YOUR_DISCORD_GUILD_ID"  # 可選，限制特定伺服器
+    command_prefix: "!"
     
     # Discord 特定設定
     webhook_path: "/webhooks/discord"
-    signature_header: "X-Discord-Signature"
     
     # 功能開關
     features:
       slash_commands: true
       embeds: true
       reactions: true
+      voice_support: false
     
     # 訊息限制
     limits:
       max_text_length: 2000
       max_embed_fields: 25
     
-  # Telegram 平台設定 (未來支援)
+  # Telegram 平台設定
   telegram:
     enabled: false
     bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
+    webhook_secret: "YOUR_WEBHOOK_SECRET"  # 可選，增強安全性
     
     # Telegram 特定設定
     webhook_path: "/webhooks/telegram"
@@ -63,11 +65,34 @@ platforms:
       inline_keyboard: true
       media_groups: true
       polls: false
+      markdown_support: true
     
     # 訊息限制
     limits:
       max_text_length: 4096
       max_caption_length: 1024
+    
+  # Slack 平台設定
+  slack:
+    enabled: false
+    bot_token: "YOUR_SLACK_BOT_TOKEN"
+    signing_secret: "YOUR_SLACK_SIGNING_SECRET"
+    app_token: "YOUR_SLACK_APP_TOKEN"  # 可選，用於 Socket Mode
+    
+    # Slack 特定設定
+    webhook_path: "/webhooks/slack"
+    
+    # 功能開關
+    features:
+      interactive_components: true
+      blocks: true
+      threads: true
+      mentions: true
+    
+    # 訊息限制
+    limits:
+      max_text_length: 4000
+      max_blocks: 50
     
   # Web 平台設定 (測試介面)
   web:
@@ -101,6 +126,7 @@ routing:
     line: "/webhooks/line"
     discord: "/webhooks/discord" 
     telegram: "/webhooks/telegram"
+    slack: "/webhooks/slack"
     
   # 健康檢查路徑
   health_checks:
@@ -108,6 +134,7 @@ routing:
     line: "/health/line"
     discord: "/health/discord"
     telegram: "/health/telegram"
+    slack: "/health/slack"
 
 # ============================================================================
 # 平台特定指令
@@ -128,6 +155,11 @@ platform_commands:
   telegram:
     channel: "加入我們的頻道獲取更新：\nhttps://t.me/yourchannel"
     group: "加入討論群組：\nhttps://t.me/yourgroup"
+    
+  # Slack 專用指令
+  slack:
+    workspace: "加入我們的工作區：\nhttps://your-workspace.slack.com"
+    support: "需要幫助請聯繫 #support 頻道"
 
 # ============================================================================
 # 平台特定設定
@@ -167,3 +199,20 @@ platform_specific:
       
     # 解析模式
     parse_mode: "Markdown"  # HTML, Markdown, MarkdownV2
+    
+  # Slack 特定設定
+  slack:
+    # 區塊設定
+    blocks:
+      enabled: true
+      max_blocks_per_message: 50
+      
+    # 互動式組件設定
+    interactive_components:
+      enabled: true
+      timeout: 300  # 秒
+      
+    # 執行緒設定
+    threads:
+      enabled: true
+      auto_thread_replies: true

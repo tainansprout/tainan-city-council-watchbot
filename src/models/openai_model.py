@@ -56,7 +56,7 @@ class OpenAIModel(FullLLMInterface):
             json_body = {
                 'model': kwargs.get('model', 'gpt-4'),
                 'messages': openai_messages,
-                'temperature': kwargs.get('temperature', 0)
+                'temperature': kwargs.get('temperature', 0.01)
             }
             
             is_successful, response, error_message = self._request('POST', '/chat/completions', body=json_body)
@@ -126,7 +126,7 @@ class OpenAIModel(FullLLMInterface):
             endpoint = f'/threads/{thread_id}/runs'
             json_body = {
                 'assistant_id': self.assistant_id,
-                'temperature': kwargs.get('temperature', 0)
+                'temperature': kwargs.get('temperature', 0.01)
             }
             
             is_successful, run_response, error_message = self._request('POST', endpoint, body=json_body, assistant=True)

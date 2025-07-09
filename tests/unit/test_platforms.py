@@ -26,6 +26,7 @@ class TestPlatformTypes:
         assert PlatformType.LINE.value == "line"
         assert PlatformType.DISCORD.value == "discord"
         assert PlatformType.TELEGRAM.value == "telegram"
+        assert PlatformType.SLACK.value == "slack"
         assert PlatformType.WEB.value == "web"
         assert PlatformType.API.value == "api"
 
@@ -91,7 +92,15 @@ class TestPlatformRegistry:
         
         # 檢查內建處理器是否已註冊
         assert registry.is_platform_supported(PlatformType.LINE)
-        assert PlatformType.LINE in registry.get_available_platforms()
+        assert registry.is_platform_supported(PlatformType.DISCORD)
+        assert registry.is_platform_supported(PlatformType.TELEGRAM)
+        assert registry.is_platform_supported(PlatformType.SLACK)
+        
+        available_platforms = registry.get_available_platforms()
+        assert PlatformType.LINE in available_platforms
+        assert PlatformType.DISCORD in available_platforms
+        assert PlatformType.TELEGRAM in available_platforms
+        assert PlatformType.SLACK in available_platforms
     
     def test_register_custom_handler(self):
         """測試註冊自定義處理器"""
@@ -113,10 +122,20 @@ class TestPlatformRegistry:
         handler_class = registry.get_handler_class(PlatformType.LINE)
         assert handler_class is not None
         
-        # 取得未註冊的處理器
+        # 取得已註冊的處理器
         handler_class = registry.get_handler_class(PlatformType.DISCORD)
-        # Discord 尚未實作，應該是 None
-        assert handler_class is None
+        # Discord 已經實作並註冊
+        assert handler_class is not None
+        
+        # 取得已註冊的處理器
+        handler_class = registry.get_handler_class(PlatformType.TELEGRAM)
+        # Telegram 已經實作並註冊
+        assert handler_class is not None
+        
+        # 取得已註冊的處理器
+        handler_class = registry.get_handler_class(PlatformType.SLACK)
+        # Slack 已經實作並註冊
+        assert handler_class is not None
 
 
 class TestPlatformFactory:

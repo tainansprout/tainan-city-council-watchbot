@@ -153,8 +153,8 @@ class TestAnthropicMocks:
     def anthropic_model(self):
         return AnthropicModel(api_key="test_key")
     
-    @patch('requests.post')
-    def test_mock_anthropic_completion(self, mock_post, anthropic_model):
+    @patch('requests.request')
+    def test_mock_anthropic_completion(self, mock_request, anthropic_model):
         """測試模擬 Anthropic 完成 API"""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -169,7 +169,7 @@ class TestAnthropicMocks:
                 'output_tokens': 18
             }
         }
-        mock_post.return_value = mock_response
+        mock_request.return_value = mock_response
         
         from src.models.base import ChatMessage
         messages = [ChatMessage(role="user", content="Hello")]
@@ -180,12 +180,12 @@ class TestAnthropicMocks:
         assert error is None
         
         # 驗證 API 調用
-        mock_post.assert_called_once()
-        call_args = mock_post.call_args
-        assert 'anthropic.com' in call_args[0][0]
+        mock_request.assert_called_once()
+        call_args = mock_request.call_args
+        assert 'anthropic.com' in call_args[0][1]
     
-    @patch('requests.post')
-    def test_mock_anthropic_error(self, mock_post, anthropic_model):
+    @patch('requests.request')
+    def test_mock_anthropic_error(self, mock_request, anthropic_model):
         """測試模擬 Anthropic API 錯誤"""
         mock_response = Mock()
         mock_response.status_code = 400
@@ -195,7 +195,7 @@ class TestAnthropicMocks:
                 'message': 'Invalid request format'
             }
         }
-        mock_post.return_value = mock_response
+        mock_request.return_value = mock_response
         
         from src.models.base import ChatMessage
         messages = [ChatMessage(role="user", content="")]  # 空訊息可能導致錯誤

@@ -121,16 +121,16 @@ class TestAnthropicModel:
     def test_get_provider(self, anthropic_model):
         assert anthropic_model.get_provider() == ModelProvider.ANTHROPIC
     
-    @patch('requests.post')
-    def test_chat_completion_success(self, mock_post, anthropic_model):
+    @patch('requests.request')
+    def test_chat_completion_success(self, mock_request, anthropic_model):
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'content': [{'text': 'Hello! How can I assist you?'}],
+            'content': [{'type': 'text', 'text': 'Hello! How can I assist you?'}],
             'stop_reason': 'end_turn',
             'usage': {'input_tokens': 10, 'output_tokens': 15}
         }
-        mock_post.return_value = mock_response
+        mock_request.return_value = mock_response
         
         messages = [ChatMessage(role="user", content="Hello")]
         is_successful, response, error = anthropic_model.chat_completion(messages)
@@ -139,8 +139,8 @@ class TestAnthropicModel:
         assert response.content == 'Hello! How can I assist you?'
         assert error is None
     
-    @patch('requests.post')
-    def test_upload_knowledge_file_success(self, mock_post, anthropic_model):
+    @patch('requests.request')
+    def test_upload_knowledge_file_success(self, mock_request, anthropic_model):
         # Mock API response
         mock_response = Mock()
         mock_response.status_code = 200
@@ -149,7 +149,7 @@ class TestAnthropicModel:
             'purpose': 'knowledge_base',
             'filename': 'test.txt'
         }
-        mock_post.return_value = mock_response
+        mock_request.return_value = mock_response
         
         # Create temporary test file
         import tempfile

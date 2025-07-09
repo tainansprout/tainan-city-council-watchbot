@@ -5,6 +5,9 @@ from ..core.logger import get_logger
 from typing import Dict, Any, Optional, Type, List, Tuple
 from .base import PlatformType, PlatformHandlerInterface, BasePlatformHandler
 from .line_handler import LineHandler
+from .discord_handler import DiscordHandler
+from .telegram_handler import TelegramHandler
+from .slack_handler import SlackHandler
 
 logger = get_logger(__name__)
 
@@ -23,7 +26,10 @@ class PlatformRegistry:
     def _register_built_in_handlers(self):
         """註冊內建的平台處理器"""
         self.register(PlatformType.LINE, LineHandler)
-        logger.info("Built-in platform handlers registered")
+        self.register(PlatformType.DISCORD, DiscordHandler)
+        self.register(PlatformType.TELEGRAM, TelegramHandler)
+        self.register(PlatformType.SLACK, SlackHandler)
+        logger.info("Built-in platform handlers registered: LINE, Discord, Telegram, Slack")
     
     def register(self, platform_type: PlatformType, handler_class: Type[BasePlatformHandler]):
         """註冊平台處理器類別"""

@@ -1,6 +1,8 @@
 import requests
 import json
 import hashlib
+import time
+import uuid
 from typing import List, Dict, Tuple, Optional
 from .base import (
     FullLLMInterface, 
@@ -86,7 +88,7 @@ class OllamaModel(FullLLMInterface):
                 "messages": ollama_messages,
                 "stream": False,
                 "options": {
-                    "temperature": kwargs.get('temperature', 0.1),
+                    "temperature": kwargs.get('temperature', 0.01),
                     "num_predict": kwargs.get('max_tokens', 2000)
                 }
             }
@@ -163,69 +165,75 @@ class OllamaModel(FullLLMInterface):
         except Exception as e:
             return False, None, str(e)
     
+    def _process_inline_citations(self, text: str, retrieved_sources: List[Dict]) -> Tuple[str, List[Dict]]:
+        """
+        處理模型回應中的內文引用，將 [檔名] 替換為 [數字] 引用格式。
+        """
+        import re
+        
+        cited_filenames = set(re.findall(r'\[([^\]]+)\]', text))
+        
+        if not cited_filenames:
+            return text, retrieved_sources
+
+        final_sources = []
+        citation_map = {}
+        next_ref_num = 1
+
+        for source in retrieved_sources:
+            filename = source.get('filename')
+            if filename in cited_filenames:
+                if filename not in citation_map:
+                    citation_map[filename] = next_ref_num
+                    final_sources.append(source)
+                    next_ref_num += 1
+        
+        for filename, ref_num in citation_map.items():
+            text = text.replace(f'[{filename}]', f'[{ref_num}]')
+            
+        return text, final_sources
+
+    def _fallback_chat_completion(self, query: str, context_messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """在 RAG 不可用時，執行標準的上下文聊天"""
+        if context_messages:
+            messages = context_messages
+        else:
+            messages = [ChatMessage(role="user", content=query)]
+        
+        is_successful, response, error = self.chat_completion(messages, **kwargs)
+        
+        if not is_successful:
+            return False, None, error
+        
+        rag_response = RAGResponse(
+            answer=response.content,
+            sources=[],
+            metadata={
+                'model': 'ollama', 
+                'no_sources': True,
+                'local_processing': True,
+                'context_messages_count': len(messages)
+            }
+        )
+        return True, rag_response, None
+
     def query_with_rag(self, query: str, thread_id: str = None, **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
         """使用本地向量搜尋進行 RAG 查詢（支援上下文和隱私模式）"""
         try:
-            context_messages = kwargs.get('context_messages', [])  # 本地上下文支援
-            local_only = kwargs.get('local_only', True)  # 本地優先模式
+            context_messages = kwargs.get('context_messages', [])
+            local_only = kwargs.get('local_only', True)
             
             # 生成查詢的嵌入向量（本地處理）
             query_embedding = self._get_embedding(query)
             
             if not query_embedding:
-                # 無法生成嵌入向量，使用本地對話
-                if context_messages:
-                    # 使用上下文訊息
-                    messages = context_messages
-                else:
-                    # 只使用當前查詢
-                    messages = [ChatMessage(role="user", content=query)]
-                
-                is_successful, response, error = self.chat_completion(messages, **kwargs)
-                
-                if not is_successful:
-                    return False, None, error
-                
-                rag_response = RAGResponse(
-                    answer=response.content,
-                    sources=[],
-                    metadata={
-                        'model': 'ollama', 
-                        'no_embedding': True,
-                        'local_processing': local_only,
-                        'context_messages_count': len(context_messages)
-                    }
-                )
-                return True, rag_response, None
+                return self._fallback_chat_completion(query, context_messages, **kwargs)
             
             # 搜尋相關文檔片段
             relevant_chunks = self._vector_search(query_embedding, top_k=kwargs.get('top_k', 3))
             
             if not relevant_chunks:
-                # 沒有相關文檔，使用本地對話
-                if context_messages:
-                    # 使用上下文訊息
-                    messages = context_messages
-                else:
-                    # 只使用當前查詢
-                    messages = [ChatMessage(role="user", content=query)]
-                
-                is_successful, response, error = self.chat_completion(messages, **kwargs)
-                
-                if not is_successful:
-                    return False, None, error
-                
-                rag_response = RAGResponse(
-                    answer=response.content,
-                    sources=[],
-                    metadata={
-                        'model': 'ollama', 
-                        'no_sources': True,
-                        'local_processing': local_only,
-                        'context_messages_count': len(context_messages)
-                    }
-                )
-                return True, rag_response, None
+                return self._fallback_chat_completion(query, context_messages, **kwargs)
             
             # 整合本地知識庫和對話上下文
             context = "\\n\\n".join([chunk['text'] for chunk in relevant_chunks])
@@ -269,7 +277,7 @@ class OllamaModel(FullLLMInterface):
                 return False, None, error
             
             # 準備來源資訊
-            sources = [
+            retrieved_sources = [
                 {
                     'file_id': chunk['file_id'],
                     'filename': chunk['filename'],
@@ -278,14 +286,17 @@ class OllamaModel(FullLLMInterface):
                 }
                 for chunk in relevant_chunks
             ]
+
+            # 處理內文引用
+            processed_answer, final_sources = self._process_inline_citations(response.content, retrieved_sources)
             
             rag_response = RAGResponse(
-                answer=response.content,
-                sources=sources,
+                answer=processed_answer,
+                sources=final_sources,
                 metadata={
                     'model': 'ollama',
                     'context_length': len(context),
-                    'num_sources': len(sources),
+                    'num_sources': len(final_sources),
                     'local_processing': local_only,
                     'context_messages_count': len(context_messages),
                     'embedding_model': self.embedding_model,
@@ -473,11 +484,23 @@ class OllamaModel(FullLLMInterface):
     def transcribe_audio(self, audio_file_path: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
         """本地音訊轉錄（使用本地 Whisper）"""
         try:
+            import whisper
+        except ImportError:
+            logger.error("本地 Whisper 套件未安裝，請執行 `pip install openai-whisper`")
+            return False, None, "本地語音轉錄功能未啟用：Whisper 套件未安裝。"
+
+        try:
             if self.whisper_model:
                 return self._transcribe_with_local_whisper(audio_file_path, **kwargs)
             else:
-                return False, None, "未配置本地 Whisper 模型，請先設定本地語音轉錄服務"
+                # 如果模型未載入，嘗試載入預設模型
+                self.set_whisper_model()
+                if self.whisper_model:
+                    return self._transcribe_with_local_whisper(audio_file_path, **kwargs)
+                else:
+                    return False, None, "未配置本地 Whisper 模型，請先設定本地語音轉錄服務"
         except Exception as e:
+            logger.error(f"Ollama audio transcription failed: {e}")
             return False, None, str(e)
     
     def generate_image(self, prompt: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:

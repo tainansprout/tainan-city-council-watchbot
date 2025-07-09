@@ -117,7 +117,7 @@ class GeminiModel(FullLLMInterface):
             json_body = {
                 "contents": gemini_contents,
                 "generationConfig": {
-                    "temperature": kwargs.get('temperature', 0.1),
+                    "temperature": kwargs.get('temperature', 0.01),
                     "maxOutputTokens": min(kwargs.get('max_tokens', 8192), 8192),  # Gemini Pro 限制
                     "topP": kwargs.get('top_p', 0.8),
                     "topK": kwargs.get('top_k', 40)
@@ -282,37 +282,69 @@ class GeminiModel(FullLLMInterface):
             
         except Exception as e:
             return False, None, str(e)
-    
+
+    def _process_inline_citations(self, text: str, retrieved_sources: List[Dict]) -> Tuple[str, List[Dict]]:
+        """
+        處理模型回應中的內文引用，將 [檔名] 替換為 [數字] 引用格式。
+        """
+        import re
+        
+        # 找到所有被引用的檔案名稱
+        cited_filenames = set(re.findall(r'\[([^\]]+)\]', text))
+        
+        if not cited_filenames:
+            return text, retrieved_sources
+
+        final_sources = []
+        citation_map = {}
+        next_ref_num = 1
+
+        # 建立引用對應表
+        for source in retrieved_sources:
+            filename = source.get('filename')
+            if filename in cited_filenames:
+                if filename not in citation_map:
+                    citation_map[filename] = next_ref_num
+                    final_sources.append(source)
+                    next_ref_num += 1
+        
+        # 替換內文中的引用
+        for filename, ref_num in citation_map.items():
+            text = text.replace(f'[{filename}]', f'[{ref_num}]')
+            
+        return text, final_sources
+
+    def _fallback_chat_completion(self, query: str, context_messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """在 RAG 不可用時，執行標準的上下文聊天"""
+        if context_messages:
+            messages = context_messages
+        else:
+            messages = [ChatMessage(role="user", content=query)]
+        
+        is_successful, response, error = self.chat_completion(messages, **kwargs)
+        
+        if not is_successful:
+            return False, None, error
+        
+        rag_response = RAGResponse(
+            answer=response.content,
+            sources=[],
+            metadata={
+                'model': 'gemini', 
+                'no_sources': True,
+                'context_messages_count': len(messages)
+            }
+        )
+        return True, rag_response, None
+
     def query_with_rag(self, query: str, thread_id: str = None, **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
         """使用 Google Semantic Retrieval 進行 RAG 查詢（支援長上下文）"""
         try:
             corpus_name = kwargs.get('corpus_name', self.default_corpus_name)
-            context_messages = kwargs.get('context_messages', [])  # 新增：支援上下文訊息
+            context_messages = kwargs.get('context_messages', [])
             
             if self.corpora.get(corpus_name) is None:
-                # 沒有語料庫，使用長上下文一般聊天
-                if context_messages:
-                    # 如果有上下文訊息，使用它們
-                    messages = context_messages
-                else:
-                    # 否則只使用當前查詢
-                    messages = [ChatMessage(role="user", content=query)]
-                
-                is_successful, response, error = self.chat_completion(messages, **kwargs)
-                
-                if not is_successful:
-                    return False, None, error
-                
-                rag_response = RAGResponse(
-                    answer=response.content,
-                    sources=[],
-                    metadata={
-                        'model': 'gemini', 
-                        'no_sources': True,
-                        'context_messages_count': len(context_messages)
-                    }
-                )
-                return True, rag_response, None
+                return self._fallback_chat_completion(query, context_messages, **kwargs)
             
             # 1. 使用 Semantic Retrieval 搜尋相關內容
             corpus_data = self.corpora.get(corpus_name)
@@ -336,23 +368,11 @@ class GeminiModel(FullLLMInterface):
             relevant_passages = retrieval_response.get('relevantChunks', [])
             
             if not relevant_passages:
-                # 沒有相關內容，使用一般聊天
-                messages = [ChatMessage(role="user", content=query)]
-                is_successful, response, error = self.chat_completion(messages, **kwargs)
-                
-                if not is_successful:
-                    return False, None, error
-                
-                rag_response = RAGResponse(
-                    answer=response.content,
-                    sources=[],
-                    metadata={'model': 'gemini', 'no_retrieval': True}
-                )
-                return True, rag_response, None
+                return self._fallback_chat_completion(query, context_messages, **kwargs)
             
             # 3. 建立包含上下文的提示
             context_parts = []
-            sources = []
+            retrieved_sources = []
             
             for passage in relevant_passages:
                 chunk_data = passage.get('chunk', {}).get('data', {})
@@ -369,14 +389,14 @@ class GeminiModel(FullLLMInterface):
                             source_file = meta.get('stringValue', 'Unknown')
                             break
                     
-                    sources.append({
+                    retrieved_sources.append({
                         'file_id': passage.get('chunkRelevanceScore', 0),
                         'filename': source_file,
                         'text': text[:200] + "..." if len(text) > 200 else text,
                         'relevance_score': passage.get('chunkRelevanceScore', 0)
                     })
             
-            context = "\\n\\n".join(context_parts)
+            context = "\n\n".join(context_parts)
             
             # 4. 整合檢索結果和長上下文
             if context_messages:
@@ -416,14 +436,17 @@ class GeminiModel(FullLLMInterface):
             
             if not is_successful:
                 return False, None, error
+
+            # 5. 處理內文引用
+            processed_answer, final_sources = self._process_inline_citations(response.content, retrieved_sources)
             
             rag_response = RAGResponse(
-                answer=response.content,
-                sources=sources,
+                answer=processed_answer,
+                sources=final_sources,
                 metadata={
                     'model': 'gemini',
                     'corpus': corpus_name,
-                    'num_sources': len(sources),
+                    'num_sources': len(final_sources),
                     'context_length': len(context),
                     'context_messages_count': len(context_messages),
                     'long_context_enabled': len(context_messages) > 5
@@ -524,6 +547,46 @@ class GeminiModel(FullLLMInterface):
         
         return chunks
     
+    def _intelligent_chunk_text(self, text: str, chunk_size: int = 1000) -> List[Dict]:
+        """
+        智慧分塊文本 - 針對 Gemini Semantic Retrieval 優化
+        
+        嘗試在語義邊界分塊，保持內容完整性
+        """
+        import re
+        
+        # 基本分塊
+        basic_chunks = self._chunk_text(text, chunk_size, overlap=100)
+        
+        # 智慧處理：嘗試在段落邊界分塊
+        intelligent_chunks = []
+        for i, chunk in enumerate(basic_chunks):
+            chunk_text = chunk['text']
+            
+            # 嘗試在句子邊界調整
+            sentences = re.split(r'[.!?。！？]\s+', chunk_text)
+            if len(sentences) > 1:
+                # 重新組合句子，確保不超過 chunk_size
+                optimized_text = ""
+                for sentence in sentences:
+                    if len(optimized_text + sentence) <= chunk_size:
+                        optimized_text += sentence + "。"
+                    else:
+                        break
+                
+                if optimized_text:
+                    chunk_text = optimized_text.strip()
+            
+            intelligent_chunks.append({
+                'text': chunk_text,
+                'start': chunk['start'],
+                'end': chunk['end'],
+                'tokens': len(chunk_text.split()),  # 估算 token 數量
+                'section': f'chunk_{i}'  # 區段標識
+            })
+        
+        return intelligent_chunks
+    
     @retry_on_rate_limit(max_retries=3, base_delay=1.0)
     def _request(self, method: str, endpoint: str, body=None, files=None):
         """發送 HTTP 請求到 Gemini API"""
@@ -593,8 +656,62 @@ class GeminiModel(FullLLMInterface):
         return False, None, "請使用 query_with_rag 方法"
     
     def transcribe_audio(self, audio_file_path: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
-        """音訊轉錄（Gemini 不支援）"""
-        return False, None, "Gemini 目前不支援音訊轉錄"
+        """使用 Gemini Pro 的多模態能力進行音訊轉錄"""
+        try:
+            import base64
+            import mimetypes
+
+            # 讀取音訊檔案並進行 Base64 編碼
+            with open(audio_file_path, "rb") as f:
+                audio_data = f.read()
+            
+            encoded_audio = base64.b64encode(audio_data).decode("utf-8")
+            
+            # 猜測 MIME 類型
+            mime_type, _ = mimetypes.guess_type(audio_file_path)
+            if not mime_type:
+                mime_type = "audio/wav"  # 預設值
+            if mime_type == "audio/x-wav":
+                mime_type = "audio/wav" # 標準化 MIME 類型
+
+            # 建立請求
+            json_body = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": "請將這段音訊轉錄成文字，如果音訊內容為非中文，請將其翻譯成繁體中文。"},
+                            {
+                                "inline_data": {
+                                    "mime_type": mime_type,
+                                    "data": encoded_audio
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+            
+            endpoint = f'/models/{self.model_name}:generateContent'
+            is_successful, response, error_message = self._request('POST', endpoint, body=json_body)
+
+            if not is_successful:
+                return False, None, error_message
+
+            if 'candidates' not in response or not response['candidates']:
+                return False, None, "No response generated from audio"
+
+            candidate = response['candidates'][0]
+            if 'content' not in candidate or not candidate['content']['parts']:
+                return False, None, "No content in response from audio"
+
+            transcribed_text = candidate['content']['parts'][0]['text']
+            return True, transcribed_text.strip(), None
+
+        except FileNotFoundError:
+            return False, None, f"Audio file not found at: {audio_file_path}"
+        except Exception as e:
+            logger.error(f"Gemini audio transcription failed: {e}")
+            return False, None, str(e)
     
     def generate_image(self, prompt: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
         """圖片生成（Gemini 不支援）"""
@@ -611,7 +728,7 @@ class GeminiModel(FullLLMInterface):
         Args:
             user_id: 用戶 ID (如 Line user ID)
             message: 用戶訊息
-            platform: 平台識別 (\'line\', \'discord\', \'telegram\')
+            platform: 平台識別 ('line', 'discord', 'telegram')
             **kwargs: 額外參數
                 - conversation_limit: 對話歷史輪數，預設20（利用長上下文）
                 - corpus_name: 語料庫名稱
@@ -715,7 +832,7 @@ class GeminiModel(FullLLMInterface):
 
 ## 回答原則
 1. 充分利用提供的對話歷史，建立連貫的對話體驗
-2. 當引用知識文檔時，使用 [文檔名稱] 格式標註來源
+2. 當引用知識文檔時，請使用 [文檔名稱] 格式標註來源
 3. 對於複雜問題，可以參考前面的對話內容提供更好的回答
 4. 如文檔中無相關資訊，明確說明並提供基於對話歷史的建議
 5. 保持專業但友善的語調，展現長期對話的連續性
