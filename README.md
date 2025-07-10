@@ -203,17 +203,22 @@ python -m pytest tests/integration/
 - `GET /chat`: 聊天介面（需要認證）
 - `POST /ask`: 聊天 API（需要認證）
 
-## 詳細文檔
+## 📚 詳細文檔
 
 更詳細的配置和部署指南，請參考：
 
-- [配置管理指南](docs/CONFIGURATION.md)
-- [部署指南](docs/DEPLOYMENT.md)
-- [安全性指南](docs/SECURITY.md)
-- [資料庫管理](docs/ORM_GUIDE.md)
-- [開發者指南](CLAUDE.md)
+### 設定與部署
+- [📋 配置管理指南](docs/CONFIGURATION.md) - 完整的配置設定說明
+- [🚀 運行指南](docs/RUNNING.md) - 本地開發與生產環境運行
+- [☁️ 部署指南](docs/DEPLOYMENT.md) - Google Cloud Run 部署完整流程
+- [🔒 安全性指南](docs/SECURITY.md) - 安全配置與最佳實踐
 
-## 常見問題
+### 功能與架構
+- [📖 RAG 實作說明](docs/RAG_IMPLEMENTATION.md) - 檢索增強生成功能詳解
+- [🗄️ 資料庫管理](docs/ORM_GUIDE.md) - SQLAlchemy ORM 與遷移管理
+- [👨‍💻 開發者指南](CLAUDE.md) - 專案架構與開發規範
+
+## ❓ 常見問題
 
 ### Q: 部署後 Bot 沒有回應？
 1. 檢查 Webhook URL 設定是否正確
@@ -230,7 +235,7 @@ python -m pytest tests/integration/
 2. 檢查 SSL 憑證配置
 3. 驗證防火牆規則
 
-## 貢獻指南
+## 🤝 貢獻指南
 
 歡迎貢獻！請遵循以下步驟：
 
@@ -239,14 +244,14 @@ python -m pytest tests/integration/
 3. 確保程式碼通過所有測試
 4. 提交 Pull Request
 
-## 授權
+## 📄 授權
 
 本專案採用 MIT 授權條款 - 詳細資訊請參考 [LICENSE](LICENSE) 文件。
 
-## 支援
+## 🆘 支援
 
 如果您遇到問題或需要協助，請：
 
-1. 查看 [常見問題](docs/FAQ.md)
+1. 查看上述 [詳細文檔](#-詳細文檔) 瞭解配置和部署
 2. 在 [GitHub Issues](https://github.com/tnsprout/ChatGPT-Line-Bot/issues) 提交問題
 3. 查看 [開發者指南](CLAUDE.md) 瞭解更多技術細節

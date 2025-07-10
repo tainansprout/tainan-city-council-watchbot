@@ -2,6 +2,23 @@
 
 本指南介紹如何在不同環境中運行 ChatGPT Line Bot，確保使用正確的服務器配置。
 
+## 🌟 支援的平台和 AI 模型
+
+### 📱 支援的聊天平台
+- **LINE Bot** - 主要支援平台，完整功能
+- **Discord Bot** - 群組聊天和指令功能
+- **Telegram Bot** - 豐富互動和檔案傳輸
+- **Slack Bot** - 企業級聊天機器人
+
+### 🤖 支援的 AI 模型
+- **OpenAI GPT** - GPT-4 系列，Assistant API
+- **Anthropic Claude** - Claude 3.5 Sonnet，安全對話
+- **Google Gemini** - Gemini 1.5 Pro，多模態能力
+- **Hugging Face** - 開源模型，包含 Llama 4、Mistral 等
+- **Ollama** - 本地部署，完全私有
+
+詳細配置請參考：[配置指南](CONFIGURATION.md)
+
 ## 📁 項目結構
 
 ```

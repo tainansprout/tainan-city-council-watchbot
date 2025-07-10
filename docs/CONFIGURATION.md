@@ -62,14 +62,57 @@ config_manager.force_reload()
 
 ### 🌍 支援的環境變數
 
-#### LINE Bot 配置
-- `LINE_CHANNEL_ACCESS_TOKEN` → `line.channel_access_token`
-- `LINE_CHANNEL_SECRET` → `line.channel_secret`
+#### 平台配置
 
-#### OpenAI 配置
+**LINE Bot 配置**
+- `LINE_CHANNEL_ACCESS_TOKEN` → `platforms.line.channel_access_token`
+- `LINE_CHANNEL_SECRET` → `platforms.line.channel_secret`
+
+**Discord Bot 配置**
+- `DISCORD_BOT_TOKEN` → `platforms.discord.bot_token`
+- `DISCORD_GUILD_ID` → `platforms.discord.guild_id`
+- `DISCORD_COMMAND_PREFIX` → `platforms.discord.command_prefix`
+
+**Telegram Bot 配置**
+- `TELEGRAM_BOT_TOKEN` → `platforms.telegram.bot_token`
+- `TELEGRAM_WEBHOOK_SECRET` → `platforms.telegram.webhook_secret`
+
+#### AI 模型配置
+
+**OpenAI 配置**
 - `OPENAI_API_KEY` → `openai.api_key`
 - `OPENAI_ASSISTANT_ID` → `openai.assistant_id`
 - `OPENAI_BASE_URL` → `openai.base_url`
+- `OPENAI_MODEL` → `openai.model`
+- `OPENAI_TEMPERATURE` → `openai.temperature`
+- `OPENAI_MAX_TOKENS` → `openai.max_tokens`
+
+**Anthropic Claude 配置**
+- `ANTHROPIC_API_KEY` → `anthropic.api_key`
+- `ANTHROPIC_MODEL` → `anthropic.model`
+- `ANTHROPIC_TEMPERATURE` → `anthropic.temperature`
+- `ANTHROPIC_MAX_TOKENS` → `anthropic.max_tokens`
+
+**Google Gemini 配置**
+- `GEMINI_API_KEY` → `gemini.api_key`
+- `GEMINI_MODEL` → `gemini.model`
+- `GEMINI_TEMPERATURE` → `gemini.temperature`
+- `GEMINI_CORPUS_NAME` → `gemini.corpus_name`
+- `GEMINI_BASE_URL` → `gemini.base_url`
+
+**Hugging Face 配置**
+- `HUGGINGFACE_API_KEY` → `huggingface.api_key`
+- `HUGGINGFACE_MODEL_NAME` → `huggingface.model_name`
+- `HUGGINGFACE_API_TYPE` → `huggingface.api_type`
+- `HUGGINGFACE_BASE_URL` → `huggingface.base_url`
+- `HUGGINGFACE_TEMPERATURE` → `huggingface.temperature`
+- `HUGGINGFACE_MAX_TOKENS` → `huggingface.max_tokens`
+- `HUGGINGFACE_TIMEOUT` → `huggingface.timeout`
+
+**Ollama 配置**
+- `OLLAMA_BASE_URL` → `ollama.base_url`
+- `OLLAMA_MODEL` → `ollama.model`
+- `OLLAMA_TEMPERATURE` → `ollama.temperature`
 
 #### 資料庫配置
 - `DB_HOST` → `db.host`
@@ -125,19 +168,540 @@ config_manager.force_reload()
 
 以下配置項為必須設定的項目：
 
-```yaml
-line:
-  channel_access_token: "必須設定"
-  channel_secret: "必須設定"
+#### 平台配置（至少需要一個平台）
 
-openai:
+```yaml
+platforms:
+  line:                    # LINE Bot (主要平台)
+    enabled: true
+    channel_access_token: "必須設定"
+    channel_secret: "必須設定"
+  
+  discord:                 # Discord Bot (可選)
+    enabled: false
+    bot_token: "設定時必須"
+  
+  telegram:                # Telegram Bot (可選)
+    enabled: false
+    bot_token: "設定時必須"
+```
+
+#### AI 模型配置（至少需要一個模型）
+
+```yaml
+# 根據 llm.provider 設定，對應的 API key 為必須
+llm:
+  provider: "openai"       # 主要模型提供商
+
+openai:                    # 當 provider 為 openai 時必須
   api_key: "必須設定"
 
+anthropic:                 # 當 provider 為 anthropic 時必須
+  api_key: "必須設定"
+
+gemini:                    # 當 provider 為 gemini 時必須
+  api_key: "必須設定"
+
+huggingface:               # 當 provider 為 huggingface 時必須
+  api_key: "必須設定"
+
+# ollama 為本地模型，不需要 API key
+```
+
+#### 資料庫配置
+
+```yaml
 db:
   host: "必須設定"
   user: "必須設定"
   password: "必須設定"
+  db_name: "必須設定"
 ```
+
+---
+
+## 🤖 AI 模型配置詳細說明
+
+### Hugging Face 配置 (v2.1)
+
+Hugging Face 提供了世界上最大的開源 AI 模型庫，支援多種先進的語言模型。本系統完全整合了 Hugging Face Inference API，支援聊天對話、RAG 檢索、語音轉文字和圖片生成功能。
+
+#### 📋 完整配置範例
+
+```yaml
+huggingface:
+  # 必需：Hugging Face API 金鑰
+  # 從 https://huggingface.co/settings/tokens 獲取
+  api_key: "${HUGGINGFACE_API_KEY}"
+  
+  # 主要聊天模型（2025年最佳性能模型）
+  model_name: "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+  
+  # API 類型選擇
+  # - inference_api: 免費但有使用限制，適合測試
+  # - serverless: 快速啟動，按使用付費
+  # - dedicated: 專用端點，最快但成本較高
+  api_type: "inference_api"
+  
+  # API 基礎 URL
+  base_url: "https://api-inference.huggingface.co"
+  
+  # 備用模型列表（按性能排序 - 2025年更新）
+  fallback_models:
+    - "meta-llama/Llama-4-Maverick-17B-128E-Instruct"  # Llama 4 旗艦模型
+    - "mistralai/Magistral-Small-2506"                  # Mistral 2025最新推理模型
+    - "meta-llama/Llama-3.1-8B-Instruct"               # 穩定的2024旗艦
+    - "mistralai/Mistral-Nemo-Instruct-2407"           # Mistral 12B 高性能
+    - "mistralai/Mistral-7B-Instruct-v0.3"             # 輕量級備選
+    - "meta-llama/Llama-3.2-3B-Instruct"               # 快速響應備選
+  
+  # 功能專用模型（2024年最佳）
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"  # 文本嵌入
+  speech_model: "openai/whisper-large-v3"                     # 語音轉文字
+  image_model: "stabilityai/stable-diffusion-xl-base-1.0"     # 圖片生成
+  
+  # 生成參數（針對 Llama 優化）
+  temperature: 0.7        # 創造性控制 (0.0-1.0)
+  max_tokens: 1024        # 最大回應長度
+  timeout: 90             # 請求超時時間（秒）
+```
+
+#### 🌍 環境變數設定
+
+```bash
+# 基本配置
+export HUGGINGFACE_API_KEY="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export HUGGINGFACE_MODEL_NAME="meta-llama/Llama-4-Scout-17B-16E-Instruct"
+export HUGGINGFACE_API_TYPE="inference_api"
+export HUGGINGFACE_TEMPERATURE="0.7"
+export HUGGINGFACE_MAX_TOKENS="1024"
+export HUGGINGFACE_TIMEOUT="90"
+
+# 進階配置
+export HUGGINGFACE_BASE_URL="https://api-inference.huggingface.co"
+```
+
+#### 🎯 推薦模型配置
+
+**2025年最佳聊天模型（非中國）：**
+
+🚀 **meta-llama/Llama-4-Scout-17B-16E-Instruct** (主要推薦)
+- Meta 2025年最新 Llama 4 系列，17B 活躍參數，16個專家
+- 原生多模態支援，世界領先的10M上下文長度
+- 在同級別中性能最優，超越 Gemma 3、Gemini 2.0 Flash-Lite
+- 支援多語言，包括中文、英文、法文、德文、日文、韓文等
+
+🎯 **meta-llama/Llama-4-Maverick-17B-128E-Instruct** (旗艦模型)
+- Meta 2025年最強模型，17B 活躍參數，128個專家
+- 性能超越 GPT-4o 和 Gemini 2.0 Flash
+- 與 DeepSeek v3 相當但參數效率更高
+- 適合需要最高性能的任務
+
+🔬 **mistralai/Magistral-Small-2506** (Mistral 2025)
+- Mistral 2025年最新推理模型，24B參數
+- 可在單張 RTX 4090 或 32GB RAM MacBook 上運行
+- 支援長推理鏈，多語言支援優秀
+- Apache 2.0 開源授權
+
+🥇 **meta-llama/Llama-3.1-8B-Instruct** (穩定首選)
+- Meta 2024年旗艦 8B 模型，性能卓越穩定
+- 在 LMSYS 排行榜排名第5位
+- 支援128K上下文，多語言支援優秀
+- 在指令跟隨、推理、程式碼生成方面表現優異
+
+#### 💡 使用情境配置
+
+**開發環境配置**
+```yaml
+huggingface:
+  api_key: "${HUGGINGFACE_API_KEY}"
+  model_name: "meta-llama/Llama-3.1-8B-Instruct"  # 較小模型，快速響應
+  api_type: "inference_api"  # 免費 API
+  temperature: 0.7
+  max_tokens: 512
+  timeout: 60
+```
+
+**生產環境配置**
+```yaml
+huggingface:
+  api_key: "${HUGGINGFACE_API_KEY}"
+  model_name: "meta-llama/Llama-4-Scout-17B-16E-Instruct"  # 最佳性能
+  api_type: "serverless"  # 付費 API，更穩定
+  temperature: 0.7
+  max_tokens: 1024
+  timeout: 90
+  fallback_models:
+    - "meta-llama/Llama-4-Maverick-17B-128E-Instruct"
+    - "meta-llama/Llama-3.1-8B-Instruct"
+```
+
+**高性能配置**
+```yaml
+huggingface:
+  api_key: "${HUGGINGFACE_API_KEY}"
+  model_name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct"  # 最強模型
+  api_type: "dedicated"  # 專用端點，最快
+  temperature: 0.8  # 稍高創造性
+  max_tokens: 2048  # 較長回應
+  timeout: 120
+```
+
+#### ⚠️ 注意事項
+
+1. **免費 Inference API** 有速率限制，推薦用於測試
+2. **生產環境**建議使用 Serverless 或 Dedicated 端點
+3. **某些模型**可能需要較長時間載入（冷啟動）
+4. **大型模型**可能需要更高的 timeout 設定
+5. **語音和圖片功能**需要對應的模型支援
+6. **備用模型**會在主模型不可用時自動切換
+
+#### 🔧 故障排除
+
+**常見問題**：
+
+1. **模型載入中**
+   ```
+   HTTP 503: Model is loading
+   ```
+   **解決方法**: 等待幾分鐘或切換到已預熱的模型
+
+2. **API 配額耗盡**
+   ```
+   HTTP 429: Rate limit exceeded
+   ```
+   **解決方法**: 升級到付費 API 或等待配額重置
+
+3. **模型不存在**
+   ```
+   HTTP 404: Model not found
+   ```
+   **解決方法**: 檢查模型名稱拼寫或選擇其他模型
+
+**測試配置**：
+```bash
+# 測試 HuggingFace 連接
+python -c "
+from src.models.huggingface_model import HuggingFaceModel
+from src.models.base import ChatMessage
+
+model = HuggingFaceModel(api_key='your_api_key')
+success, error = model.check_connection()
+print(f'連接狀態: {\"成功\" if success else \"失敗\"}, 錯誤: {error}')
+"
+```
+
+### OpenAI 配置
+
+OpenAI 提供 GPT 系列模型，包括最新的 GPT-4 和 GPT-3.5-turbo，具備優秀的聊天能力和 Assistant API 功能。
+
+#### 📋 完整配置範例
+
+```yaml
+openai:
+  # 必需：OpenAI API 金鑰
+  api_key: "${OPENAI_API_KEY}"
+  
+  # 可選：Assistant ID（使用 Assistant API 時）
+  assistant_id: "${OPENAI_ASSISTANT_ID}"
+  
+  # 可選設定
+  base_url: "https://api.openai.com/v1"  # API 基礎 URL
+  model: "gpt-4"                         # 預設模型
+  temperature: 0.1                       # 生成溫度
+  max_tokens: 4000                       # 最大 token 數
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export OPENAI_API_KEY="sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export OPENAI_ASSISTANT_ID="asst_xxxxxxxxxxxxxxxxxxxxxxxx"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_MODEL="gpt-4"
+export OPENAI_TEMPERATURE="0.1"
+export OPENAI_MAX_TOKENS="4000"
+```
+
+### Anthropic Claude 配置
+
+Anthropic Claude 提供高品質的對話體驗，特別擅長安全和有用的回應。
+
+#### 📋 完整配置範例
+
+```yaml
+anthropic:
+  # 必需：Anthropic API 金鑰
+  api_key: "${ANTHROPIC_API_KEY}"
+  
+  # 模型選擇
+  model: "claude-3-5-sonnet-20240620"    # 推薦使用最新版本
+  
+  # 生成參數
+  max_tokens: 4000                       # 最大回應長度
+  temperature: 0.1                       # 生成溫度
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export ANTHROPIC_MODEL="claude-3-5-sonnet-20240620"
+export ANTHROPIC_TEMPERATURE="0.1"
+export ANTHROPIC_MAX_TOKENS="4000"
+```
+
+### Google Gemini 配置
+
+Google Gemini 提供強大的多模態能力和 Semantic Retrieval API，支援長上下文和檔案上傳。
+
+#### 📋 完整配置範例
+
+```yaml
+gemini:
+  # 必需：Google Gemini API 金鑰
+  api_key: "${GEMINI_API_KEY}"
+  
+  # 模型選擇
+  model: "gemini-1.5-pro-latest"         # 最新 Gemini 模型
+  
+  # 生成參數
+  temperature: 0.1                       # 生成溫度
+  
+  # Semantic Retrieval 設定
+  corpus_name: "chatbot-knowledge"       # 知識庫名稱
+  
+  # API 設定
+  base_url: "https://generativelanguage.googleapis.com"
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export GEMINI_API_KEY="AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export GEMINI_MODEL="gemini-1.5-pro-latest"
+export GEMINI_TEMPERATURE="0.1"
+export GEMINI_CORPUS_NAME="chatbot-knowledge"
+export GEMINI_BASE_URL="https://generativelanguage.googleapis.com"
+```
+
+### Ollama 本地模型配置
+
+Ollama 提供完全本地運行的開源模型，無需 API 金鑰，適合隱私要求高的環境。
+
+#### 📋 完整配置範例
+
+```yaml
+ollama:
+  # Ollama 服務地址
+  base_url: "http://localhost:11434"     # 本地 Ollama 服務
+  
+  # 模型選擇
+  model: "llama3.1:8b"                   # 推薦使用 Llama 3.1
+  
+  # 生成參數
+  temperature: 0.1                       # 生成溫度
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export OLLAMA_BASE_URL="http://localhost:11434"
+export OLLAMA_MODEL="llama3.1:8b"
+export OLLAMA_TEMPERATURE="0.1"
+```
+
+#### 🔧 Ollama 安裝和設定
+
+1. **安裝 Ollama**：
+   ```bash
+   # macOS
+   brew install ollama
+   
+   # Linux
+   curl -fsSL https://ollama.ai/install.sh | sh
+   
+   # Windows
+   # 下載並安裝：https://ollama.ai/download/windows
+   ```
+
+2. **下載和運行模型**：
+   ```bash
+   # 下載 Llama 3.1 8B 模型
+   ollama pull llama3.1:8b
+   
+   # 啟動 Ollama 服務
+   ollama serve
+   
+   # 測試模型
+   ollama run llama3.1:8b "Hello, how are you?"
+   ```
+
+---
+
+## 🖥️ 平台配置詳細說明
+
+### LINE Bot 配置
+
+LINE Bot 是主要支援的平台，提供完整的聊天機器人功能。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  line:
+    enabled: true                        # 啟用 LINE 平台
+    channel_access_token: "${LINE_CHANNEL_ACCESS_TOKEN}"
+    channel_secret: "${LINE_CHANNEL_SECRET}"
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export LINE_CHANNEL_ACCESS_TOKEN="your_line_channel_access_token"
+export LINE_CHANNEL_SECRET="your_line_channel_secret"
+```
+
+#### 🔧 LINE Bot 設定步驟
+
+1. **建立 LINE Bot**：
+   - 前往 [LINE Developers Console](https://developers.line.biz/)
+   - 建立新的 Provider 和 Channel
+   - 選擇 "Messaging API" 類型
+
+2. **取得憑證**：
+   - **Channel Access Token**：在 "Messaging API" 頁面產生長期存取權杖
+   - **Channel Secret**：在 "Basic settings" 頁面找到
+
+3. **設定 Webhook**：
+   - 在 "Messaging API" 頁面設定 Webhook URL
+   - 格式：`https://your-domain.com/webhooks/line`
+   - 啟用 "Use webhook" 選項
+
+### Discord Bot 配置
+
+Discord Bot 支援群組聊天和指令功能。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  discord:
+    enabled: true                        # 啟用 Discord 平台
+    bot_token: "${DISCORD_BOT_TOKEN}"    # Bot 權杖
+    guild_id: "${DISCORD_GUILD_ID}"      # 可選：特定伺服器 ID
+    command_prefix: "!"                  # 可選：指令前綴
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export DISCORD_BOT_TOKEN="your_discord_bot_token"
+export DISCORD_GUILD_ID="your_discord_guild_id"  # 可選
+export DISCORD_COMMAND_PREFIX="!"                # 可選
+```
+
+#### 🔧 Discord Bot 設定步驟
+
+1. **建立 Discord 應用程式**：
+   - 前往 [Discord Developer Portal](https://discord.com/developers/applications)
+   - 點擊 "New Application" 建立新應用程式
+   - 在 "Bot" 頁面建立 Bot
+
+2. **取得 Bot Token**：
+   - 在 "Bot" 頁面點擊 "Reset Token" 產生新權杖
+   - 複製權杖作為 `DISCORD_BOT_TOKEN`
+
+3. **設定權限**：
+   - 在 "Bot" 頁面啟用必要的 Privileged Gateway Intents
+   - 在 "OAuth2" > "URL Generator" 選擇適當的權限
+   - 使用產生的 URL 邀請 Bot 到伺服器
+
+4. **取得 Guild ID**（可選）：
+   - 在 Discord 中啟用開發者模式
+   - 右鍵點擊伺服器名稱，選擇 "Copy Server ID"
+
+### Telegram Bot 配置
+
+Telegram Bot 提供豐富的互動功能和檔案傳輸支援。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  telegram:
+    enabled: true                        # 啟用 Telegram 平台
+    bot_token: "${TELEGRAM_BOT_TOKEN}"   # Bot 權杖
+    webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"  # 可選：Webhook 驗證密鑰
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export TELEGRAM_BOT_TOKEN="your_telegram_bot_token"
+export TELEGRAM_WEBHOOK_SECRET="your_webhook_secret"  # 可選
+```
+
+#### 🔧 Telegram Bot 設定步驟
+
+1. **建立 Telegram Bot**：
+   - 在 Telegram 中找到 [@BotFather](https://t.me/botfather)
+   - 發送 `/newbot` 指令
+   - 按照指示設定 Bot 名稱和用戶名
+
+2. **取得 Bot Token**：
+   - BotFather 會提供 Bot Token
+   - 格式類似：`123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+
+3. **設定 Webhook**（可選）：
+   - 如果需要 Webhook 驗證，設定 `webhook_secret`
+   - 系統會自動設定 Webhook URL
+
+4. **測試 Bot**：
+   - 在 Telegram 中搜尋你的 Bot
+   - 發送 `/start` 測試連接
+
+### Slack Bot 配置
+
+Slack Bot 提供企業級聊天機器人功能。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  slack:
+    enabled: true                        # 啟用 Slack 平台
+    bot_token: "${SLACK_BOT_TOKEN}"      # Bot 權杖
+    signing_secret: "${SLACK_SIGNING_SECRET}"  # 簽名密鑰
+    app_token: "${SLACK_APP_TOKEN}"      # 可選：Socket Mode 應用程式權杖
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-your-slack-bot-token"
+export SLACK_SIGNING_SECRET="your_slack_signing_secret"
+export SLACK_APP_TOKEN="xapp-your-slack-app-token"  # 可選
+```
+
+#### 🔧 Slack Bot 設定步驟
+
+1. **建立 Slack 應用程式**：
+   - 前往 [Slack API](https://api.slack.com/apps)
+   - 點擊 "Create New App"
+   - 選擇 "From scratch" 並設定應用程式名稱和工作區
+
+2. **設定 Bot Token**：
+   - 在 "OAuth & Permissions" 頁面新增 Bot Token Scopes
+   - 安裝應用程式到工作區
+   - 複製 "Bot User OAuth Token"
+
+3. **取得 Signing Secret**：
+   - 在 "Basic Information" 頁面找到 "Signing Secret"
+
+4. **設定事件訂閱**：
+   - 在 "Event Subscriptions" 頁面啟用事件
+   - 設定 Request URL：`https://your-domain.com/webhooks/slack`
 
 ---
 
@@ -589,16 +1153,64 @@ DB_NAME=your_db_name
 
 ## 環境變數對照表
 
+### 平台配置
+
 | 用途 | config.yml 路徑 | 環境變數 | 部署腳本變數 |
 |------|----------------|----------|-------------|
-| LINE Access Token | `line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` | `LINE_CHANNEL_ACCESS_TOKEN` |
-| LINE Secret | `line.channel_secret` | `LINE_CHANNEL_SECRET` | `LINE_CHANNEL_SECRET` |
+| LINE Access Token | `platforms.line.channel_access_token` | `LINE_CHANNEL_ACCESS_TOKEN` | `LINE_CHANNEL_ACCESS_TOKEN` |
+| LINE Secret | `platforms.line.channel_secret` | `LINE_CHANNEL_SECRET` | `LINE_CHANNEL_SECRET` |
+| Discord Bot Token | `platforms.discord.bot_token` | `DISCORD_BOT_TOKEN` | `DISCORD_BOT_TOKEN` |
+| Discord Guild ID | `platforms.discord.guild_id` | `DISCORD_GUILD_ID` | `DISCORD_GUILD_ID` |
+| Discord Command Prefix | `platforms.discord.command_prefix` | `DISCORD_COMMAND_PREFIX` | `DISCORD_COMMAND_PREFIX` |
+| Telegram Bot Token | `platforms.telegram.bot_token` | `TELEGRAM_BOT_TOKEN` | `TELEGRAM_BOT_TOKEN` |
+| Telegram Webhook Secret | `platforms.telegram.webhook_secret` | `TELEGRAM_WEBHOOK_SECRET` | `TELEGRAM_WEBHOOK_SECRET` |
+| Slack Bot Token | `platforms.slack.bot_token` | `SLACK_BOT_TOKEN` | `SLACK_BOT_TOKEN` |
+| Slack Signing Secret | `platforms.slack.signing_secret` | `SLACK_SIGNING_SECRET` | `SLACK_SIGNING_SECRET` |
+| Slack App Token | `platforms.slack.app_token` | `SLACK_APP_TOKEN` | `SLACK_APP_TOKEN` |
+
+### AI 模型配置
+
+| 用途 | config.yml 路徑 | 環境變數 | 部署腳本變數 |
+|------|----------------|----------|-------------|
 | OpenAI API Key | `openai.api_key` | `OPENAI_API_KEY` | `OPENAI_API_KEY` |
 | OpenAI Assistant ID | `openai.assistant_id` | `OPENAI_ASSISTANT_ID` | `OPENAI_ASSISTANT_ID` |
+| OpenAI Model | `openai.model` | `OPENAI_MODEL` | `OPENAI_MODEL` |
+| OpenAI Base URL | `openai.base_url` | `OPENAI_BASE_URL` | `OPENAI_BASE_URL` |
+| OpenAI Temperature | `openai.temperature` | `OPENAI_TEMPERATURE` | `OPENAI_TEMPERATURE` |
+| OpenAI Max Tokens | `openai.max_tokens` | `OPENAI_MAX_TOKENS` | `OPENAI_MAX_TOKENS` |
+| Anthropic API Key | `anthropic.api_key` | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY` |
+| Anthropic Model | `anthropic.model` | `ANTHROPIC_MODEL` | `ANTHROPIC_MODEL` |
+| Anthropic Temperature | `anthropic.temperature` | `ANTHROPIC_TEMPERATURE` | `ANTHROPIC_TEMPERATURE` |
+| Anthropic Max Tokens | `anthropic.max_tokens` | `ANTHROPIC_MAX_TOKENS` | `ANTHROPIC_MAX_TOKENS` |
+| Gemini API Key | `gemini.api_key` | `GEMINI_API_KEY` | `GEMINI_API_KEY` |
+| Gemini Model | `gemini.model` | `GEMINI_MODEL` | `GEMINI_MODEL` |
+| Gemini Temperature | `gemini.temperature` | `GEMINI_TEMPERATURE` | `GEMINI_TEMPERATURE` |
+| Gemini Corpus Name | `gemini.corpus_name` | `GEMINI_CORPUS_NAME` | `GEMINI_CORPUS_NAME` |
+| Gemini Base URL | `gemini.base_url` | `GEMINI_BASE_URL` | `GEMINI_BASE_URL` |
+| HuggingFace API Key | `huggingface.api_key` | `HUGGINGFACE_API_KEY` | `HUGGINGFACE_API_KEY` |
+| HuggingFace Model Name | `huggingface.model_name` | `HUGGINGFACE_MODEL_NAME` | `HUGGINGFACE_MODEL_NAME` |
+| HuggingFace API Type | `huggingface.api_type` | `HUGGINGFACE_API_TYPE` | `HUGGINGFACE_API_TYPE` |
+| HuggingFace Base URL | `huggingface.base_url` | `HUGGINGFACE_BASE_URL` | `HUGGINGFACE_BASE_URL` |
+| HuggingFace Temperature | `huggingface.temperature` | `HUGGINGFACE_TEMPERATURE` | `HUGGINGFACE_TEMPERATURE` |
+| HuggingFace Max Tokens | `huggingface.max_tokens` | `HUGGINGFACE_MAX_TOKENS` | `HUGGINGFACE_MAX_TOKENS` |
+| HuggingFace Timeout | `huggingface.timeout` | `HUGGINGFACE_TIMEOUT` | `HUGGINGFACE_TIMEOUT` |
+| Ollama Base URL | `ollama.base_url` | `OLLAMA_BASE_URL` | `OLLAMA_BASE_URL` |
+| Ollama Model | `ollama.model` | `OLLAMA_MODEL` | `OLLAMA_MODEL` |
+| Ollama Temperature | `ollama.temperature` | `OLLAMA_TEMPERATURE` | `OLLAMA_TEMPERATURE` |
+
+### 資料庫配置
+
+| 用途 | config.yml 路徑 | 環境變數 | 部署腳本變數 |
+|------|----------------|----------|-------------|
 | 資料庫主機 | `db.host` | `DB_HOST` | `DB_HOST` |
+| 資料庫埠號 | `db.port` | `DB_PORT` | `DB_PORT` |
 | 資料庫用戶 | `db.user` | `DB_USER` | `DB_USER` |
 | 資料庫密碼 | `db.password` | `DB_PASSWORD` | `DB_PASSWORD` |
 | 資料庫名稱 | `db.db_name` | `DB_NAME` | `DB_NAME` |
+| SSL 模式 | `db.sslmode` | `DB_SSLMODE` | `DB_SSLMODE` |
+| SSL 根憑證 | `db.sslrootcert` | `DB_SSLROOTCERT` | `DB_SSLROOTCERT` |
+| SSL 用戶端憑證 | `db.sslcert` | `DB_SSLCERT` | `DB_SSLCERT` |
+| SSL 私鑰 | `db.sslkey` | `DB_SSLKEY` | `DB_SSLKEY` |
 
 ---
 

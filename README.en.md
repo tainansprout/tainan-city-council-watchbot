@@ -203,17 +203,22 @@ python -m pytest tests/integration/
 - `GET /chat`: Chat interface (requires authentication)
 - `POST /ask`: Chat API (requires authentication)
 
-## Documentation
+## 📚 Documentation
 
 For detailed configuration and deployment guides, please refer to:
 
-- [Configuration Management Guide](docs/CONFIGURATION.md)
-- [Deployment Guide](docs/DEPLOYMENT.md)
-- [Security Guide](docs/SECURITY.md)
-- [Database Management](docs/ORM_GUIDE.md)
-- [Developer Guide](CLAUDE.md)
+### Setup & Deployment
+- [📋 Configuration Management Guide](docs/CONFIGURATION.md) - Complete configuration setup instructions
+- [🚀 Running Guide](docs/RUNNING.md) - Local development and production environment setup
+- [☁️ Deployment Guide](docs/DEPLOYMENT.md) - Complete Google Cloud Run deployment process
+- [🔒 Security Guide](docs/SECURITY.md) - Security configuration and best practices
 
-## FAQ
+### Features & Architecture
+- [📖 RAG Implementation](docs/RAG_IMPLEMENTATION.md) - Retrieval Augmented Generation features
+- [🗄️ Database Management](docs/ORM_GUIDE.md) - SQLAlchemy ORM and migration management
+- [👨‍💻 Developer Guide](CLAUDE.md) - Project architecture and development standards
+
+## ❓ FAQ
 
 ### Q: Bot not responding after deployment?
 1. Check if Webhook URL is configured correctly
@@ -230,7 +235,7 @@ For detailed configuration and deployment guides, please refer to:
 2. Check SSL certificate configuration
 3. Validate firewall rules
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please follow these steps:
 
@@ -239,14 +244,14 @@ Contributions are welcome! Please follow these steps:
 3. Ensure all tests pass
 4. Submit a Pull Request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## 🆘 Support
 
 If you encounter issues or need assistance:
 
-1. Check the [FAQ](docs/FAQ.md)
+1. Check the above [Documentation](#-documentation) for configuration and deployment
 2. Submit issues on [GitHub Issues](https://github.com/tnsprout/ChatGPT-Line-Bot/issues)
 3. Review the [Developer Guide](CLAUDE.md) for technical details

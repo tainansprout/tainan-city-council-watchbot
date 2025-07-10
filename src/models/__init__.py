@@ -11,6 +11,7 @@ from .base import (
     FileInfo
 )
 from .openai_model import OpenAIModel
+from .huggingface_model import HuggingFaceModel
 from .factory import ModelFactory
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     'ThreadInfo',
     'FileInfo',
     'OpenAIModel',
+    'HuggingFaceModel',
     'ModelFactory'
 ]

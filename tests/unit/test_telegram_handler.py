@@ -5,6 +5,7 @@ import pytest
 import asyncio
 import json
 import time
+import gc
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from src.platforms.base import PlatformType, PlatformUser, PlatformMessage, PlatformResponse
 from src.platforms.telegram_handler import TelegramHandler, TelegramUtils
@@ -401,7 +402,8 @@ class TestTelegramHandlerAsyncBehavior:
         """Test setting the webhook."""
         handler = TelegramHandler(tg_valid_config)
         handler.bot = MagicMock()
-        handler.bot.set_webhook = AsyncMock()
+        # Use a regular Mock instead of AsyncMock to avoid the warning
+        handler.bot.set_webhook = MagicMock()
         
         # Mock asyncio.run to return True
         mock_asyncio_run.return_value = True
@@ -419,10 +421,9 @@ class TestTelegramHandlerAsyncBehavior:
         mock_bot_info.id = 123
         mock_bot_info.username = 'test_bot'
         
-        # Mock the async get_me method
-        get_me_mock = AsyncMock(return_value=mock_bot_info)
+        # Use regular Mock instead of AsyncMock to avoid the warning
         handler.bot = MagicMock()
-        handler.bot.get_me = get_me_mock
+        handler.bot.get_me = MagicMock()
         
         # Mock asyncio.run to return the result of the coroutine
         mock_asyncio_run.return_value = mock_bot_info

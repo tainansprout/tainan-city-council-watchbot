@@ -4,6 +4,7 @@ from .openai_model import OpenAIModel
 from .anthropic_model import AnthropicModel
 from .gemini_model import GeminiModel
 from .ollama_model import OllamaModel
+from .huggingface_model import HuggingFaceModel
 
 
 class ModelFactory:
@@ -78,9 +79,26 @@ class ModelFactory:
         )
     
     @staticmethod
-    def _create_huggingface_model(config: Dict[str, Any]):
-        """建立 HuggingFace 模型（未來實作）"""
-        raise NotImplementedError("HuggingFace model not implemented yet")
+    def _create_huggingface_model(config: Dict[str, Any]) -> HuggingFaceModel:
+        """建立 HuggingFace 模型"""
+        api_key = config.get('api_key')
+        if not api_key:
+            raise ValueError("HuggingFace API key is required")
+        
+        return HuggingFaceModel(
+            api_key=api_key,
+            model_name=config.get('model_name', 'mistralai/Mistral-7B-Instruct-v0.1'),
+            api_type=config.get('api_type', 'inference_api'),
+            base_url=config.get('base_url', 'https://api-inference.huggingface.co'),
+            # 傳遞所有額外配置
+            fallback_models=config.get('fallback_models'),
+            embedding_model=config.get('embedding_model'),
+            speech_model=config.get('speech_model'),
+            image_model=config.get('image_model'),
+            temperature=config.get('temperature'),
+            max_tokens=config.get('max_tokens'),
+            timeout=config.get('timeout')
+        )
     
     @staticmethod
     def _create_ollama_model(config: Dict[str, Any]) -> OllamaModel:

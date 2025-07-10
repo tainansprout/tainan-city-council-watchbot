@@ -285,33 +285,50 @@ class GeminiModel(FullLLMInterface):
 
     def _process_inline_citations(self, text: str, retrieved_sources: List[Dict]) -> Tuple[str, List[Dict]]:
         """
-        處理模型回應中的內文引用，將 [檔名] 替換為 [數字] 引用格式。
+        處理模型回應中的內文引用，將 [檔名] 替換為 [數字] 引用格式，並移除無效引用。
         """
         import re
         
-        # 找到所有被引用的檔案名稱
         cited_filenames = set(re.findall(r'\[([^\]]+)\]', text))
-        
         if not cited_filenames:
-            return text, retrieved_sources
+            # 如果模型回應中沒有引用，則來源列表也應該是空的
+            return text, []
 
         final_sources = []
         citation_map = {}
         next_ref_num = 1
+        
+        # 從檢索到的來源中，建立有效檔案名的集合
+        valid_source_filenames = {source['filename'] for source in retrieved_sources if 'filename' in source}
 
-        # 建立引用對應表
-        for source in retrieved_sources:
-            filename = source.get('filename')
-            if filename in cited_filenames:
+        # 建立有效引用的對應表
+        for filename in sorted(list(cited_filenames)): # sort for consistent numbering
+            if filename in valid_source_filenames:
                 if filename not in citation_map:
                     citation_map[filename] = next_ref_num
-                    final_sources.append(source)
                     next_ref_num += 1
-        
-        # 替換內文中的引用
+
+        # 替換有效的引用
         for filename, ref_num in citation_map.items():
             text = text.replace(f'[{filename}]', f'[{ref_num}]')
-            
+
+        # 移除無效的引用
+        invalid_filenames = cited_filenames - set(citation_map.keys())
+        for filename in invalid_filenames:
+            text = text.replace(f'[{filename}]', '')
+        
+        # 清理可能產生的多餘空格
+        text = re.sub(r'\s\s+', ' ', text).strip()
+
+        # 根據有效的引用，建立最終的 sources 列表
+        # 使用檔案名來確保我們只為每個被引用的文件添加一次源
+        added_filenames = set()
+        for source in retrieved_sources:
+            filename = source.get('filename')
+            if filename in citation_map and filename not in added_filenames:
+                final_sources.append(source)
+                added_filenames.add(filename)
+                
         return text, final_sources
 
     def _fallback_chat_completion(self, query: str, context_messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
@@ -689,7 +706,7 @@ class GeminiModel(FullLLMInterface):
                 "contents": [
                     {
                         "parts": [
-                            {"text": "請將這段音訊轉錄成文字，如果音訊內容為非中文，請將其翻譯成繁體中文。"},
+                            {"text": "請將這段音訊轉錄成文字。"},
                             {
                                 "inline_data": {
                                     "mime_type": mime_type,
@@ -854,3 +871,59 @@ class GeminiModel(FullLLMInterface):
 - 在回答末尾標註相關的知識文檔來源
 
 請始終保持這個角色設定，充分發揮長上下文和語義檢索的優勢。"""
+
+    def _upload_multimodal_file(self, file_path: str, corpus_name: str, **kwargs) -> Tuple[bool, Optional[FileInfo], Optional[str]]:
+        """
+        上傳多模態檔案到 Google Cloud Storage 並與 Semantic Retrieval 整合
+        
+        此功能為進階實作，需要完整的 Google Cloud Storage (GCS) 整合，目前尚未啟用。
+        啟用此功能前，請確保：
+        1. 已安裝 `google-cloud-storage` Python 套件。
+        2. 應用程式執行環境已設定 GCS 服務帳號憑證。
+        3. 已在 Google Cloud 專案中建立一個 GCS 儲存桶 (bucket)。
+        """
+        logger.warning("Multimodal file upload is not fully implemented and requires Google Cloud Storage integration.")
+        return False, None, "多模態檔案上傳功能尚未完整實作，需要 Google Cloud Storage 整合。"
+        
+        # 完整實作流程範例：
+        # try:
+        #     from google.cloud import storage
+        #     import os
+
+        #     # 從設定或環境變數讀取 GCS bucket 名稱
+        #     bucket_name = os.environ.get("GCS_BUCKET_NAME")
+        #     if not bucket_name:
+        #         logger.error("GCS_BUCKET_NAME environment variable is not set.")
+        #         return False, None, "GCS bucket 未設定"
+
+        #     storage_client = storage.Client()
+        #     bucket = storage_client.bucket(bucket_name)
+            
+        #     destination_blob_name = f"multimodal_uploads/{os.path.basename(file_path)}"
+        #     blob = bucket.blob(destination_blob_name)
+
+        #     logger.info(f"Uploading {file_path} to GCS bucket {bucket_name}...")
+        #     blob.upload_from_filename(file_path)
+        #     gcs_uri = f"gs://{bucket_name}/{destination_blob_name}"
+        #     logger.info(f"File uploaded to {gcs_uri}")
+
+        #     # TODO: 後續需要調用 Google File API 或類似服務，
+        #     # 將 GCS URI 與 Semantic Retrieval 的文檔進行關聯。
+        #     # 這部分的 API 可能會隨 Google Cloud 的更新而變化。
+
+        #     file_info = FileInfo(
+        #         file_id=gcs_uri, # 暫時使用 GCS URI 作為 ID
+        #         filename=os.path.basename(file_path),
+        #         status='uploaded_to_gcs',
+        #         purpose='multimodal_knowledge',
+        #         metadata={'gcs_uri': gcs_uri, 'corpus': corpus_name}
+        #     )
+            
+        #     return True, file_info, None
+
+        # except ImportError:
+        #     logger.error("google-cloud-storage is not installed. Please install it to use multimodal features.")
+        #     return False, None, "缺少 google-cloud-storage 套件"
+        # except Exception as e:
+        #     logger.error(f"Failed to upload multimodal file to GCS: {e}")
+        #     return False, None, f"多模態檔案上傳失敗: {e}"

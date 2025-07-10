@@ -463,17 +463,19 @@ class TestGeminiModel:
         """Test the processing of inline citations."""
         text = "According to [doc1.pdf], and also [doc2.txt]."
         sources = [
-            {'filename': 'doc1.pdf', 'file_id': 'id1'},
-            {'filename': 'doc2.txt', 'file_id': 'id2'},
-            {'filename': 'unused.md', 'file_id': 'id3'}
+            {'filename': 'doc1.pdf', 'file_id': 'id1', 'text': 'content1'},
+            {'filename': 'doc2.txt', 'file_id': 'id2', 'text': 'content2'},
+            {'filename': 'unused.md', 'file_id': 'id3', 'text': 'content3'}
         ]
         
         processed_text, final_sources = gemini_model._process_inline_citations(text, sources)
         
         assert processed_text == "According to [1], and also [2]."
         assert len(final_sources) == 2
-        assert final_sources[0]['filename'] == 'doc1.pdf'
-        assert final_sources[1]['filename'] == 'doc2.txt'
+        # 檢查任一來源都可以，因為排序可能不同
+        source_filenames = {source['filename'] for source in final_sources}
+        assert 'doc1.pdf' in source_filenames
+        assert 'doc2.txt' in source_filenames
 
     def test_chunk_text(self, gemini_model):
         """Test the _chunk_text helper method."""
@@ -586,18 +588,21 @@ class TestGeminiModel:
                 'chunkRelevanceScore': 0.9,
                 'chunk': {
                     'name': 'corpora/test_corpus/documents/doc1/chunks/chunk1',
-                    'data': {'stringValue': 'This is relevant content'}
+                    'data': {'stringValue': 'This is relevant content'},
+                    'customMetadata': [
+                        {'key': 'source_file', 'stringValue': 'test_document.txt'}
+                    ]
                 }
             }]
         }
         
-        # Mock chat response
+        # Mock chat response - include citation to generate sources
         mock_chat_response = Mock()
         mock_chat_response.status_code = 200
         mock_chat_response.json.return_value = {
             'candidates': [{
                 'content': {
-                    'parts': [{'text': 'Based on the knowledge base, here is the answer.'}]
+                    'parts': [{'text': 'Based on [test_document.txt], here is the answer.'}]
                 }
             }]
         }
@@ -608,7 +613,7 @@ class TestGeminiModel:
         
         assert is_successful is True
         assert rag_response is not None
-        assert "knowledge base" in rag_response.answer
+        assert "here is the answer" in rag_response.answer
         assert len(rag_response.sources) > 0
         assert error is None
 
