@@ -531,6 +531,9 @@ class GeminiModel(FullLLMInterface):
         chunks = []
         start = 0
         
+        # 確保 overlap 不會大於 chunk_size 並且是合理的
+        overlap = min(overlap, chunk_size // 2)
+        
         while start < len(text):
             end = min(start + chunk_size, len(text))
             chunk_text = text[start:end]
@@ -541,8 +544,15 @@ class GeminiModel(FullLLMInterface):
                 'end': end
             })
             
-            start = end - overlap
-            if start <= 0:
+            # 確保下一個位置總是向前移動
+            next_start = end - overlap
+            if next_start <= start:  # 防止無限循環
+                next_start = start + max(1, chunk_size - overlap)
+            
+            start = next_start
+            
+            # 如果已經到達文本末尾，停止
+            if end >= len(text):
                 break
         
         return chunks

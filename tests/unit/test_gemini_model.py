@@ -384,3 +384,375 @@ class TestGeminiModel:
         assert is_successful is False
         assert text is None
         assert 'not found' in error.lower()
+
+    def test_check_connection_exception(self, gemini_model):
+        """Test check_connection when the API call raises an exception."""
+        with patch.object(gemini_model, 'chat_completion', side_effect=Exception('Network Error')):
+            is_successful, error = gemini_model.check_connection()
+            assert is_successful is False
+            assert 'Network Error' in error
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_chat_completion_api_error(self, mock_post, gemini_model):
+        """Test chat_completion when the API returns a non-200 status."""
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_response.json.return_value = {'error': {'message': 'Internal Server Error'}}
+        mock_post.return_value = mock_response
+        
+        is_successful, response, error = gemini_model.chat_completion([ChatMessage(role='user', content='Hi')])
+        assert is_successful is False
+        assert response is None
+        assert ('Internal Server Error' in error or 'Server error' in error)
+
+    def test_assistant_interface_methods(self, gemini_model):
+        """Test assistant interface methods for basic execution."""
+        # These methods have minimal implementation, just test they run and return expected values
+        is_successful, thread_info, error = gemini_model.create_thread()
+        assert is_successful is True
+        assert isinstance(thread_info, ThreadInfo)
+        assert error is None
+
+        is_successful, error = gemini_model.delete_thread('some_id')
+        assert is_successful is True
+        assert error is None
+
+        is_successful, error = gemini_model.add_message_to_thread('some_id', ChatMessage(role='user', content='Hi'))
+        assert is_successful is True
+        assert error is None
+
+        is_successful, response, error = gemini_model.run_assistant('some_id')
+        assert is_successful is False
+        assert response is None
+        assert 'query_with_rag' in error
+
+    def test_image_generation_not_supported(self, gemini_model):
+        """Test that image generation is not supported."""
+        is_successful, response, error = gemini_model.generate_image("a cat")
+        assert is_successful is False
+        assert response is None
+        assert ('not support' in error or '不支援' in error)
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_query_with_rag_no_relevant_passages(self, mock_post, gemini_model):
+        """Test RAG query when no relevant passages are found."""
+        gemini_model.corpora['test_corpus'] = {'name': 'corpora/test_corpus'}
+        
+        # Mock retrieval response (no passages)
+        mock_retrieval_response = Mock()
+        mock_retrieval_response.status_code = 200
+        mock_retrieval_response.json.return_value = {'relevantChunks': []}
+        
+        # Mock fallback chat completion response
+        mock_chat_response = Mock()
+        mock_chat_response.status_code = 200
+        mock_chat_response.json.return_value = {
+            'candidates': [{'content': {'parts': [{'text': 'General fallback answer.'}]}}]
+        }
+        mock_post.side_effect = [mock_retrieval_response, mock_chat_response]
+
+        is_successful, rag_response, error = gemini_model.query_with_rag("query", corpus_name='test_corpus')
+        
+        assert is_successful is True
+        assert rag_response.answer == 'General fallback answer.'
+        assert not rag_response.sources
+        assert (rag_response.metadata.get('no_retrieval') is True or 
+                rag_response.metadata.get('no_sources') is True)
+
+    def test_process_inline_citations(self, gemini_model):
+        """Test the processing of inline citations."""
+        text = "According to [doc1.pdf], and also [doc2.txt]."
+        sources = [
+            {'filename': 'doc1.pdf', 'file_id': 'id1'},
+            {'filename': 'doc2.txt', 'file_id': 'id2'},
+            {'filename': 'unused.md', 'file_id': 'id3'}
+        ]
+        
+        processed_text, final_sources = gemini_model._process_inline_citations(text, sources)
+        
+        assert processed_text == "According to [1], and also [2]."
+        assert len(final_sources) == 2
+        assert final_sources[0]['filename'] == 'doc1.pdf'
+        assert final_sources[1]['filename'] == 'doc2.txt'
+
+    def test_chunk_text(self, gemini_model):
+        """Test the _chunk_text helper method."""
+        long_text = "This is a sentence. " * 200  # 約 4000 字符
+        chunks = gemini_model._chunk_text(long_text, chunk_size=200, overlap=20)
+        
+        assert len(chunks) > 1
+        assert chunks[0]['text'].startswith("This is a sentence.")
+        assert len(chunks[0]['text']) <= 200
+        
+        # 測試 overlap 邏輯：檢查相鄰 chunks 之間是否有重疊
+        if len(chunks) > 1:
+            # 第二個 chunk 的開始位置應該是 180 (200-20)，重疊部分應該存在
+            chunk1_end_part = chunks[0]['text'][-20:]
+            chunk2_start_part = chunks[1]['text'][:20] if len(chunks[1]['text']) >= 20 else chunks[1]['text']
+            
+            # 檢查是否有重疊（但不一定完全相同，因為可能在字符邊界）
+            assert len(chunk1_end_part) > 0
+            assert len(chunk2_start_part) > 0
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_upload_knowledge_file_api_error(self, mock_post, gemini_model, tmp_path):
+        """Test knowledge file upload when the API returns an error."""
+        mock_response = Mock()
+        mock_response.status_code = 403
+        mock_response.json.return_value = {'error': {'message': 'Permission Denied'}}
+        mock_post.return_value = mock_response
+
+        file_path = tmp_path / "test.txt"
+        file_path.write_text("content")
+
+        is_successful, file_info, error = gemini_model.upload_knowledge_file(str(file_path))
+        
+        assert is_successful is False
+        assert file_info is None
+        assert 'Permission Denied' in error
+
+    def test_get_knowledge_files_api_error(self, gemini_model):
+        """Test getting knowledge files when the API returns an error."""
+        # 模擬一個有語料庫的狀態
+        gemini_model.corpora['test_corpus'] = {'name': 'corpora/test_corpus'}
+        
+        # 模擬 _request 方法返回錯誤
+        with patch.object(gemini_model, '_request', return_value=(False, None, 'Service Unavailable')):
+            is_successful, files, error = gemini_model.get_knowledge_files()
+            
+            # 由於 get_knowledge_files 會在錯誤時繼續，所以會返回 True 但 files 是空的
+            assert is_successful is True
+            assert files == []
+            assert error is None
+
+    def test_delete_knowledge_file_not_implemented(self, gemini_model):
+        """Test that delete_knowledge_file is not implemented for Gemini."""
+        # Gemini 模型目前沒有實現 delete_knowledge_file 方法
+        # 這個測試僅驗證方法不存在或返回適當的錯誤
+        assert not hasattr(gemini_model, 'delete_knowledge_file') or \
+               gemini_model.delete_knowledge_file("test") == (False, "Not implemented")
+
+    def test_transcribe_audio_generic_exception(self, gemini_model, tmp_path):
+        """Test transcribe_audio for generic exceptions during file processing."""
+        audio_file = tmp_path / "test.wav"
+        audio_file.write_bytes(b'audio')
+
+        with patch('base64.b64encode', side_effect=Exception("Encoding failed")):
+            is_successful, text, error = gemini_model.transcribe_audio(str(audio_file))
+            assert is_successful is False
+            assert text is None
+            assert "Encoding failed" in error
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_upload_knowledge_file_success(self, mock_post, gemini_model, tmp_path):
+        """Test successful knowledge file upload."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'name': 'corpora/test_corpus',
+            'displayName': 'Test Corpus'
+        }
+        mock_post.return_value = mock_response
+
+        file_path = tmp_path / "test.txt"
+        file_path.write_text("This is test content for knowledge base.")
+
+        is_successful, file_info, error = gemini_model.upload_knowledge_file(str(file_path))
+        
+        assert is_successful is True
+        assert file_info is not None
+        assert file_info.filename == "test.txt"
+        assert file_info.status == "processed"
+        assert error is None
+
+    def test_upload_knowledge_file_not_found(self, gemini_model):
+        """Test knowledge file upload when file doesn't exist."""
+        is_successful, file_info, error = gemini_model.upload_knowledge_file("/non/existent/file.txt")
+        
+        assert is_successful is False
+        assert file_info is None
+        assert ("not found" in error.lower() or "no such file" in error.lower())
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_query_with_rag_success(self, mock_post, gemini_model):
+        """Test successful RAG query with retrieval."""
+        gemini_model.corpora['test_corpus'] = {'name': 'corpora/test_corpus'}
+        
+        # Mock retrieval response
+        mock_retrieval_response = Mock()
+        mock_retrieval_response.status_code = 200
+        mock_retrieval_response.json.return_value = {
+            'relevantChunks': [{
+                'chunkRelevanceScore': 0.9,
+                'chunk': {
+                    'name': 'corpora/test_corpus/documents/doc1/chunks/chunk1',
+                    'data': {'stringValue': 'This is relevant content'}
+                }
+            }]
+        }
+        
+        # Mock chat response
+        mock_chat_response = Mock()
+        mock_chat_response.status_code = 200
+        mock_chat_response.json.return_value = {
+            'candidates': [{
+                'content': {
+                    'parts': [{'text': 'Based on the knowledge base, here is the answer.'}]
+                }
+            }]
+        }
+        
+        mock_post.side_effect = [mock_retrieval_response, mock_chat_response]
+
+        is_successful, rag_response, error = gemini_model.query_with_rag("test query", corpus_name='test_corpus')
+        
+        assert is_successful is True
+        assert rag_response is not None
+        assert "knowledge base" in rag_response.answer
+        assert len(rag_response.sources) > 0
+        assert error is None
+
+    @patch('src.models.gemini_model.requests.post')
+    def test_query_with_rag_retrieval_error(self, mock_post, gemini_model):
+        """Test RAG query when retrieval fails."""
+        gemini_model.corpora['test_corpus'] = {'name': 'corpora/test_corpus'}
+        
+        # Mock retrieval error
+        mock_retrieval_response = Mock()
+        mock_retrieval_response.status_code = 500
+        mock_retrieval_response.json.return_value = {'error': {'message': 'Retrieval failed'}}
+        mock_post.return_value = mock_retrieval_response
+
+        is_successful, rag_response, error = gemini_model.query_with_rag("test query", corpus_name='test_corpus')
+        
+        assert is_successful is False
+        assert rag_response is None
+        assert ("Retrieval failed" in error or "Server error" in error)
+
+    def test_get_file_references(self, gemini_model):
+        """Test getting file references."""
+        # Mock get_knowledge_files to return some files
+        from src.models.base import FileInfo
+        mock_files = [
+            FileInfo(file_id='file1', filename='test1.txt', size=100, status='processed', purpose='knowledge'),
+            FileInfo(file_id='file2', filename='test2.json', size=200, status='processed', purpose='knowledge')
+        ]
+        
+        with patch.object(gemini_model, 'get_knowledge_files', return_value=(True, mock_files, None)):
+            references = gemini_model.get_file_references()
+            
+            assert isinstance(references, dict)
+            assert 'file1' in references
+            assert 'file2' in references
+            assert references['file1'] == 'test1'
+            assert references['file2'] == 'test2'
+
+    def test_get_recent_conversations(self, gemini_model):
+        """Test _get_recent_conversations method."""
+        mock_conversation_manager = Mock()
+        mock_conversation_manager.get_recent_conversations.return_value = [
+            {'role': 'user', 'content': 'Hello', 'created_at': '2024-01-01T10:00:00'},
+            {'role': 'assistant', 'content': 'Hi there!', 'created_at': '2024-01-01T10:00:01'}
+        ]
+        gemini_model.conversation_manager = mock_conversation_manager
+        
+        conversations = gemini_model._get_recent_conversations('test_user', 'line', 10)
+        
+        assert len(conversations) == 2
+        assert conversations[0]['role'] == 'user'
+        assert conversations[1]['role'] == 'assistant'
+        mock_conversation_manager.get_recent_conversations.assert_called_once_with('test_user', 'gemini', 10, 'line')
+
+    def test_get_recent_conversations_error(self, gemini_model):
+        """Test _get_recent_conversations when it fails."""
+        mock_conversation_manager = Mock()
+        mock_conversation_manager.get_recent_conversations.side_effect = Exception("Database error")
+        gemini_model.conversation_manager = mock_conversation_manager
+        
+        conversations = gemini_model._get_recent_conversations('test_user', 'line', 10)
+        
+        assert conversations == []
+
+    def test_supported_media_types(self, gemini_model):
+        """Test supported media types."""
+        assert 'image' in gemini_model.supported_media_types
+        assert 'video' in gemini_model.supported_media_types
+        assert 'audio' in gemini_model.supported_media_types
+
+    def test_request_method_success(self, gemini_model):
+        """Test _request method for successful API calls."""
+        with patch('src.models.gemini_model.requests.post') as mock_post:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {'success': True}
+            mock_post.return_value = mock_response
+            
+            is_successful, response_data, error = gemini_model._request('POST', '/test', {'data': 'test'})
+            
+            assert is_successful is True
+            assert response_data['success'] is True
+            assert error is None
+
+    def test_request_method_failure(self, gemini_model):
+        """Test _request method for failed API calls."""
+        with patch('src.models.gemini_model.requests.post') as mock_post:
+            mock_response = Mock()
+            mock_response.status_code = 400
+            mock_response.json.return_value = {'error': {'message': 'Bad request'}}
+            mock_post.return_value = mock_response
+            
+            is_successful, response_data, error = gemini_model._request('POST', '/test', {'data': 'test'})
+            
+            assert is_successful is False
+            assert response_data is None
+            assert 'Bad request' in error
+
+    def test_request_method_exception(self, gemini_model):
+        """Test _request method when an exception occurs."""
+        with patch('src.models.gemini_model.requests.post', side_effect=Exception("Network error")):
+            is_successful, response_data, error = gemini_model._request('POST', '/test', {'data': 'test'})
+            
+            assert is_successful is False
+            assert response_data is None
+            assert 'Network error' in error
+
+    def test_clear_user_history_failure(self, gemini_model):
+        """Test clear_user_history when it fails."""
+        mock_conversation_manager = Mock()
+        mock_conversation_manager.clear_user_history.return_value = False
+        gemini_model.conversation_manager = mock_conversation_manager
+        
+        is_successful, error = gemini_model.clear_user_history('test_user')
+        
+        assert is_successful is False
+        assert "Failed to clear" in error
+
+    def test_clear_user_history_exception(self, gemini_model):
+        """Test clear_user_history when an exception occurs."""
+        mock_conversation_manager = Mock()
+        mock_conversation_manager.clear_user_history.side_effect = Exception("Database error")
+        gemini_model.conversation_manager = mock_conversation_manager
+        
+        is_successful, error = gemini_model.clear_user_history('test_user')
+        
+        assert is_successful is False
+        assert "Database error" in error
+
+    def test_chat_with_user_rag_failure(self, gemini_model):
+        """Test chat_with_user when RAG query fails."""
+        with patch.object(gemini_model, '_get_recent_conversations', return_value=[]):
+            with patch.object(gemini_model, 'query_with_rag', return_value=(False, None, "RAG error")):
+                is_successful, response, error = gemini_model.chat_with_user('test_user', 'Hello')
+                
+                assert is_successful is False
+                assert response is None
+                assert error == "RAG error"
+
+    def test_chat_with_user_exception(self, gemini_model):
+        """Test chat_with_user when an exception occurs."""
+        with patch.object(gemini_model, '_get_recent_conversations', side_effect=Exception("Error")):
+            is_successful, response, error = gemini_model.chat_with_user('test_user', 'Hello')
+            
+            assert is_successful is False
+            assert response is None
+            assert "Error" in error

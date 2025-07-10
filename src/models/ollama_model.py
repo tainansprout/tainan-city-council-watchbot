@@ -382,7 +382,7 @@ class OllamaModel(FullLLMInterface):
             })
             
             start = end - overlap
-            if start <= 0:
+            if start >= len(text) or end >= len(text):
                 break
         
         return chunks
