@@ -206,7 +206,7 @@ python -m pytest tests/integration/
 ### Test Structure
 ```
 tests/
-├── unit/           # Unit tests (73+ tests)
+├── unit/           # Unit tests (112+ tests)
 ├── integration/    # Integration tests
 ├── api/           # API endpoint tests
 └── mocks/         # External service mocks
@@ -264,7 +264,7 @@ if not monitor.check_memory_usage():
 ### v2.1 Integration Updates
 - **Core Modules**: `logger.py` and `security.py` are now unified (removed optimized_* versions)
 - **Performance**: Pre-compiled regex patterns and async processing
-- **Testing**: 35% total coverage with comprehensive unit tests
+- **Testing**: 86% total coverage with comprehensive unit tests
 
 ### Deployment
 - **Development**: `python main.py` (auto-detects environment)
@@ -282,7 +282,7 @@ if not monitor.check_memory_usage():
 - Flask, SQLAlchemy, PyYAML, Gunicorn
 
 ### Platform Integrations
-- line-bot-sdk (Discord and Telegram planned)
+- line-bot-sdk, discord.py, python-telegram-bot, slack-sdk
 
 ### AI Model Providers
 - openai, anthropic, google-generativeai, requests (for Ollama)
