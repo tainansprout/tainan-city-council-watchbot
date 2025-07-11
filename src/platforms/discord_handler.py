@@ -190,6 +190,10 @@ class DiscordHandler(BasePlatformHandler):
             logger.error("Discord bot not initialized")
             return False
         
+        if not self.event_loop:
+            logger.error("Discord event loop not available")
+            return False
+            
         try:
             # 從原始訊息中取得 channel
             discord_message = message.metadata.get('discord_message')

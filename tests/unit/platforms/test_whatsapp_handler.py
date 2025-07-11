@@ -230,9 +230,10 @@ class TestWhatsAppHandler:
     @patch('src.platforms.whatsapp_handler.requests.post')
     def test_send_text_message_success(self, mock_post, whatsapp_handler):
         """測試發送文字訊息成功"""
-        # 模擬 API 回應
-        mock_response = Mock()
+        # 模擬 API 回應 - 確保使用同步 Mock
+        mock_response = Mock(spec=['status_code', 'text'])
         mock_response.status_code = 200
+        mock_response.text = 'Success'
         mock_post.return_value = mock_response
         
         # 建立測試訊息
@@ -264,8 +265,8 @@ class TestWhatsAppHandler:
     @patch('src.platforms.whatsapp_handler.requests.post')
     def test_send_text_message_failure(self, mock_post, whatsapp_handler):
         """測試發送文字訊息失敗"""
-        # 模擬 API 錯誤回應
-        mock_response = Mock()
+        # 模擬 API 錯誤回應 - 確保使用同步 Mock
+        mock_response = Mock(spec=['status_code', 'text'])
         mock_response.status_code = 400
         mock_response.text = 'Bad Request'
         mock_post.return_value = mock_response

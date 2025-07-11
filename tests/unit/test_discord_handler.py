@@ -278,6 +278,7 @@ class TestDiscordHandlerExtended:
         """測試發送回應時的 API 錯誤"""
         handler = DiscordHandler(self.valid_config)
         handler.bot = Mock()
+        handler.event_loop = Mock()  # 模擬 event_loop
         
         mock_discord_message = Mock()
         mock_discord_message.channel = Mock()
@@ -292,11 +293,9 @@ class TestDiscordHandlerExtended:
         
         response = PlatformResponse(content="Hello back!")
         
-        # Mock _send_message_async to raise exception
-        with patch.object(handler, '_send_message_async', new_callable=AsyncMock) as mock_send:
-            mock_send.side_effect = Exception("Discord API Error")
-            with patch('asyncio.run', side_effect=Exception("Discord API Error")):
-                result = handler.send_response(response, message)
+        # Mock asyncio.run_coroutine_threadsafe to raise exception
+        with patch('asyncio.run_coroutine_threadsafe', side_effect=Exception("Discord API Error")):
+            result = handler.send_response(response, message)
         
         assert result is False
     
@@ -416,7 +415,7 @@ class TestDiscordAsyncMethods:
             
             # 創建 mock 附件
             mock_attachment = Mock()
-            mock_attachment.read = AsyncMock(return_value=b'fake_data')
+            mock_attachment.read = Mock(return_value=b'fake_data')
             
             # 測試異步方法的邏輯（不實際執行異步）
             assert hasattr(handler, '_download_attachment')
@@ -759,15 +758,14 @@ class TestDiscordHandlerAsyncBehavior:
         
         mock_msg, _ = self._create_mock_discord_message("", attachments=[mock_attachment])
 
-        with patch.object(handler, '_download_attachment', new_callable=AsyncMock) as mock_download:
-            mock_download.return_value = b'fake_audio_bytes'
+        with patch.object(handler, '_download_attachment', return_value=b'fake_audio_bytes') as mock_download:
             with patch('discord.Message', new=MagicMock()):
                 parsed = handler.parse_message(mock_msg)
 
         assert parsed is not None
         assert parsed.message_type == 'audio'
         assert parsed.raw_data == b'fake_audio_bytes'
-        mock_download.assert_awaited_once_with(mock_attachment)
+        mock_download.assert_called_once_with(mock_attachment)
 
     async def test_send_message_async_short(self, valid_config):
         """Test _send_message_async with a short message."""
@@ -1029,9 +1027,12 @@ class TestDiscordHandlerAsyncBehavior:
         mock_attachment.read = AsyncMock(return_value=b'test_data')
         
         # Test the async method directly
-        result = asyncio.run(handler._download_attachment(mock_attachment))
-        assert result == b'test_data'
-        mock_attachment.read.assert_awaited_once()
+        async def test_async():
+            result = await handler._download_attachment(mock_attachment)
+            assert result == b'test_data'
+            mock_attachment.read.assert_awaited_once()
+        
+        asyncio.run(test_async())
 
     def test_get_discord_manager(self, valid_config):
         """Test get_discord_manager function."""
