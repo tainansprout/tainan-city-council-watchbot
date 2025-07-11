@@ -77,6 +77,12 @@ config_manager.force_reload()
 - `TELEGRAM_BOT_TOKEN` → `platforms.telegram.bot_token`
 - `TELEGRAM_WEBHOOK_SECRET` → `platforms.telegram.webhook_secret`
 
+**WhatsApp Business API 配置**
+- `WHATSAPP_ACCESS_TOKEN` → `platforms.whatsapp.access_token`
+- `WHATSAPP_PHONE_NUMBER_ID` → `platforms.whatsapp.phone_number_id`
+- `WHATSAPP_APP_SECRET` → `platforms.whatsapp.app_secret`
+- `WHATSAPP_VERIFY_TOKEN` → `platforms.whatsapp.verify_token`
+
 #### AI 模型配置
 
 **OpenAI 配置**
@@ -1221,9 +1227,19 @@ DB_NAME=your_db_name
 **方法 1: 使用 config.yml**
 ```yaml
 # config/config.yml
-line:
-  channel_access_token: "your_line_token"
-  channel_secret: "your_line_secret"
+platforms:
+  line:
+    enabled: true
+    channel_access_token: "your_line_token"
+    channel_secret: "your_line_secret"
+  
+  whatsapp:
+    enabled: true
+    access_token: "your_whatsapp_token"
+    phone_number_id: "your_phone_number_id"
+    app_secret: "your_app_secret"
+    verify_token: "your_verify_token"
+    api_version: "v13.0"
 
 openai:
   api_key: "sk-proj-xxxxxxxx"
@@ -1255,6 +1271,10 @@ security:
 # .env.local (需手動載入)
 export LINE_CHANNEL_ACCESS_TOKEN="your_line_token"
 export LINE_CHANNEL_SECRET="your_line_secret"
+export WHATSAPP_ACCESS_TOKEN="your_whatsapp_token"
+export WHATSAPP_PHONE_NUMBER_ID="your_phone_number_id"
+export WHATSAPP_APP_SECRET="your_app_secret"
+export WHATSAPP_VERIFY_TOKEN="your_verify_token"
 export OPENAI_API_KEY="sk-proj-xxxxxxxx"
 export OPENAI_ASSISTANT_ID="asst_xxxxxxxx"
 export DB_HOST="localhost"

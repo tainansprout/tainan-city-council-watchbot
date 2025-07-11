@@ -8,7 +8,7 @@
 [![Test Coverage](https://img.shields.io/badge/coverage-86%25-brightgreen.svg)](htmlcov/index.html)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/tnsprout/ChatGPT-Line-Bot/actions)
 
-本專案是一個**多平台聊天機器人**，支援 LINE、Discord、Telegram 等多個平台，整合了多種 AI 模型提供商（OpenAI、Anthropic Claude、Google Gemini、Ollama）。機器人採用模組化架構設計，部署在 Google Cloud Run 上，並使用 Google Cloud SQL 進行對話歷史管理。
+本專案是一個**多平台聊天機器人**，支援 LINE、Discord、Telegram、WhatsApp 等多個平台，整合了多種 AI 模型提供商（OpenAI、Anthropic Claude、Google Gemini、Ollama）。機器人採用模組化架構設計，部署在 Google Cloud Run 上，並使用 Google Cloud SQL 進行對話歷史管理。
 
 **🆕 v2.1 核心基礎設施整合升級**：高效能日誌系統與安全模組整合，優化效能並簡化維護。
 
@@ -17,7 +17,7 @@
 ## 核心特色
 
 🤖 **多 AI 模型支援**: 統一介面整合 OpenAI、Anthropic、Gemini、Ollama  
-🌐 **多平台支援**: LINE、Discord、Telegram 等平台統一管理  
+🌐 **多平台支援**: LINE、Discord、Telegram、WhatsApp 等平台統一管理  
 📚 **RAG 知識庫**: 所有模型支援文檔檢索與引用功能  
 🔗 **統一引用處理**: 跨模型的一致引用格式化  
 🛡️ **企業級安全**: 輸入驗證、速率限制、錯誤處理  

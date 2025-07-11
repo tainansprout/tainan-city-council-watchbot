@@ -117,6 +117,13 @@ echo -n "$OPENAI_API_KEY_SECRET" | gcloud secrets create openai-api-key --data-f
 echo -n "$OPENAI_ASSISTANT_ID_SECRET" | gcloud secrets create openai-assistant-id --data-file=-
 echo -n "$LINE_CHANNEL_ACCESS_TOKEN_SECRET" | gcloud secrets create line-channel-access-token --data-file=-
 echo -n "$LINE_CHANNEL_SECRET_SECRET" | gcloud secrets create line-channel-secret --data-file=-
+
+# WhatsApp Business API 密鑰
+echo -n "$WHATSAPP_ACCESS_TOKEN_SECRET" | gcloud secrets create whatsapp-access-token --data-file=-
+echo -n "$WHATSAPP_PHONE_NUMBER_ID_SECRET" | gcloud secrets create whatsapp-phone-number-id --data-file=-
+echo -n "$WHATSAPP_APP_SECRET_SECRET" | gcloud secrets create whatsapp-app-secret --data-file=-
+echo -n "$WHATSAPP_VERIFY_TOKEN_SECRET" | gcloud secrets create whatsapp-verify-token --data-file=-
+
 echo -n "$DB_HOST_SECRET" | gcloud secrets create db-host --data-file=-
 echo -n "$DB_USER_SECRET" | gcloud secrets create db-user --data-file=-
 echo -n "$DB_PASSWORD_SECRET" | gcloud secrets create db-password --data-file=-
@@ -379,6 +386,59 @@ autoscaling.knative.dev/maxScale: "100"  # 最大實例數
 | 錯誤率 | < 1% | Cloud Monitoring |
 | 冷啟動時間 | < 10 秒 | Cloud Monitoring |
 
+## 📱 WhatsApp 部署特殊需求
+
+### Webhook 設定
+WhatsApp Business API 需要特殊的 webhook 設定：
+
+1. **Meta 開發者控制台設定**
+   - 登入 [Meta for Developers](https://developers.facebook.com/)
+   - 選擇您的 WhatsApp Business App
+   - 設定 Webhook URL: `https://your-domain.com/webhooks/whatsapp`
+   - 驗證 Token: 與環境變數 `WHATSAPP_VERIFY_TOKEN` 相同
+
+2. **HTTPS 需求**
+   - WhatsApp 要求必須使用 HTTPS
+   - 確保 SSL 證書有效
+   - 支援 TLS 1.2 或更高版本
+
+3. **網域驗證**
+   - 網域必須可公開訪問
+   - 不能使用 localhost 或內部 IP
+   - 建議使用 Load Balancer 提供穩定的端點
+
+### 環境變數設定
+確保以下 WhatsApp 環境變數已正確設定：
+
+```bash
+# 在 Cloud Run 中設定
+gcloud run services update chatgpt-line-bot \
+    --region=asia-east1 \
+    --set-env-vars WHATSAPP_ACCESS_TOKEN=projects/PROJECT_ID/secrets/whatsapp-access-token/versions/latest \
+    --set-env-vars WHATSAPP_PHONE_NUMBER_ID=projects/PROJECT_ID/secrets/whatsapp-phone-number-id/versions/latest \
+    --set-env-vars WHATSAPP_APP_SECRET=projects/PROJECT_ID/secrets/whatsapp-app-secret/versions/latest \
+    --set-env-vars WHATSAPP_VERIFY_TOKEN=projects/PROJECT_ID/secrets/whatsapp-verify-token/versions/latest
+```
+
+### 測試 WhatsApp 整合
+```bash
+# 測試 webhook 驗證
+curl -X GET "https://your-domain.com/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
+
+# 檢查平台狀態
+curl https://your-domain.com/health | jq '.checks.platforms'
+
+# 查看 WhatsApp 日誌
+gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"[WHATSAPP]"' --limit=50
+```
+
+### 申請流程
+1. **Meta Business Account**: 完成商業驗證
+2. **WhatsApp Business API**: 申請並等待審核（1-4週）
+3. **電話號碼**: 驗證專用電話號碼
+4. **測試**: 使用測試號碼進行初步測試
+5. **生產**: 審核通過後切換到生產環境
+
 ## 📞 支援和聯繫
 
 如遇到問題：
@@ -386,6 +446,12 @@ autoscaling.knative.dev/maxScale: "100"  # 最大實例數
 2. 查看 Google Cloud 狀態頁面
 3. 檢查監控和日誌
 4. 聯繫開發團隊
+
+### WhatsApp 特殊問題
+- **Webhook 驗證失敗**: 檢查 verify_token 是否正確
+- **訊息發送失敗**: 確認 24 小時窗口限制
+- **API 認證錯誤**: 檢查 access_token 是否有效
+- **媒體下載失敗**: 確認網路連線和權限
 
 ---
 

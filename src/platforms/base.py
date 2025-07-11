@@ -16,6 +16,7 @@ class PlatformType(Enum):
     DISCORD = "discord"
     TELEGRAM = "telegram"
     SLACK = "slack"
+    WHATSAPP = "whatsapp"
     WEB = "web"
     API = "api"
 

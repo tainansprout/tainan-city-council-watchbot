@@ -6,10 +6,11 @@
 
 **絕對不要**在任何情況下將以下敏感資訊提交到版本控制系統：
 
-- API 金鑰（OpenAI、Line Bot 等）
+- API 金鑰（OpenAI、Line Bot、WhatsApp 等）
 - 資料庫密碼
 - SSL 憑證和私鑰
 - Service Account 金鑰
+- WhatsApp Business API 憑證
 - 任何包含敏感資訊的配置檔案
 
 ## 🛡️ 敏感資訊管理
@@ -224,6 +225,7 @@ gcloud logging sinks create security-sink \
 - 新增 `InputValidator` 類別進行全面的輸入清理
 - 實施長度限制、XSS 防護、危險模式檢測
 - 驗證 Line 用戶 ID 格式
+- WhatsApp webhook 實施 HMAC-SHA256 簽名驗證
 
 #### 2. 敏感資訊洩露風險
 **問題**: 日誌可能記錄敏感資訊

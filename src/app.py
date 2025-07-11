@@ -211,9 +211,12 @@ class MultiPlatformChatBot:
             return self._health_check()
         
         # 通用 webhook 端點 - 使用平台路由
-        @self.app.route("/webhooks/<platform_name>", methods=['POST'])
+        @self.app.route("/webhooks/<platform_name>", methods=['POST', 'GET'])
         def webhook_handler(platform_name):
-            return self._handle_webhook(platform_name)
+            if request.method == 'GET':
+                return self._handle_webhook_verification(platform_name)
+            else:
+                return self._handle_webhook(platform_name)
         
         # 向後兼容的 LINE callback 端點
         @self.app.route("/callback", methods=['POST'])
@@ -419,6 +422,54 @@ class MultiPlatformChatBot:
                 return jsonify({'error': detailed_error}), 500
         
         logger.info("Routes registered successfully")
+    
+    def _handle_webhook_verification(self, platform_name: str):
+        """處理 webhook 驗證請求（主要用於 WhatsApp）"""
+        try:
+            logger.info(f"[WEBHOOK_VERIFY] Received verification request for {platform_name}")
+            
+            # 解析平台類型
+            try:
+                platform_type = PlatformType(platform_name.lower())
+            except ValueError:
+                logger.error(f"[WEBHOOK_VERIFY] Unknown platform: {platform_name}")
+                abort(404)
+            
+            # 只有 WhatsApp 需要 webhook 驗證
+            if platform_type == PlatformType.WHATSAPP:
+                # 取得 WhatsApp 處理器
+                handler = self.platform_manager.get_handler(platform_type)
+                if not handler:
+                    logger.error(f"[WEBHOOK_VERIFY] No handler found for WhatsApp")
+                    abort(404)
+                
+                # 取得驗證參數
+                hub_mode = request.args.get('hub.mode')
+                hub_verify_token = request.args.get('hub.verify_token')
+                hub_challenge = request.args.get('hub.challenge')
+                
+                logger.debug(f"[WEBHOOK_VERIFY] Mode: {hub_mode}, Token: {hub_verify_token}, Challenge: {hub_challenge}")
+                
+                # 驗證 webhook
+                if hub_mode == 'subscribe':
+                    challenge = handler.verify_webhook(hub_verify_token, hub_challenge)
+                    if challenge:
+                        logger.info("[WEBHOOK_VERIFY] WhatsApp webhook verification successful")
+                        return challenge
+                    else:
+                        logger.error("[WEBHOOK_VERIFY] WhatsApp webhook verification failed")
+                        abort(403)
+                else:
+                    logger.error(f"[WEBHOOK_VERIFY] Invalid hub mode: {hub_mode}")
+                    abort(400)
+            else:
+                # 其他平台不需要 GET 驗證
+                logger.warning(f"[WEBHOOK_VERIFY] Platform {platform_name} does not support GET verification")
+                abort(405)
+                
+        except Exception as e:
+            logger.error(f"[WEBHOOK_VERIFY] Error handling verification for {platform_name}: {e}")
+            abort(500)
     
     def _handle_webhook(self, platform_name: str):
         """統一的 webhook 處理器"""

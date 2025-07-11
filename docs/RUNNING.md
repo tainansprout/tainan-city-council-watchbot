@@ -9,6 +9,7 @@
 - **Discord Bot** - 群組聊天和指令功能
 - **Telegram Bot** - 豐富互動和檔案傳輸
 - **Slack Bot** - 企業級聊天機器人
+- **WhatsApp Bot** - 企業級客服，支援媒體訊息
 
 ### 🤖 支援的 AI 模型
 - **OpenAI GPT** - GPT-4 系列，Assistant API
@@ -18,6 +19,68 @@
 - **Ollama** - 本地部署，完全私有
 
 詳細配置請參考：[配置指南](CONFIGURATION.md)
+
+## 🌟 WhatsApp 平台功能
+
+### 📱 WhatsApp Business Cloud API
+WhatsApp 平台使用 Meta 官方的 WhatsApp Business Cloud API，提供企業級的即時通訊服務。
+
+#### 支援功能
+- ✅ **文字訊息**: 完整的文字內容接收和發送
+- ✅ **音訊訊息**: 自動下載和轉錄為文字
+- ✅ **圖片訊息**: 自動下載圖片檔案
+- ✅ **文件訊息**: 支援 PDF、DOC、XLSX 等格式
+- ✅ **位置訊息**: 經緯度座標和地址資訊
+- ✅ **聯絡人訊息**: 聯絡人卡片資訊
+- ✅ **簽名驗證**: HMAC-SHA256 webhook 安全驗證
+
+#### 技術特色
+- **官方 API**: 使用 Meta 官方 WhatsApp Business Cloud API
+- **統一介面**: 與其他平台使用相同的聊天服務
+- **媒體處理**: 自動媒體檔案下載和處理
+- **安全性**: 完整的簽名驗證和錯誤處理
+
+#### 申請要求
+- Meta Business Account 驗證
+- WhatsApp Business API 審核（1-4週）
+- 商業證明文件
+- 電話號碼驗證
+
+#### 限制說明
+- **24小時窗口**: 只能回覆用戶主動發送的訊息
+- **模板訊息**: 營銷訊息需要使用預先審核的模板
+- **費用計算**: 依據訊息量和地區計費
+- **群組限制**: 不支援群組訊息發送
+
+### 🔧 WhatsApp 設定
+```yaml
+platforms:
+  whatsapp:
+    enabled: true
+    access_token: "${WHATSAPP_ACCESS_TOKEN}"
+    phone_number_id: "${WHATSAPP_PHONE_NUMBER_ID}"
+    app_secret: "${WHATSAPP_APP_SECRET}"
+    verify_token: "${WHATSAPP_VERIFY_TOKEN}"
+    api_version: "v13.0"
+```
+
+### 📞 Webhook 設定
+- **Webhook URL**: `https://your-domain.com/webhooks/whatsapp`
+- **驗證方式**: GET 請求與 verify_token 驗證
+- **接收方式**: POST 請求包含訊息資料
+- **簽名驗證**: 使用 App Secret 進行 HMAC-SHA256 驗證
+
+### 🧪 測試命令
+```bash
+# 執行 WhatsApp 測試
+python -m pytest tests/unit/platforms/test_whatsapp_handler.py -v
+
+# 檢查平台狀態
+curl http://your-domain.com/health | jq '.checks.platforms'
+
+# 測試 webhook 驗證
+curl -X GET "https://your-domain.com/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test"
+```
 
 ## 📁 項目結構
 
