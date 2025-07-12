@@ -218,11 +218,6 @@ class MultiPlatformChatBot:
             else:
                 return self._handle_webhook(platform_name)
         
-        # 向後兼容的 LINE callback 端點
-        @self.app.route("/callback", methods=['POST'])
-        def line_callback():
-            return self._handle_webhook('line')
-        
         # 根路徑
         @self.app.route("/")
         def home():
@@ -424,7 +419,7 @@ class MultiPlatformChatBot:
         logger.info("Routes registered successfully")
     
     def _handle_webhook_verification(self, platform_name: str):
-        """處理 webhook 驗證請求（主要用於 WhatsApp）"""
+        """處理 webhook 驗證請求（主要用於 WhatsApp、Messenger 和 Instagram）"""
         try:
             logger.info(f"[WEBHOOK_VERIFY] Received verification request for {platform_name}")
             
@@ -435,12 +430,12 @@ class MultiPlatformChatBot:
                 logger.error(f"[WEBHOOK_VERIFY] Unknown platform: {platform_name}")
                 abort(404)
             
-            # 只有 WhatsApp 需要 webhook 驗證
-            if platform_type == PlatformType.WHATSAPP:
-                # 取得 WhatsApp 處理器
+            # WhatsApp、Messenger 和 Instagram 需要 webhook 驗證
+            if platform_type in [PlatformType.WHATSAPP, PlatformType.MESSENGER, PlatformType.INSTAGRAM]:
+                # 取得平台處理器
                 handler = self.platform_manager.get_handler(platform_type)
                 if not handler:
-                    logger.error(f"[WEBHOOK_VERIFY] No handler found for WhatsApp")
+                    logger.error(f"[WEBHOOK_VERIFY] No handler found for {platform_name}")
                     abort(404)
                 
                 # 取得驗證參數
@@ -454,10 +449,10 @@ class MultiPlatformChatBot:
                 if hub_mode == 'subscribe':
                     challenge = handler.verify_webhook(hub_verify_token, hub_challenge)
                     if challenge:
-                        logger.info("[WEBHOOK_VERIFY] WhatsApp webhook verification successful")
+                        logger.info(f"[WEBHOOK_VERIFY] {platform_name} webhook verification successful")
                         return challenge
                     else:
-                        logger.error("[WEBHOOK_VERIFY] WhatsApp webhook verification failed")
+                        logger.error(f"[WEBHOOK_VERIFY] {platform_name} webhook verification failed")
                         abort(403)
                 else:
                     logger.error(f"[WEBHOOK_VERIFY] Invalid hub mode: {hub_mode}")
@@ -488,12 +483,11 @@ class MultiPlatformChatBot:
                 abort(404)
             
             # 取得請求資料
-            signature = request.headers.get('X-Line-Signature') or request.headers.get('X-Hub-Signature-256', '')
             body = request.get_data(as_text=True)
+            headers = dict(request.headers)
             
             logger.debug(f"[WEBHOOK] Request body size: {len(body)} bytes")
-            logger.debug(f"[WEBHOOK] Signature header: {'Present' if signature else 'Missing'}")
-            logger.debug(f"[WEBHOOK] Request headers: {dict(request.headers)}")
+            logger.debug(f"[WEBHOOK] Request headers: {headers}")
             logger.debug(f"[WEBHOOK] Request body preview: {body[:500]}..." if len(body) > 500 else f"[WEBHOOK] Request body: {body}")
             
             # 檢查平台管理器狀態
@@ -502,7 +496,7 @@ class MultiPlatformChatBot:
             # 使用平台管理器處理 webhook
             logger.debug(f"[WEBHOOK] Starting webhook processing with platform manager")
             messages = self.platform_manager.handle_platform_webhook(
-                platform_type, body, signature
+                platform_type, body, headers
             )
             
             logger.debug(f"[WEBHOOK] Platform manager returned {len(messages) if messages else 0} messages")

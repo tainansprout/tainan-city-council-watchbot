@@ -83,6 +83,18 @@ config_manager.force_reload()
 - `WHATSAPP_APP_SECRET` → `platforms.whatsapp.app_secret`
 - `WHATSAPP_VERIFY_TOKEN` → `platforms.whatsapp.verify_token`
 
+**Facebook Messenger Platform 配置**
+- `FACEBOOK_APP_ID` → `platforms.messenger.app_id`
+- `FACEBOOK_APP_SECRET` → `platforms.messenger.app_secret`
+- `FACEBOOK_PAGE_ACCESS_TOKEN` → `platforms.messenger.page_access_token`
+- `FACEBOOK_VERIFY_TOKEN` → `platforms.messenger.verify_token`
+
+**Instagram Business Cloud API 配置**
+- `INSTAGRAM_APP_ID` → `platforms.instagram.app_id`
+- `INSTAGRAM_APP_SECRET` → `platforms.instagram.app_secret`
+- `INSTAGRAM_PAGE_ACCESS_TOKEN` → `platforms.instagram.page_access_token`
+- `INSTAGRAM_VERIFY_TOKEN` → `platforms.instagram.verify_token`
+
 #### AI 模型配置
 
 **OpenAI 配置**
@@ -709,6 +721,194 @@ export SLACK_APP_TOKEN="xapp-your-slack-app-token"  # 可選
    - 在 "Event Subscriptions" 頁面啟用事件
    - 設定 Request URL：`https://your-domain.com/webhooks/slack`
 
+### WhatsApp Business API 配置
+
+WhatsApp Business API 提供企業級即時通訊服務，支援媒體訊息和音訊轉錄。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  whatsapp:
+    enabled: true                        # 啟用 WhatsApp 平台
+    access_token: "${WHATSAPP_ACCESS_TOKEN}"  # WhatsApp Access Token
+    phone_number_id: "${WHATSAPP_PHONE_NUMBER_ID}"  # 電話號碼 ID
+    app_secret: "${WHATSAPP_APP_SECRET}"  # App Secret（用於簽名驗證）
+    verify_token: "${WHATSAPP_VERIFY_TOKEN}"  # Webhook 驗證 Token
+    api_version: "v13.0"                 # API 版本
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export WHATSAPP_ACCESS_TOKEN="your_whatsapp_access_token"
+export WHATSAPP_PHONE_NUMBER_ID="your_phone_number_id"
+export WHATSAPP_APP_SECRET="your_app_secret"
+export WHATSAPP_VERIFY_TOKEN="your_verify_token"
+```
+
+#### 🔧 WhatsApp 設定步驟
+
+1. **建立 Meta Business Account**：
+   - 前往 [Meta Business](https://business.facebook.com/)
+   - 建立或選擇現有的 Business Account
+   - 通過身份驗證流程
+
+2. **設定 WhatsApp Business API**：
+   - 在 [Meta Developers](https://developers.facebook.com/) 建立應用程式
+   - 選擇 "Business" 類型應用程式
+   - 新增 "WhatsApp" 產品
+
+3. **取得憑證**：
+   - **Access Token**: 在 WhatsApp > Getting Started 頁面產生
+   - **Phone Number ID**: 在測試電話號碼旁邊找到
+   - **App Secret**: 在 App Settings > Basic 頁面找到
+   - **Verify Token**: 自行設定的隨機字串
+
+4. **設定 Webhook**：
+   - 在 WhatsApp > Configuration 頁面設定 Webhook URL
+   - 格式：`https://your-domain.com/webhooks/whatsapp`
+   - 輸入 Verify Token 並選擇事件類型
+
+### Facebook Messenger Platform 配置
+
+Facebook Messenger Platform 提供企業級聊天機器人服務，支援音訊轉錄和豐富互動功能。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  messenger:
+    enabled: true                        # 啟用 Messenger 平台
+    app_id: "${FACEBOOK_APP_ID}"         # Facebook App ID
+    app_secret: "${FACEBOOK_APP_SECRET}" # Facebook App Secret
+    page_access_token: "${FACEBOOK_PAGE_ACCESS_TOKEN}"  # 頁面存取權杖
+    verify_token: "${FACEBOOK_VERIFY_TOKEN}"  # Webhook 驗證 Token
+    api_version: "v19.0"                 # Graph API 版本
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export FACEBOOK_APP_ID="your_facebook_app_id"
+export FACEBOOK_APP_SECRET="your_facebook_app_secret"
+export FACEBOOK_PAGE_ACCESS_TOKEN="your_page_access_token"
+export FACEBOOK_VERIFY_TOKEN="your_verify_token"
+```
+
+#### 🔧 Messenger 設定步驟
+
+1. **建立 Facebook 應用程式**：
+   - 前往 [Meta Developers](https://developers.facebook.com/)
+   - 點擊 "Create App" 建立新應用程式
+   - 選擇 "Business" 類型
+
+2. **設定 Messenger Platform**：
+   - 在應用程式中新增 "Messenger" 產品
+   - 選擇要連結的 Facebook 頁面
+
+3. **取得憑證**：
+   - **App ID**: 在 App Settings > Basic 頁面頂部找到
+   - **App Secret**: 在 App Settings > Basic 頁面找到
+   - **Page Access Token**: 在 Messenger > Settings 頁面產生
+   - **Verify Token**: 自行設定的隨機字串
+
+4. **設定 Webhook**：
+   - 在 Messenger > Settings > Webhooks 設定
+   - Callback URL：`https://your-domain.com/webhooks/messenger`
+   - Verify Token：填入您設定的 verify_token
+   - 選擇事件：messages, messaging_postbacks
+
+5. **取得權限**：
+   - 確保應用程式有 "pages_messaging" 權限
+   - 如需發送給非測試用戶，需要通過 App Review
+
+#### 💡 音訊訊息支援
+
+Messenger 平台支援音訊訊息自動轉錄為文字（如同 LINE 平台）：
+- ✅ 自動下載音訊檔案
+- ✅ 使用相同的 AudioHandler 進行轉錄
+- ✅ 支援多種音訊格式
+- ✅ 統一的錯誤處理和日誌記錄
+
+### Instagram Business Cloud API 配置
+
+Instagram Business Cloud API 提供企業級的私訊聊天機器人服務，支援 Story 回覆和媒體訊息處理。
+
+#### 📋 完整配置範例
+
+```yaml
+platforms:
+  instagram:
+    enabled: true                        # 啟用 Instagram 平台
+    app_id: "${INSTAGRAM_APP_ID}"        # Instagram App ID
+    app_secret: "${INSTAGRAM_APP_SECRET}" # Instagram App Secret
+    page_access_token: "${INSTAGRAM_PAGE_ACCESS_TOKEN}"  # 頁面存取權杖
+    verify_token: "${INSTAGRAM_VERIFY_TOKEN}"  # Webhook 驗證 Token
+    api_version: "v19.0"                 # Graph API 版本
+```
+
+#### 🌍 環境變數設定
+
+```bash
+export INSTAGRAM_APP_ID="your_instagram_app_id"
+export INSTAGRAM_APP_SECRET="your_instagram_app_secret"
+export INSTAGRAM_PAGE_ACCESS_TOKEN="your_instagram_page_access_token"
+export INSTAGRAM_VERIFY_TOKEN="your_instagram_verify_token"
+```
+
+#### 🔧 Instagram 設定步驟
+
+1. **建立 Facebook 應用程式**：
+   - 前往 [Meta Developers](https://developers.facebook.com/)
+   - 點擊 "Create App" 建立新應用程式
+   - 選擇 "Business" 類型
+
+2. **設定 Instagram Basic Display**：
+   - 在應用程式中新增 "Instagram Basic Display" 產品
+   - 選擇要連結的 Instagram 商業帳號
+
+3. **取得憑證**：
+   - **App ID**: 在 App Settings > Basic 頁面頂部找到
+   - **App Secret**: 在 App Settings > Basic 頁面找到
+   - **Page Access Token**: 需要將 Instagram 帳號連接到 Facebook 頁面後產生
+   - **Verify Token**: 自行設定的隨機字串
+
+4. **連接 Instagram 商業帳號**：
+   - 確保您有 Instagram 商業帳號（Business Account）
+   - 在 Facebook 商業管理工具中連接 Instagram 帳號到 Facebook 頁面
+   - 取得連接後的頁面存取權杖
+
+5. **設定 Webhook**：
+   - 在 Instagram Basic Display > Webhooks 設定
+   - Callback URL：`https://your-domain.com/webhooks/instagram`
+   - Verify Token：填入您設定的 verify_token
+   - 選擇事件：messages, messaging_postbacks
+
+6. **取得權限**：
+   - 確保應用程式有 "instagram_basic" 和 "instagram_manage_messages" 權限
+   - 如需發送給非測試用戶，需要通過 App Review
+
+#### 💡 Instagram 功能支援
+
+Instagram 平台支援以下功能：
+- ✅ **文字訊息**: 完整的文字內容接收和發送
+- ✅ **音訊訊息**: 自動下載和轉錄為文字（如同 LINE 平台）
+- ✅ **圖片訊息**: 自動下載圖片檔案
+- ✅ **影片訊息**: 支援影片檔案處理
+- ✅ **檔案訊息**: 支援各種檔案格式
+- ✅ **Story 回覆**: 回覆用戶的 Story 提及和互動
+- ✅ **簽名驗證**: HMAC-SHA1 webhook 安全驗證
+
+#### ⚠️ Instagram 限制說明
+
+- **商業帳號**: 僅支援 Instagram 商業帳號
+- **用戶發起**: 只能回覆用戶主動發送的訊息
+- **24小時窗口**: 使用者互動後24小時內可自由回覆
+- **Story 回覆**: 僅能回覆提及商業帳號的 Story
+- **頁面綁定**: 需要將 Instagram 帳號連接到 Facebook 頁面
+- **審核流程**: 某些功能需要 Meta 審核
+
 ---
 
 ## 🔒 安全配置詳細說明 (v2.1)
@@ -1173,6 +1373,18 @@ DB_NAME=your_db_name
 | Slack Bot Token | `platforms.slack.bot_token` | `SLACK_BOT_TOKEN` | `SLACK_BOT_TOKEN` |
 | Slack Signing Secret | `platforms.slack.signing_secret` | `SLACK_SIGNING_SECRET` | `SLACK_SIGNING_SECRET` |
 | Slack App Token | `platforms.slack.app_token` | `SLACK_APP_TOKEN` | `SLACK_APP_TOKEN` |
+| WhatsApp Access Token | `platforms.whatsapp.access_token` | `WHATSAPP_ACCESS_TOKEN` | `WHATSAPP_ACCESS_TOKEN` |
+| WhatsApp Phone Number ID | `platforms.whatsapp.phone_number_id` | `WHATSAPP_PHONE_NUMBER_ID` | `WHATSAPP_PHONE_NUMBER_ID` |
+| WhatsApp App Secret | `platforms.whatsapp.app_secret` | `WHATSAPP_APP_SECRET` | `WHATSAPP_APP_SECRET` |
+| WhatsApp Verify Token | `platforms.whatsapp.verify_token` | `WHATSAPP_VERIFY_TOKEN` | `WHATSAPP_VERIFY_TOKEN` |
+| Messenger App ID | `platforms.messenger.app_id` | `FACEBOOK_APP_ID` | `FACEBOOK_APP_ID` |
+| Messenger App Secret | `platforms.messenger.app_secret` | `FACEBOOK_APP_SECRET` | `FACEBOOK_APP_SECRET` |
+| Messenger Page Access Token | `platforms.messenger.page_access_token` | `FACEBOOK_PAGE_ACCESS_TOKEN` | `FACEBOOK_PAGE_ACCESS_TOKEN` |
+| Messenger Verify Token | `platforms.messenger.verify_token` | `FACEBOOK_VERIFY_TOKEN` | `FACEBOOK_VERIFY_TOKEN` |
+| Instagram App ID | `platforms.instagram.app_id` | `INSTAGRAM_APP_ID` | `INSTAGRAM_APP_ID` |
+| Instagram App Secret | `platforms.instagram.app_secret` | `INSTAGRAM_APP_SECRET` | `INSTAGRAM_APP_SECRET` |
+| Instagram Page Access Token | `platforms.instagram.page_access_token` | `INSTAGRAM_PAGE_ACCESS_TOKEN` | `INSTAGRAM_PAGE_ACCESS_TOKEN` |
+| Instagram Verify Token | `platforms.instagram.verify_token` | `INSTAGRAM_VERIFY_TOKEN` | `INSTAGRAM_VERIFY_TOKEN` |
 
 ### AI 模型配置
 
@@ -1240,6 +1452,22 @@ platforms:
     app_secret: "your_app_secret"
     verify_token: "your_verify_token"
     api_version: "v13.0"
+  
+  messenger:
+    enabled: true
+    app_id: "your_facebook_app_id"
+    app_secret: "your_facebook_app_secret"
+    page_access_token: "your_facebook_page_access_token"
+    verify_token: "your_facebook_verify_token"
+    api_version: "v19.0"
+  
+  instagram:
+    enabled: true
+    app_id: "your_instagram_app_id"
+    app_secret: "your_instagram_app_secret"
+    page_access_token: "your_instagram_page_access_token"
+    verify_token: "your_instagram_verify_token"
+    api_version: "v19.0"
 
 openai:
   api_key: "sk-proj-xxxxxxxx"
@@ -1275,6 +1503,14 @@ export WHATSAPP_ACCESS_TOKEN="your_whatsapp_token"
 export WHATSAPP_PHONE_NUMBER_ID="your_phone_number_id"
 export WHATSAPP_APP_SECRET="your_app_secret"
 export WHATSAPP_VERIFY_TOKEN="your_verify_token"
+export FACEBOOK_APP_ID="your_facebook_app_id"
+export FACEBOOK_APP_SECRET="your_facebook_app_secret"
+export FACEBOOK_PAGE_ACCESS_TOKEN="your_facebook_page_access_token"
+export FACEBOOK_VERIFY_TOKEN="your_facebook_verify_token"
+export INSTAGRAM_APP_ID="your_instagram_app_id"
+export INSTAGRAM_APP_SECRET="your_instagram_app_secret"
+export INSTAGRAM_PAGE_ACCESS_TOKEN="your_instagram_page_access_token"
+export INSTAGRAM_VERIFY_TOKEN="your_instagram_verify_token"
 export OPENAI_API_KEY="sk-proj-xxxxxxxx"
 export OPENAI_ASSISTANT_ID="asst_xxxxxxxx"
 export DB_HOST="localhost"

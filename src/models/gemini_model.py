@@ -24,10 +24,22 @@ class GeminiModel(FullLLMInterface):
     """
     Google Gemini 2024 模型實作
     
-    特色功能：
+    📋 架構職責分工：
+    ✅ RESPONSIBILITIES (模型層職責):
+      - 實作統一的 FullLLMInterface 接口
+      - 提供 chat_with_user() 文字對話功能
+      - 提供 transcribe_audio() 音訊轉錄功能
+      - 管理對話歷史和上下文
+      - 處理 Google AI API 限流和重試邏輯
+
+    🎯 模型特色：
     - Semantic Retrieval API: Google 的語義檢索服務
     - Multimodal RAG: 支援文字、圖片、影片的混合檢索
     - Long Context Window: Gemini Pro 1.5 支援百萬 token 上下文
+
+    ⚠️ 功能限制：
+    - 音訊轉錄: 使用多模態API (Beta階段，可能不穩定)
+    - 圖片生成: 目前不支援 (返回 "Gemini 目前不支援圖片生成")
     - Vertex AI 整合: 企業級 AI 平台整合
     - Ranking API: 智慧重排序提升檢索品質
     """

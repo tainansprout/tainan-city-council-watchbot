@@ -176,7 +176,7 @@ class TestLineHandlerMessageParsing:
 
 class TestLineHandlerWebhook:
     """測試 Webhook 處理"""
-    
+
     @pytest.fixture
     def handler(self):
         config = {
@@ -188,54 +188,78 @@ class TestLineHandlerWebhook:
                 }
             }
         }
-        
         with patch('src.platforms.line_handler.WebhookParser') as mock_parser, \
              patch('src.platforms.line_handler.Configuration') as mock_config:
-            
             handler = LineHandler(config)
-            
-            # 確保 handler 有必要的屬性（模擬完整初始化）
-            if not hasattr(handler, 'parser'):
-                handler.parser = mock_parser.return_value
-            if not hasattr(handler, 'configuration'):
-                handler.configuration = mock_config.return_value
-            
+            handler.parser = mock_parser.return_value
+            handler.configuration = mock_config.return_value
             return handler
-    
-    def test_handle_webhook_success(self, handler):
-        """測試成功處理 webhook"""
-        request_body = '{"events": []}'
-        signature = 'valid_signature'
+
+    def test_handle_webhook_success_with_events(self, handler):
+        """測試成功處理帶有事件的 webhook"""
+        request_body = '{"events": ["event1", "event2"]}'
+        headers = {'X-Line-Signature': 'valid_signature'}
         
-        # 確保 handler 有 parser 屬性（模擬完整初始化）
-        if not hasattr(handler, 'parser'):
-            handler.parser = Mock()
+        # 模擬 parser 回傳兩個事件
+        mock_event1 = Mock()
+        mock_event2 = Mock()
+        handler.parser.parse.return_value = [mock_event1, mock_event2]
         
-        # Mock parser.parse 方法
-        handler.parser.parse.return_value = []
-        
-        result = handler.handle_webhook(request_body, signature)
-        
-        assert result == []
-        handler.parser.parse.assert_called_once_with(request_body, signature)
-    
+        # 模擬 parse_message 的回傳值
+        mock_user = PlatformUser(user_id="test_user", platform=PlatformType.LINE)
+        mock_msg = PlatformMessage(message_id="1", user=mock_user, content="msg1")
+        with patch.object(handler, 'parse_message', side_effect=[mock_msg, None]) as mock_parse_message:
+            messages = handler.handle_webhook(request_body, headers)
+            
+            # 驗證 messages 不是 None
+            assert messages is not None
+            assert isinstance(messages, list)
+            
+            # 驗證 parser 被正確呼叫
+            handler.parser.parse.assert_called_once_with(request_body, headers['X-Line-Signature'])
+            
+            # 驗證 parse_message 被呼叫兩次
+            assert mock_parse_message.call_count == 2
+            mock_parse_message.assert_any_call(mock_event1)
+            mock_parse_message.assert_any_call(mock_event2)
+            
+            # 驗證回傳的訊息列表
+            assert len(messages) == 1
+            assert messages[0].content == "msg1"
+
     def test_handle_webhook_invalid_signature(self, handler):
         """測試無效簽名的 webhook"""
         request_body = '{"events": []}'
-        signature = 'invalid_signature'
-        
-        # 確保 handler 有 parser 屬性（模擬完整初始化）
-        if not hasattr(handler, 'parser'):
-            handler.parser = Mock()
+        headers = {'X-Line-Signature': 'invalid_signature'}
         
         from linebot.v3.exceptions import InvalidSignatureError
         handler.parser.parse.side_effect = InvalidSignatureError('Invalid signature')
         
-        # 根據實際實現，InvalidSignatureError 被捕獲並返回空列表，而不是重新拋出
-        result = handler.handle_webhook(request_body, signature)
+        messages = handler.handle_webhook(request_body, headers)
         
-        assert result == []
-        handler.parser.parse.assert_called_once_with(request_body, signature)
+        assert messages == []
+        handler.parser.parse.assert_called_once_with(request_body, headers['X-Line-Signature'])
+
+    def test_handle_webhook_no_signature(self, handler):
+        """測試沒有簽名的 webhook"""
+        request_body = '{"events": []}'
+        
+        messages = handler.handle_webhook(request_body, {}) # 空 headers
+        
+        assert messages == []
+        handler.parser.parse.assert_not_called()
+
+    def test_handle_webhook_parser_exception(self, handler):
+        """測試解析器拋出一般例外"""
+        request_body = '{"events": []}'
+        headers = {'X-Line-Signature': 'valid_signature'}
+        
+        handler.parser.parse.side_effect = Exception('Something went wrong')
+        
+        messages = handler.handle_webhook(request_body, headers)
+        
+        assert messages == []
+        handler.parser.parse.assert_called_once_with(request_body, headers['X-Line-Signature'])
 
 
 class TestLineHandlerResponse:

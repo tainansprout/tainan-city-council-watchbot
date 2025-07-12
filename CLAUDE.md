@@ -82,12 +82,67 @@ gcloud run deploy {service-name} \
 - **src/database/models.py**: SQLAlchemy ORM models
 - **src/database/operations.py**: Database operations toolkit
 
+### Message Processing Flow
+
+The system follows a **strict separation of concerns** architecture to ensure maintainability and extensibility:
+
+#### Text Message Flow
+```
+User → Platform Handler → App.py → ChatService → Model → Response
+```
+
+#### Audio Message Flow  
+```
+User → Platform Handler → App.py → AudioService → Model (transcription) → App.py → ChatService → Model (chat) → Response
+```
+
+#### Detailed Processing Steps
+
+**1. Platform Layer (src/platforms/)**
+- **Responsibility**: Webhook parsing, message extraction, media download, response delivery
+- **NEVER**: Perform audio transcription or AI model calls
+- **Output**: PlatformMessage with raw_data for audio messages
+
+**2. Application Layer (src/app.py)**
+- **Responsibility**: Message routing and service coordination
+- **Process**: 
+  - Receive PlatformMessage from platform handlers
+  - Route audio messages to AudioService for transcription
+  - Route text messages (including transcribed audio) to ChatService
+  - Coordinate response delivery back to platforms
+
+**3. Service Layer**
+- **AudioService (src/services/audio.py)**: Audio-to-text transcription only
+- **ChatService (src/services/chat.py)**: Text message processing and AI conversation
+- **NEVER**: Services should not know about specific platforms
+
+**4. Model Layer (src/models/)**
+- **Responsibility**: AI functionality (chat, transcription)
+- **NEVER**: Know about platform sources or message routing
+
 ### Key Architecture Patterns
 
 1. **Factory Pattern**: Model and platform selection
-2. **Strategy Pattern**: Platform-specific message handling
-3. **Multi-Platform Support**: Unified conversation management
-4. **Model Agnostic**: Support for multiple AI providers
+2. **Strategy Pattern**: Platform-specific message handling  
+3. **Dependency Injection**: Model instances injected into services
+4. **Separation of Concerns**: Each layer has single responsibility
+5. **Multi-Platform Support**: Unified conversation management
+6. **Model Agnostic**: Support for multiple AI providers
+
+### Critical Design Principles
+
+⚠️ **NEVER violate these principles**:
+
+1. **Platform handlers MUST NOT call model APIs directly**
+2. **Models MUST NOT know about platform types**
+3. **Audio transcription MUST happen in AudioService, not platforms**
+4. **App.py is the ONLY coordinator between layers**
+5. **Each layer should have single responsibility**
+
+📖 **For detailed documentation, see:**
+- **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Interface Specifications**: [docs/INTERFACES.md](docs/INTERFACES.md)  
+- **Model Status & Features**: [docs/MODEL_STATUS.md](docs/MODEL_STATUS.md)
 
 ## Configuration
 
@@ -225,6 +280,77 @@ src/
 ```
 
 ### Key Development Patterns
+
+#### Platform Handler Implementation (CORRECT)
+```python
+# ✅ CORRECT: Platform only downloads and provides raw data
+class PlatformHandler(BasePlatformHandler):
+    def parse_message(self, event) -> PlatformMessage:
+        if message_type == "audio":
+            # Only download raw audio data
+            raw_data = self._download_audio(audio_url)
+            content = "[Audio Message]"  # Placeholder text
+            
+            return PlatformMessage(
+                message_type="audio",
+                content=content,
+                raw_data=raw_data  # Provide to app layer
+            )
+```
+
+#### Platform Handler Anti-Pattern (WRONG)
+```python
+# ❌ WRONG: Platform should NOT transcribe audio
+class PlatformHandler(BasePlatformHandler):
+    def parse_message(self, event) -> PlatformMessage:
+        if message_type == "audio":
+            raw_data = self._download_audio(audio_url)
+            # ❌ DON'T DO THIS: Platform calling model
+            transcribed_text = self.audio_handler.transcribe_audio(raw_data)
+            return PlatformMessage(content=transcribed_text)
+```
+
+#### App Layer Coordination (CORRECT)
+```python
+# ✅ CORRECT: App.py coordinates services
+def _handle_webhook(self, platform_name: str):
+    messages = self.platform_manager.handle_platform_webhook(...)
+    
+    for message in messages:
+        if message.message_type == "audio":
+            # Step 1: AudioService transcribes
+            audio_result = self.audio_service.handle_message(
+                user_id=message.user.user_id,
+                audio_content=message.raw_data
+            )
+            
+            if audio_result['success']:
+                # Step 2: Create text message for ChatService  
+                text_message = PlatformMessage(
+                    content=audio_result['transcribed_text'],
+                    message_type="text"
+                )
+                # Step 3: ChatService processes text
+                response = self.chat_service.handle_message(text_message)
+        else:
+            # Direct text processing
+            response = self.chat_service.handle_message(message)
+```
+
+#### Service Layer Implementation (CORRECT)
+```python
+# ✅ CORRECT: Services are platform-agnostic
+class AudioService:
+    def handle_message(self, user_id: str, audio_content: bytes, platform: str):
+        # Only transcribes audio, doesn't know about platform specifics
+        success, transcribed_text, error = process_audio(audio_content, self.model)
+        return {'success': success, 'transcribed_text': transcribed_text}
+
+class ChatService:
+    def handle_message(self, message: PlatformMessage):
+        # Only processes text, works with any platform
+        return self.model.chat_with_user(message.user.user_id, message.content)
+```
 
 #### Configuration Management
 ```python

@@ -9,6 +9,8 @@ from .discord_handler import DiscordHandler
 from .telegram_handler import TelegramHandler
 from .slack_handler import SlackHandler
 from .whatsapp_handler import WhatsAppHandler
+from .messenger_handler import MessengerHandler
+from .instagram_handler import InstagramHandler
 
 logger = get_logger(__name__)
 
@@ -31,7 +33,9 @@ class PlatformRegistry:
         self.register(PlatformType.TELEGRAM, TelegramHandler)
         self.register(PlatformType.SLACK, SlackHandler)
         self.register(PlatformType.WHATSAPP, WhatsAppHandler)
-        logger.info("Built-in platform handlers registered: LINE, Discord, Telegram, Slack, WhatsApp")
+        self.register(PlatformType.MESSENGER, MessengerHandler)
+        self.register(PlatformType.INSTAGRAM, InstagramHandler)
+        logger.info("Built-in platform handlers registered: LINE, Discord, Telegram, Slack, WhatsApp, Messenger, Instagram")
     
     def register(self, platform_type: PlatformType, handler_class: Type[BasePlatformHandler]):
         """註冊平台處理器類別"""

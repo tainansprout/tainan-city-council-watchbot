@@ -606,7 +606,7 @@ class AudioInterface(ABC):
             - 接受常見音訊格式（MP3、WAV、OGG、M4A 等）
             - 自動檢測語言（中文、英文等）
             - 返回準確的文字轉錄結果
-            - 處理音訊質量問題和噪音
+            - 處理音訊品質問題和噪音
             - 支援較長的音訊文件（通常 10-25MB 限制）
         
         實作策略對比:
@@ -738,8 +738,33 @@ class FullLLMInterface(BaseLLMInterface, UserConversationInterface, RAGInterface
     
     當前實作狀態:
         - OpenAIModel: ✅ 完整實作所有功能
-        - AnthropicModel: ✅ 完整實作，圖片生成返回不支援
-        - GeminiModel: 🔄 實作中
-        - OllamaModel: 🔄 本地模型實作
+          ├─ 對話: ✅ Assistant API with thread management
+          ├─ 音訊轉錄: ✅ Whisper API (原生支援)
+          ├─ 圖片生成: ✅ DALL-E API
+          └─ 連線狀態: ✅ 穩定
+          
+        - AnthropicModel: ✅ 完整實作 (部分功能有限制)
+          ├─ 對話: ✅ Messages API (最佳效能)
+          ├─ 音訊轉錄: ⚠️ 需配置外部服務 (Deepgram/AssemblyAI)
+          ├─ 圖片生成: ❌ 不支援
+          └─ 連線狀態: ✅ 穩定
+          
+        - GeminiModel: ✅ 完整實作 (音訊功能實驗性)
+          ├─ 對話: ✅ GenerativeAI API (長文本支援佳)
+          ├─ 音訊轉錄: ⚠️ 多模態API (Beta階段，可能不穩定)
+          ├─ 圖片生成: ❌ 目前不支援
+          └─ 連線狀態: ✅ 穩定
+          
+        - HuggingFaceModel: ✅ 完整實作 (依賴模型可用性)
+          ├─ 對話: ✅ Inference API (支援多種開源模型)
+          ├─ 音訊轉錄: ✅ ASR模型 (Whisper/Wav2Vec2，依模型而定)
+          ├─ 圖片生成: ✅ Diffusion模型 (Stable Diffusion等)
+          └─ 連線狀態: ⚠️ 依賴Hugging Face服務和模型狀態
+          
+        - OllamaModel: ⚠️ 基本功能正常 (本地部署，功能受限)
+          ├─ 對話: ✅ 本地LLM (Llama2, Mistral等)
+          ├─ 音訊轉錄: ⚠️ 需本地安裝Whisper (`pip install openai-whisper`)
+          ├─ 圖片生成: ❌ 目前不支援
+          └─ 連線狀態: ⚠️ 依賴本地Ollama服務狀態
     """
     pass

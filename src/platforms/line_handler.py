@@ -1,6 +1,29 @@
 """
 LINE 平台處理器
 使用官方 LINE SDK v3 簡化簽名驗證與事件解析
+
+📋 架構職責分工：
+✅ RESPONSIBILITIES (平台層職責):
+  - 解析 LINE webhook events
+  - 下載音訊/圖片等媒體檔案
+  - 透過 LINE Messaging API 發送回應
+  - 使用官方 SDK 進行簽名驗證
+
+❌ NEVER DO (絕對禁止):
+  - 呼叫 AI 模型 API (音訊轉錄、文字生成)
+  - 處理對話邏輯或歷史記錄
+  - 知道或依賴特定的 AI 模型類型
+  - 直接調用 AudioService 或 ChatService
+
+🔄 資料流向：
+  LINE Webhook → parse_message() → PlatformMessage → app.py
+  app.py → send_response() → LINE Messaging API
+
+🎯 平台特色：
+  - 使用 reply_token 機制回應訊息
+  - 支援豐富的訊息類型 (文字、音訊、圖片、sticker等)
+  - Webhook 簽名使用 HMAC-SHA256 驗證
+  - 音訊檔案需透過 Blob API 下載
 """
 from ..core.logger import get_logger
 from typing import List, Optional, Any, Dict
@@ -75,14 +98,20 @@ class LineHandler(BasePlatformHandler):
                     blob_api = MessagingApiBlob(api_client)
                     audio_content = blob_api.get_message_content(message_id=event.message.id)
                 logger.debug(f"[LINE] parse_message downloaded audio content ({len(audio_content)} bytes)")
+                
+                # 只標記為音訊訊息，不在此層進行轉錄
+                content = "[Audio Message]"
+                logger.debug(f"[LINE] Audio message from {user.user_id}, size: {len(audio_content)} bytes")
+                    
             except Exception:
                 logger.error("[LINE] parse_message failed to download audio content", exc_info=True)
-                return None
+                audio_content = None
+                content = "[Audio Message - Download Failed]"
 
             return PlatformMessage(
                 message_id=event.message.id,
                 user=user,
-                content="[Audio Message]",
+                content=content,
                 message_type="audio",
                 raw_data=audio_content,
                 reply_token=event.reply_token,
@@ -91,8 +120,9 @@ class LineHandler(BasePlatformHandler):
 
         return None
 
-    def handle_webhook(self, request_body: str, signature: str) -> List[PlatformMessage]:
+    def handle_webhook(self, request_body: str, headers: Dict[str, str]) -> List[PlatformMessage]:
         messages: List[PlatformMessage] = []
+        signature = headers.get('X-Line-Signature')
         logger.debug(f"[LINE] handle_webhook start, signature={signature}, body_bytes={len(request_body)}")
         
         # 基本簽名格式檢查
@@ -116,8 +146,7 @@ class LineHandler(BasePlatformHandler):
             message = self.parse_message(event)
             if message:
                 messages.append(message)
-
-        logger.debug(f"[LINE] handle_webhook returning {len(messages)} messages")
+        
         return messages
 
     def send_response(self, response: PlatformResponse, message: PlatformMessage) -> bool:

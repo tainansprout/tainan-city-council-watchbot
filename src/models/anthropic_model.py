@@ -1,3 +1,38 @@
+"""
+Anthropic Claude Model 實作
+使用 Anthropic Messages API 提供聊天功能
+
+📋 架構職責分工：
+✅ RESPONSIBILITIES (模型層職責):
+  - 實作統一的 FullLLMInterface 接口
+  - 提供 chat_with_user() 文字對話功能
+  - 提供 transcribe_audio() 音訊轉錄功能 (透過外部服務)
+  - 管理對話歷史和上下文
+  - 處理 Anthropic API 限流和重試邏輯
+
+❌ NEVER DO (絕對禁止):
+  - 知道訊息來源平台 (LINE、Telegram 等)
+  - 處理平台特定的訊息格式
+  - 直接處理 webhook 或網路請求
+  - 路由訊息或協調服務
+
+🔄 統一接口：
+  - chat_with_user(user_id, message, platform) -> (bool, str, str)
+  - transcribe_audio(file_path) -> (bool, str, str)
+  - clear_user_history(user_id, platform) -> (bool, str)
+  - check_connection() -> (bool, str)
+
+🎯 模型特色：
+  - 使用 Claude 的 Messages API
+  - 支援長對話和複雜推理
+  - 優秀的程式碼和文字生成能力
+  - 對話歷史儲存在資料庫
+
+⚠️ 功能限制：
+  - 音訊轉錄: 需配置外部服務 (Deepgram/AssemblyAI)
+  - 圖片生成: 不支援 (返回 "Anthropic does not support image generation")
+"""
+
 import requests
 import json
 import time

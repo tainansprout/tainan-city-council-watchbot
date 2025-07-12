@@ -26,8 +26,25 @@ class OllamaModel(FullLLMInterface):
     """
     Ollama 本地模型實作
     
-    使用 Ollama API + 本地向量資料庫實現 RAG 功能
-    支援 llama2, codellama, mistral 等本地模型
+    📋 架構職責分工：
+    ✅ RESPONSIBILITIES (模型層職責):
+      - 實作統一的 FullLLMInterface 接口
+      - 提供 chat_with_user() 文字對話功能
+      - 提供 transcribe_audio() 音訊轉錄功能
+      - 管理對話歷史和上下文
+      - 處理本地 Ollama 服務連線和重試邏輯
+
+    🎯 模型特色：
+    - 完全本地部署，保護隱私
+    - 支援多種開源模型 (Llama2, Mistral, CodeLlama等)
+    - 本地向量資料庫實現 RAG 功能
+    - 無需網路連線運行
+
+    ⚠️ 功能限制：
+    - 音訊轉錄: 需本地安裝 Whisper (`pip install openai-whisper`)
+    - 圖片生成: 目前不支援
+    - 依賴本地 Ollama 服務運行狀態
+    - 需要充足的硬體資源 (RAM/GPU)
     """
     
     def __init__(self, base_url: str = "http://localhost:11434", model_name: str = "llama3.1:8b", embedding_model: str = "nomic-embed-text"):

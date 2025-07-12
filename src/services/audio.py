@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 class AudioHandler:
     """優化的音訊處理器 - 減少磁碟 I/O"""
     
-    def __init__(self):
+    def __init__(self, model_handler=None):
         self.temp_files_to_cleanup = set()
         self.cleanup_lock = threading.Lock()
         self.processing_stats = {
@@ -35,6 +35,7 @@ class AudioHandler:
             'average_processing_time': 0,
         }
         self.stats_lock = threading.Lock()
+        self.model_handler = model_handler
         
         # 註冊程式結束時的清理
         atexit.register(self._cleanup_all_temp_files)
@@ -83,6 +84,38 @@ class AudioHandler:
             # 🔥 非阻塞清理
             if temp_file_path:
                 self._schedule_cleanup(temp_file_path)
+    
+    def transcribe_audio(self, audio_content: bytes) -> str:
+        """
+        便捷的音訊轉錄方法
+        
+        Args:
+            audio_content: 音訊檔案內容（bytes）
+            
+        Returns:
+            轉錄的文字（失敗時返回錯誤訊息）
+        """
+        if self.model_handler is None:
+            # 如果沒有設定模型，使用全域模型
+            from ..models.factory import get_model_handler
+            try:
+                model_handler = get_model_handler()
+            except Exception as e:
+                logger.error(f"無法獲取模型處理器: {e}")
+                return "[Audio Message - Model Not Available]"
+        else:
+            model_handler = self.model_handler
+        
+        try:
+            success, transcription, error = self.process_audio(audio_content, model_handler)
+            if success and transcription:
+                return transcription
+            else:
+                logger.error(f"音訊轉錄失敗: {error}")
+                return "[Audio Message - Processing Failed]"
+        except Exception as e:
+            logger.error(f"音訊轉錄異常: {e}")
+            return "[Audio Message - Processing Failed]"
     
     def _can_use_memory_processing(self, model_handler) -> bool:
         """檢查是否可以使用記憶體處理"""

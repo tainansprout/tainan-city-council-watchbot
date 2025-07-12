@@ -1,13 +1,36 @@
 """
 WhatsApp Business Cloud API 平台處理器
 使用 Meta 官方的 WhatsApp Business Cloud API
+
+📋 架構職責分工：
+✅ RESPONSIBILITIES (平台層職責):
+  - 解析 WhatsApp Business webhooks
+  - 透過 Graph API 下載媒體檔案 (音訊、圖片等)
+  - 使用 Graph API 發送訊息
+  - Meta webhook 簽名驗證 (X-Hub-Signature-256)
+
+❌ NEVER DO (絕對禁止):
+  - 呼叫 AI 模型 API (音訊轉錄、文字生成)
+  - 處理對話邏輯或歷史記錄
+  - 知道或依賴特定的 AI 模型類型
+  - 直接調用 AudioService 或 ChatService
+
+🔄 資料流向：
+  WhatsApp Webhook → parse_message() → PlatformMessage → app.py
+  app.py → send_response() → WhatsApp Business API
+
+🎯 平台特色：
+  - 使用手機號碼作為用戶識別
+  - 支援多種媒體類型和互動式訊息
+  - 需要商業驗證和 Meta 審核
+  - 媒體檔案透過 Media ID 下載
+  - Webhook 驗證使用 verify_token
 """
 import json
 import requests
-import hmac
-import hashlib
 from typing import List, Optional, Any, Dict
 from ..core.logger import get_logger
+from ..utils.webhook import verify_meta_signature
 from .base import BasePlatformHandler, PlatformType, PlatformUser, PlatformMessage, PlatformResponse
 
 logger = get_logger(__name__)
@@ -27,6 +50,7 @@ class WhatsAppHandler(BasePlatformHandler):
         self.verify_token = self.get_config('verify_token')
         self.api_version = self.get_config('api_version', 'v13.0')
         self.base_url = f'https://graph.facebook.com/{self.api_version}'
+        
         
         if self.is_enabled() and self.validate_config():
             self.headers = {
@@ -116,11 +140,18 @@ class WhatsAppHandler(BasePlatformHandler):
                 
             elif message_type == 'audio':
                 audio_data = message_data.get('audio', {})
-                content = '[Audio Message]'
-                # 可以在這裡下載音訊檔案
                 media_id = audio_data.get('id')
                 if media_id:
                     raw_data = self._download_media(media_id)
+                    if raw_data:
+                        content = '[Audio Message]'
+                        logger.debug(f"[WHATSAPP] Audio message from {from_number}, size: {len(raw_data)} bytes")
+                    else:
+                        content = '[Audio Message - Download Failed]'
+                        raw_data = None
+                else:
+                    content = '[Audio Message]'
+                    raw_data = None
                 logger.debug(f"[WHATSAPP] parse_message audio from {from_number}, media_id: {media_id}")
                 
             elif message_type == 'image':
@@ -208,8 +239,6 @@ class WhatsAppHandler(BasePlatformHandler):
             
             if response.response_type == "text":
                 return self._send_text_message(to_number, response.content)
-            elif response.response_type == "audio" and response.raw_response:
-                return self._send_audio_message(to_number, response.raw_response)
             else:
                 logger.warning(f"[WHATSAPP] send_response unsupported response type: {response.response_type}")
                 return False
@@ -247,76 +276,55 @@ class WhatsAppHandler(BasePlatformHandler):
             logger.error(f"[WHATSAPP] _send_text_message error: {e}")
             return False
 
-    def _send_audio_message(self, to_number: str, audio_data: bytes) -> bool:
-        """發送音訊訊息"""
-        try:
-            # WhatsApp Cloud API 需要先上傳媒體，然後使用 media_id 發送
-            # 這需要實作媒體上傳功能
-            logger.warning("[WHATSAPP] _send_audio_message not implemented yet")
-            return False
-                
-        except Exception as e:
-            logger.error(f"[WHATSAPP] _send_audio_message error: {e}")
-            return False
-
-    def handle_webhook(self, request_body: str, signature: str) -> List[PlatformMessage]:
-        """處理 WhatsApp webhook 請求"""
-        messages: List[PlatformMessage] = []
-        
-        try:
-            logger.debug(f"[WHATSAPP] handle_webhook received body: {request_body}")
-            
-            # 驗證 webhook 簽名
-            if self.app_secret and signature:
-                if not self._verify_signature(request_body, signature):
-                    logger.error("[WHATSAPP] handle_webhook signature verification failed")
-                    return []
-            
-            # 解析 webhook 資料
-            webhook_data = json.loads(request_body)
-            
-            # 檢查是否為驗證請求
-            if 'hub.mode' in webhook_data:
-                # 這是 webhook 驗證請求，不是訊息
-                logger.debug("[WHATSAPP] handle_webhook received verification request")
-                return []
-            
-            # 處理訊息事件
-            message = self.parse_message(webhook_data)
-            if message:
-                messages.append(message)
-                logger.debug(f"[WHATSAPP] handle_webhook parsed message from {message.user.user_id}")
-                
-        except json.JSONDecodeError as e:
-            logger.error(f"[WHATSAPP] handle_webhook JSON decode error: {e}")
-        except Exception as e:
-            logger.error(f"[WHATSAPP] handle_webhook error: {e}")
-        
-        logger.debug(f"[WHATSAPP] handle_webhook returning {len(messages)} messages")
-        return messages
-
     def _verify_signature(self, request_body: str, signature: str) -> bool:
-        """驗證 webhook 簽名"""
+        """驗證 WhatsApp webhook 簽名"""
         try:
-            # WhatsApp 使用 HMAC-SHA256 驗證
-            if not signature.startswith('sha256='):
-                logger.error("[WHATSAPP] _verify_signature invalid signature format")
-                return False
+            if isinstance(request_body, str):
+                body_bytes = request_body.encode('utf-8')
+            else:
+                body_bytes = request_body
             
-            signature_hash = signature[7:]  # 移除 'sha256=' 前綴
-            expected_signature = hmac.new(
-                self.app_secret.encode('utf-8'),
-                request_body.encode('utf-8'),
-                hashlib.sha256
-            ).hexdigest()
-            
-            is_valid = hmac.compare_digest(signature_hash, expected_signature)
-            logger.debug(f"[WHATSAPP] _verify_signature result: {is_valid}")
-            return is_valid
-            
+            return verify_meta_signature(self.app_secret, body_bytes, signature)
         except Exception as e:
-            logger.error(f"[WHATSAPP] _verify_signature error: {e}")
+            logger.error(f"[WHATSAPP] Signature verification error: {e}")
             return False
+
+    def handle_webhook(self, request_body: str, headers: Dict[str, str]) -> List[PlatformMessage]:
+        """處理 WhatsApp webhook 請求"""
+        signature = headers.get('X-Hub-Signature') or headers.get('X-Hub-Signature-256')
+        if self.app_secret and signature and not self._verify_signature(request_body, signature):
+            logger.error("[WHATSAPP] Webhook signature verification failed.")
+            return []
+
+        messages: List[PlatformMessage] = []
+        try:
+            webhook_data = json.loads(request_body)
+            if webhook_data.get('object') != 'whatsapp_business_account':
+                return []
+
+            for entry in webhook_data.get('entry', []):
+                for change in entry.get('changes', []):
+                    value = change.get('value', {})
+                    
+                    # 建構完整的事件對象傳給 parse_message
+                    event = {
+                        'object': 'whatsapp_business_account',
+                        'entry': [{
+                            'changes': [{'value': value}]
+                        }]
+                    }
+                    
+                    for message_data in value.get('messages', []):
+                        message = self.parse_message(event)
+                        if message:
+                            messages.append(message)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[WHATSAPP] JSON decode error: {e}")
+        except Exception as e:
+            logger.error(f"[WHATSAPP] Webhook handling error: {e}")
+        
+        return messages
 
     def verify_webhook(self, verify_token: str, challenge: str) -> Optional[str]:
         """驗證 webhook 設定"""

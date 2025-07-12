@@ -1,0 +1,639 @@
+"""
+Instagram Business Cloud API 處理器測試
+"""
+import pytest
+import json
+from unittest.mock import Mock, patch, MagicMock
+from src.platforms.instagram_handler import InstagramHandler
+from src.utils.webhook import verify_meta_signature
+from src.platforms.base import PlatformType, PlatformUser, PlatformMessage, PlatformResponse
+
+
+class TestInstagramHandler:
+    """Instagram 處理器測試類別"""
+    
+    @pytest.fixture
+    def config(self):
+        """測試配置"""
+        return {
+            'platforms': {
+                'instagram': {
+                    'enabled': True,
+                    'app_id': 'test_app_id_123',
+                    'app_secret': 'test_app_secret',
+                    'page_access_token': 'test_page_access_token',
+                    'verify_token': 'test_verify_token',
+                    'api_version': 'v19.0'
+                }
+            }
+        }
+    
+    @pytest.fixture
+    def disabled_config(self):
+        """停用的配置"""
+        return {
+            'platforms': {
+                'instagram': {
+                    'enabled': False,
+                    'app_id': 'test_app_id_123',
+                    'page_access_token': 'test_page_access_token',
+                    'verify_token': 'test_verify_token'
+                }
+            }
+        }
+    
+    @pytest.fixture
+    def invalid_config(self):
+        """無效配置"""
+        return {
+            'platforms': {
+                'instagram': {
+                    'enabled': True
+                    # 缺少必要的配置
+                }
+            }
+        }
+    
+    @pytest.fixture
+    def instagram_handler(self, config):
+        """Instagram 處理器實例"""
+        return InstagramHandler(config)
+    
+    def test_platform_type(self, instagram_handler):
+        """測試平台類型"""
+        assert instagram_handler.get_platform_type() == PlatformType.INSTAGRAM
+    
+    def test_required_config_fields(self, instagram_handler):
+        """測試必要配置欄位"""
+        required_fields = instagram_handler.get_required_config_fields()
+        assert 'app_id' in required_fields
+        assert 'app_secret' in required_fields
+        assert 'page_access_token' in required_fields
+        assert 'verify_token' in required_fields
+    
+    def test_config_validation_success(self, config):
+        """測試配置驗證成功"""
+        handler = InstagramHandler(config)
+        assert handler.validate_config() == True
+        assert handler.is_enabled() == True
+    
+    def test_config_validation_failure(self, invalid_config):
+        """測試配置驗證失敗"""
+        handler = InstagramHandler(invalid_config)
+        assert handler.validate_config() == False
+    
+    def test_disabled_platform(self, disabled_config):
+        """測試停用平台"""
+        handler = InstagramHandler(disabled_config)
+        assert handler.is_enabled() == False
+    
+    def test_parse_text_message(self, instagram_handler):
+        """測試解析文字訊息"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": [{
+                "id": "page_id_123",
+                "time": 1458692752478,
+                "messaging": [{
+                    "sender": {
+                        "id": "user_id_123"
+                    },
+                    "recipient": {
+                        "id": "page_id_123"
+                    },
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.1457764197618:41d102a3e1ae206a38",
+                        "text": "Hello Instagram",
+                        "seq": 73
+                    }
+                }]
+            }]
+        }
+        
+        with patch('requests.get') as mock_get:
+            # 模擬用戶資訊請求
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "name": "Test User",
+                "username": "testuser"
+            }
+            mock_get.return_value = mock_response
+            
+            message = instagram_handler.parse_message(webhook_event)
+        
+        assert message is not None
+        assert message.message_id == 'mid.1457764197618:41d102a3e1ae206a38'
+        assert message.content == 'Hello Instagram'
+        assert message.message_type == 'text'
+        assert message.user.user_id == 'user_id_123'
+        assert message.user.platform == PlatformType.INSTAGRAM
+        assert message.user.display_name == 'Test User'
+        assert message.metadata['sender_id'] == 'user_id_123'
+        assert message.metadata['recipient_id'] == 'page_id_123'
+    
+    def test_parse_audio_message(self, instagram_handler):
+        """測試解析音訊訊息"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {
+                        "id": "user_id_123"
+                    },
+                    "recipient": {
+                        "id": "page_id_123"
+                    },
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.AUDIO123",
+                        "attachments": [{
+                            "type": "audio",
+                            "payload": {
+                                "url": "https://example.com/audio.mp3"
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        with patch.object(instagram_handler, '_download_media', return_value=b'fake_audio_data'):
+            message = instagram_handler.parse_message(webhook_event)
+        
+        assert message is not None
+        assert message.message_id == 'mid.AUDIO123'
+        assert '[Audio Message' in message.content
+        assert message.message_type == 'audio'
+        assert message.raw_data == b'fake_audio_data'
+    
+    def test_parse_image_message(self, instagram_handler):
+        """測試解析圖片訊息"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {
+                        "id": "user_id_123"
+                    },
+                    "recipient": {
+                        "id": "page_id_123"
+                    },
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.IMAGE123",
+                        "attachments": [{
+                            "type": "image",
+                            "payload": {
+                                "url": "https://example.com/image.jpg"
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        with patch.object(instagram_handler, '_download_media', return_value=b'fake_image_data'):
+            message = instagram_handler.parse_message(webhook_event)
+        
+        assert message is not None
+        assert message.message_type == 'image'
+        assert message.content == '[Image Message]'
+        assert message.raw_data == b'fake_image_data'
+    
+    def test_parse_story_reply_message(self, instagram_handler):
+        """測試解析 Story 回覆訊息"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {
+                        "id": "user_id_123"
+                    },
+                    "recipient": {
+                        "id": "page_id_123"
+                    },
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.STORY123",
+                        "attachments": [{
+                            "type": "story_reply",
+                            "payload": {
+                                "url": "https://example.com/story_reply"
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        message = instagram_handler.parse_message(webhook_event)
+        
+        assert message is not None
+        assert message.message_type == 'story_reply'
+        assert message.content == '[Story Reply]'
+    
+    def test_parse_non_instagram_event(self, instagram_handler):
+        """測試解析非 Instagram 事件"""
+        webhook_event = {
+            "object": "other_object",
+            "entry": []
+        }
+        
+        message = instagram_handler.parse_message(webhook_event)
+        assert message is None
+    
+    def test_parse_empty_event(self, instagram_handler):
+        """測試解析空事件"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": []
+        }
+        
+        message = instagram_handler.parse_message(webhook_event)
+        assert message is None
+    
+    @patch('src.platforms.instagram_handler.requests.post')
+    def test_send_text_message_success(self, mock_post, instagram_handler):
+        """測試發送文字訊息成功"""
+        # 模擬 API 回應
+        mock_response = Mock(spec=['status_code', 'text'])
+        mock_response.status_code = 200
+        mock_response.text = 'Success'
+        mock_post.return_value = mock_response
+        
+        # 建立測試訊息
+        user = PlatformUser(user_id='user_id_123', platform=PlatformType.INSTAGRAM)
+        message = PlatformMessage(
+            message_id='test_msg',
+            user=user,
+            content='Test message'
+        )
+        
+        response = PlatformResponse(
+            content='Hello back!',
+            response_type='text'
+        )
+        
+        # 測試發送
+        result = instagram_handler.send_response(response, message)
+        
+        assert result == True
+        mock_post.assert_called_once()
+        
+        # 驗證 API 呼叫參數
+        call_args = mock_post.call_args
+        assert 'https://graph.facebook.com/v19.0/me/messages' in call_args[0][0]
+        assert call_args[1]['json']['recipient']['id'] == 'user_id_123'
+        assert call_args[1]['json']['message']['text'] == 'Hello back!'
+    
+    @patch('src.platforms.instagram_handler.requests.post')
+    def test_send_text_message_failure(self, mock_post, instagram_handler):
+        """測試發送文字訊息失敗"""
+        # 模擬 API 錯誤回應
+        mock_response = Mock(spec=['status_code', 'text'])
+        mock_response.status_code = 400
+        mock_response.text = 'Bad Request'
+        mock_post.return_value = mock_response
+        
+        # 建立測試訊息
+        user = PlatformUser(user_id='user_id_123', platform=PlatformType.INSTAGRAM)
+        message = PlatformMessage(
+            message_id='test_msg',
+            user=user,
+            content='Test message'
+        )
+        
+        response = PlatformResponse(
+            content='Hello back!',
+            response_type='text'
+        )
+        
+        # 測試發送
+        result = instagram_handler.send_response(response, message)
+        
+        assert result == False
+    
+    def test_handle_webhook_single_message(self, instagram_handler):
+        """測試處理單一 webhook 訊息"""
+        webhook_data = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {
+                        "id": "user_id_123"
+                    },
+                    "recipient": {
+                        "id": "page_id_123"
+                    },
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.TEST123",
+                        "text": "Hello"
+                    }
+                }]
+            }]
+        }
+        
+        webhook_body = json.dumps(webhook_data)
+        # Calculate correct signature for the test
+        import hmac
+        import hashlib
+        expected_signature = hmac.new(
+            'test_app_secret'.encode('utf-8'),
+            webhook_body.encode('utf-8'),
+            hashlib.sha1
+        ).hexdigest()
+        signature = f'sha1={expected_signature}'
+        
+        headers = {'X-Hub-Signature': signature}
+        messages = instagram_handler.handle_webhook(webhook_body, headers)
+        
+        assert len(messages) == 1
+        assert messages[0].content == 'Hello'
+        assert messages[0].user.user_id == 'user_id_123'
+    
+    def test_handle_webhook_verification_request(self, instagram_handler):
+        """測試處理 webhook 驗證請求"""
+        webhook_data = {
+            "hub.mode": "subscribe",
+            "hub.verify_token": "test_verify_token",
+            "hub.challenge": "challenge_value"
+        }
+        
+        webhook_body = json.dumps(webhook_data)
+        signature = ''
+        
+        headers = {'X-Hub-Signature': signature}
+        messages = instagram_handler.handle_webhook(webhook_body, headers)
+        
+        assert len(messages) == 0  # 驗證請求不應該返回訊息
+    
+    def test_handle_webhook_invalid_json(self, instagram_handler):
+        """測試處理無效 JSON webhook"""
+        webhook_body = '{\"invalid\": json}'
+        signature = 'sha1=test_signature'
+        
+        headers = {'X-Hub-Signature': signature}
+        messages = instagram_handler.handle_webhook(webhook_body, headers)
+        
+        assert len(messages) == 0
+    
+    def test_verify_signature_success(self, instagram_handler):
+        """測試簽名驗證成功"""
+        request_body = '{\"test\": \"data\"}'
+        # 使用正確的 HMAC 計算
+        import hmac
+        import hashlib
+        expected_signature = hmac.new(
+            'test_app_secret'.encode('utf-8'),
+            request_body.encode('utf-8'),
+            hashlib.sha1
+        ).hexdigest()
+        signature = f'sha1={expected_signature}'
+        
+        result = instagram_handler._verify_signature(request_body, signature)
+        assert result == True
+    
+    def test_verify_signature_failure(self, instagram_handler):
+        """測試簽名驗證失敗"""
+        request_body = '{\"test\": \"data\"}'
+        signature = 'sha1=invalid_signature'
+        
+        result = instagram_handler._verify_signature(request_body, signature)
+        assert result == False
+    
+    def test_verify_signature_invalid_format(self, instagram_handler):
+        """測試無效簽名格式"""
+        request_body = '{\"test\": \"data\"}'
+        signature = 'invalid_format'
+        
+        result = instagram_handler._verify_signature(request_body, signature)
+        assert result == False
+    
+    def test_verify_webhook_success(self, instagram_handler):
+        """測試 webhook 驗證成功"""
+        verify_token = 'test_verify_token'
+        challenge = 'challenge_value'
+        
+        result = instagram_handler.verify_webhook(verify_token, challenge)
+        assert result == 'challenge_value'
+    
+    def test_verify_webhook_failure(self, instagram_handler):
+        """測試 webhook 驗證失敗"""
+        verify_token = 'wrong_token'
+        challenge = 'challenge_value'
+        
+        result = instagram_handler.verify_webhook(verify_token, challenge)
+        assert result is None
+    
+    def test_get_webhook_info(self, instagram_handler):
+        """測試取得 webhook 資訊"""
+        info = instagram_handler.get_webhook_info()
+        
+        assert info['platform'] == 'instagram'
+        assert info['webhook_url'] == '/webhooks/instagram'
+        assert info['verify_token'] == 'test_verify_token'
+        assert info['app_id'] == 'test_app_id_123'
+        assert info['api_version'] == 'v19.0'
+    
+    @patch('src.platforms.instagram_handler.requests.get')
+    def test_download_media_success(self, mock_get, instagram_handler):
+        """測試下載媒體成功"""
+        # 模擬媒體下載
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.content = b'fake_media_data'
+        mock_get.return_value = mock_response
+        
+        result = instagram_handler._download_media('https://example.com/media.jpg')
+        
+        assert result == b'fake_media_data'
+    
+    @patch('src.platforms.instagram_handler.requests.get')
+    def test_download_media_failure(self, mock_get, instagram_handler):
+        """測試下載媒體失敗"""
+        # 模擬 API 錯誤回應
+        mock_response = Mock()
+        mock_response.status_code = 404
+        mock_get.return_value = mock_response
+        
+        result = instagram_handler._download_media('https://example.com/invalid_media.jpg')
+        
+        assert result is None
+    
+    @patch('src.platforms.instagram_handler.requests.post')
+    def test_send_story_reply(self, mock_post, instagram_handler):
+        """測試發送 Story 回覆"""
+        # 模擬 API 回應
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+        
+        result = instagram_handler.send_story_reply(
+            'user_id_123', 
+            'story_id_456', 
+            'Thanks for the story!'
+        )
+        
+        assert result == True
+        mock_post.assert_called_once()
+        
+        # 驗證 Story 回覆格式
+        call_args = mock_post.call_args
+        message_data = call_args[1]['json']
+        assert message_data['recipient']['id'] == 'user_id_123'
+        assert message_data['message']['text'] == 'Thanks for the story!'
+        assert message_data['messaging_type'] == 'MESSAGE_TAG'
+        assert message_data['tag'] == 'STORY_MENTION'
+    
+    def test_parse_message_string_input(self, instagram_handler):
+        """測試解析字串格式的訊息"""
+        webhook_event_str = """{
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {"id": "user_id_123"},
+                    "recipient": {"id": "page_id_123"},
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.STRING123",
+                        "text": "String message",
+                        "seq": 73
+                    }
+                }]
+            }]
+        }"""
+        
+        with patch('requests.get') as mock_get:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"name": "Test", "username": "testuser"}
+            mock_get.return_value = mock_response
+            
+            message = instagram_handler.parse_message(webhook_event_str)
+        
+        assert message is not None
+        assert message.content == 'String message'
+        assert message.message_id == 'mid.STRING123'
+    
+    def test_parse_video_message(self, instagram_handler):
+        """測試解析影片訊息"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {"id": "user_id_123"},
+                    "recipient": {"id": "page_id_123"},
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.VIDEO123",
+                        "attachments": [{
+                            "type": "video",
+                            "payload": {"url": "https://example.com/video.mp4"}
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        message = instagram_handler.parse_message(webhook_event)
+        
+        assert message is not None
+        assert message.message_type == 'video'
+        assert message.content == '[Video Message]'
+    
+    def test_user_info_fetch_failure(self, instagram_handler):
+        """測試用戶資訊獲取失敗的情況"""
+        webhook_event = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {"id": "user_id_123"},
+                    "recipient": {"id": "page_id_123"},
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.USERINFO123",
+                        "text": "Test message"
+                    }
+                }]
+            }]
+        }
+        
+        with patch('requests.get') as mock_get:
+            mock_get.side_effect = Exception("Network error")
+            
+            message = instagram_handler.parse_message(webhook_event)
+        
+        assert message is not None
+        assert message.content == 'Test message'
+        assert message.user.display_name is None
+    
+    @patch('src.platforms.instagram_handler.requests.post')
+    def test_send_audio_message(self, mock_post, instagram_handler):
+        """測試發送音訊訊息（暫未實現）"""
+        user = PlatformUser(user_id='user_id_123', platform=PlatformType.INSTAGRAM)
+        message = PlatformMessage(
+            message_id='test_msg',
+            user=user,
+            content='Test message'
+        )
+        
+        response = PlatformResponse(
+            content='Audio response',
+            response_type='audio',
+            raw_response=b'fake_audio_data'
+        )
+        
+        result = instagram_handler.send_response(response, message)
+        
+        # 目前音訊發送未實現，應該返回 False
+        assert result == False
+    
+    def test_signature_verification_missing_secret(self):
+        """測試缺少 app_secret 時的簽名驗證"""
+        config_no_secret = {
+            'platforms': {
+                'instagram': {
+                    'enabled': True,
+                    'app_id': 'test_app_id_123',
+                    'page_access_token': 'test_page_access_token',
+                    'verify_token': 'test_verify_token',
+                    'api_version': 'v19.0'
+                    # 缺少 app_secret
+                }
+            }
+        }
+        
+        handler = InstagramHandler(config_no_secret)
+        
+        # 沒有 app_secret 時應該跳過驗證
+        result = handler._verify_signature('{"test": "data"}', 'sha1=signature')
+        assert result == True  # webhook.py 中如果沒有 app_secret 會返回 True
+    
+    def test_handle_webhook_no_signature_verification(self, instagram_handler):
+        """測試沒有簽名驗證的 webhook 處理"""
+        webhook_data = {
+            "object": "instagram",
+            "entry": [{
+                "messaging": [{
+                    "sender": {"id": "user_id_123"},
+                    "recipient": {"id": "page_id_123"},
+                    "timestamp": 1458692752478,
+                    "message": {
+                        "mid": "mid.NOSIG123",
+                        "text": "No signature"
+                    }
+                }]
+            }]
+        }
+        
+        webhook_body = json.dumps(webhook_data)
+        
+        # 不提供簽名
+        headers = {}
+        messages = instagram_handler.handle_webhook(webhook_body, headers)
+        
+        assert len(messages) == 1
+        assert messages[0].content == 'No signature'

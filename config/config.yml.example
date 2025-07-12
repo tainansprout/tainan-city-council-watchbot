@@ -17,7 +17,31 @@ platforms:
   
   telegram:
     enabled: false
-    bot_token: ${TELEGRAM_BOT_TOKEN} 
+    bot_token: ${TELEGRAM_BOT_TOKEN}
+  
+  whatsapp:
+    enabled: false
+    access_token: ${WHATSAPP_ACCESS_TOKEN}
+    phone_number_id: ${WHATSAPP_PHONE_NUMBER_ID}
+    app_secret: ${WHATSAPP_APP_SECRET}
+    verify_token: ${WHATSAPP_VERIFY_TOKEN}
+    api_version: "v13.0"
+  
+  messenger:
+    enabled: false
+    app_id: ${FACEBOOK_APP_ID}
+    app_secret: ${FACEBOOK_APP_SECRET}
+    page_access_token: ${FACEBOOK_PAGE_ACCESS_TOKEN}
+    verify_token: ${FACEBOOK_VERIFY_TOKEN}
+    api_version: "v19.0"
+  
+  instagram:
+    enabled: false
+    app_id: ${INSTAGRAM_APP_ID}
+    app_secret: ${INSTAGRAM_APP_SECRET}
+    page_access_token: ${INSTAGRAM_PAGE_ACCESS_TOKEN}
+    verify_token: ${INSTAGRAM_VERIFY_TOKEN}
+    api_version: "v19.0" 
 
 # AI 模型配置
 llm:

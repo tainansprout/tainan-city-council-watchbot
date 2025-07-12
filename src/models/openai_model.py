@@ -1,3 +1,42 @@
+"""
+OpenAI Model 實作
+使用 OpenAI Assistant API 提供聊天和音訊轉錄功能
+
+📋 架構職責分工：
+✅ RESPONSIBILITIES (模型層職責):
+  - 實作統一的 FullLLMInterface 接口
+  - 提供 chat_with_user() 文字對話功能
+  - 提供 transcribe_audio() 音訊轉錄功能
+  - 管理 OpenAI Assistant threads 和對話歷史
+  - 處理 OpenAI API 限流和重試邏輯
+
+❌ NEVER DO (絕對禁止):
+  - 知道訊息來源平台 (LINE、Telegram 等)
+  - 處理平台特定的訊息格式
+  - 直接處理 webhook 或網路請求
+  - 路由訊息或協調服務
+
+🔄 統一接口：
+  - chat_with_user(user_id, message, platform) -> (bool, str, str)
+  - transcribe_audio(file_path) -> (bool, str, str)
+  - clear_user_history(user_id, platform) -> (bool, str)
+  - check_connection() -> (bool, str)
+
+🎯 模型特色：
+  - 使用 Assistant API 進行對話管理
+  - 支援 RAG (檢索增強生成)
+  - 使用 Whisper API 進行音訊轉錄
+  - DALL-E API 圖片生成
+  - 智慧重試和錯誤處理
+  - Thread-based 對話歷史管理
+
+✅ 完整功能支援：
+  - 對話: Assistant API (最穩定)
+  - 音訊轉錄: Whisper API (原生支援，最佳品質)
+  - 圖片生成: DALL-E API (原生支援)
+  - 連線狀態: 企業級穩定性
+"""
+
 import requests
 from ..core.logger import get_logger
 from ..core.api_timeouts import SmartTimeoutConfig, TimeoutContext

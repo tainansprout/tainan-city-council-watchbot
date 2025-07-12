@@ -124,6 +124,18 @@ echo -n "$WHATSAPP_PHONE_NUMBER_ID_SECRET" | gcloud secrets create whatsapp-phon
 echo -n "$WHATSAPP_APP_SECRET_SECRET" | gcloud secrets create whatsapp-app-secret --data-file=-
 echo -n "$WHATSAPP_VERIFY_TOKEN_SECRET" | gcloud secrets create whatsapp-verify-token --data-file=-
 
+# Facebook Messenger Platform 密鑰
+echo -n "$FACEBOOK_APP_ID_SECRET" | gcloud secrets create facebook-app-id --data-file=-
+echo -n "$FACEBOOK_APP_SECRET_SECRET" | gcloud secrets create facebook-app-secret --data-file=-
+echo -n "$FACEBOOK_PAGE_ACCESS_TOKEN_SECRET" | gcloud secrets create facebook-page-access-token --data-file=-
+echo -n "$FACEBOOK_VERIFY_TOKEN_SECRET" | gcloud secrets create facebook-verify-token --data-file=-
+
+# Instagram Business Cloud API 密鑰
+echo -n "$INSTAGRAM_APP_ID_SECRET" | gcloud secrets create instagram-app-id --data-file=-
+echo -n "$INSTAGRAM_APP_SECRET_SECRET" | gcloud secrets create instagram-app-secret --data-file=-
+echo -n "$INSTAGRAM_PAGE_ACCESS_TOKEN_SECRET" | gcloud secrets create instagram-page-access-token --data-file=-
+echo -n "$INSTAGRAM_VERIFY_TOKEN_SECRET" | gcloud secrets create instagram-verify-token --data-file=-
+
 echo -n "$DB_HOST_SECRET" | gcloud secrets create db-host --data-file=-
 echo -n "$DB_USER_SECRET" | gcloud secrets create db-user --data-file=-
 echo -n "$DB_PASSWORD_SECRET" | gcloud secrets create db-password --data-file=-
@@ -386,9 +398,11 @@ autoscaling.knative.dev/maxScale: "100"  # 最大實例數
 | 錯誤率 | < 1% | Cloud Monitoring |
 | 冷啟動時間 | < 10 秒 | Cloud Monitoring |
 
-## 📱 WhatsApp 部署特殊需求
+## 📱 多平台部署特殊需求
 
-### Webhook 設定
+### WhatsApp Business API 部署
+
+#### Webhook 設定
 WhatsApp Business API 需要特殊的 webhook 設定：
 
 1. **Meta 開發者控制台設定**
@@ -407,20 +421,28 @@ WhatsApp Business API 需要特殊的 webhook 設定：
    - 不能使用 localhost 或內部 IP
    - 建議使用 Load Balancer 提供穩定的端點
 
-### 環境變數設定
+#### 環境變數設定
 確保以下 WhatsApp 環境變數已正確設定：
 
 ```bash
-# 在 Cloud Run 中設定
+# 在 Cloud Run 中設定 (包含 WhatsApp、Messenger 和 Instagram)
 gcloud run services update chatgpt-line-bot \
     --region=asia-east1 \
     --set-env-vars WHATSAPP_ACCESS_TOKEN=projects/PROJECT_ID/secrets/whatsapp-access-token/versions/latest \
     --set-env-vars WHATSAPP_PHONE_NUMBER_ID=projects/PROJECT_ID/secrets/whatsapp-phone-number-id/versions/latest \
     --set-env-vars WHATSAPP_APP_SECRET=projects/PROJECT_ID/secrets/whatsapp-app-secret/versions/latest \
-    --set-env-vars WHATSAPP_VERIFY_TOKEN=projects/PROJECT_ID/secrets/whatsapp-verify-token/versions/latest
+    --set-env-vars WHATSAPP_VERIFY_TOKEN=projects/PROJECT_ID/secrets/whatsapp-verify-token/versions/latest \
+    --set-env-vars FACEBOOK_APP_ID=projects/PROJECT_ID/secrets/facebook-app-id/versions/latest \
+    --set-env-vars FACEBOOK_APP_SECRET=projects/PROJECT_ID/secrets/facebook-app-secret/versions/latest \
+    --set-env-vars FACEBOOK_PAGE_ACCESS_TOKEN=projects/PROJECT_ID/secrets/facebook-page-access-token/versions/latest \
+    --set-env-vars FACEBOOK_VERIFY_TOKEN=projects/PROJECT_ID/secrets/facebook-verify-token/versions/latest \
+    --set-env-vars INSTAGRAM_APP_ID=projects/PROJECT_ID/secrets/instagram-app-id/versions/latest \
+    --set-env-vars INSTAGRAM_APP_SECRET=projects/PROJECT_ID/secrets/instagram-app-secret/versions/latest \
+    --set-env-vars INSTAGRAM_PAGE_ACCESS_TOKEN=projects/PROJECT_ID/secrets/instagram-page-access-token/versions/latest \
+    --set-env-vars INSTAGRAM_VERIFY_TOKEN=projects/PROJECT_ID/secrets/instagram-verify-token/versions/latest
 ```
 
-### 測試 WhatsApp 整合
+#### 測試 WhatsApp 整合
 ```bash
 # 測試 webhook 驗證
 curl -X GET "https://your-domain.com/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
@@ -432,12 +454,156 @@ curl https://your-domain.com/health | jq '.checks.platforms'
 gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"[WHATSAPP]"' --limit=50
 ```
 
-### 申請流程
+#### 申請流程
 1. **Meta Business Account**: 完成商業驗證
 2. **WhatsApp Business API**: 申請並等待審核（1-4週）
 3. **電話號碼**: 驗證專用電話號碼
 4. **測試**: 使用測試號碼進行初步測試
 5. **生產**: 審核通過後切換到生產環境
+
+### Facebook Messenger Platform 部署
+
+#### Webhook 設定
+Messenger Platform 需要特殊的 webhook 設定：
+
+1. **Meta 開發者控制台設定**
+   - 登入 [Meta for Developers](https://developers.facebook.com/)
+   - 選擇您的 Messenger App
+   - 設定 Webhook URL: `https://your-domain.com/webhooks/messenger`
+   - 驗證 Token: 與環境變數 `FACEBOOK_VERIFY_TOKEN` 相同
+
+2. **Facebook 頁面連結**
+   - 必須有一個 Facebook 頁面（企業頁面）
+   - 在 Messenger Settings 中連結頁面
+   - 產生 Page Access Token
+
+3. **HTTPS 需求**
+   - Messenger 要求必須使用 HTTPS
+   - 確保 SSL 證書有效
+   - 支援 TLS 1.2 或更高版本
+
+4. **網域驗證**
+   - 網域必須可公開訪問
+   - 不能使用 localhost 或內部 IP
+   - 建議使用 Load Balancer 提供穩定的端點
+
+#### 環境變數設定
+確保以下 Messenger 環境變數已正確設定：
+
+```bash
+# 在 Cloud Run 中設定
+gcloud run services update chatgpt-line-bot \
+    --region=asia-east1 \
+    --set-env-vars FACEBOOK_APP_ID=projects/PROJECT_ID/secrets/facebook-app-id/versions/latest \
+    --set-env-vars FACEBOOK_APP_SECRET=projects/PROJECT_ID/secrets/facebook-app-secret/versions/latest \
+    --set-env-vars FACEBOOK_PAGE_ACCESS_TOKEN=projects/PROJECT_ID/secrets/facebook-page-access-token/versions/latest \
+    --set-env-vars FACEBOOK_VERIFY_TOKEN=projects/PROJECT_ID/secrets/facebook-verify-token/versions/latest
+```
+
+#### 測試 Messenger 整合
+```bash
+# 測試 webhook 驗證
+curl -X GET "https://your-domain.com/webhooks/messenger?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
+
+# 檢查平台狀態
+curl https://your-domain.com/health | jq '.checks.platforms'
+
+# 查看 Messenger 日誌
+gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"[MESSENGER]"' --limit=50
+```
+
+#### 申請流程
+1. **Facebook 開發者帳號**: 建立或使用現有帳號
+2. **Facebook 應用程式**: 建立 Business 類型應用程式
+3. **Facebook 頁面**: 建立或使用現有企業頁面
+4. **Messenger Platform**: 設定和連結頁面
+5. **測試**: 使用測試帳號進行初步測試
+6. **App Review**: 如需發送給非測試用戶，需通過 Facebook 審核
+
+#### 音訊訊息支援
+Messenger 平台已支援音訊訊息轉錄（如同 LINE 平台）：
+- ✅ 自動下載音訊附件
+- ✅ 使用相同的 AudioHandler 進行轉錄
+- ✅ 支援 MP3, AAC 等常見格式
+- ✅ 統一的錯誤處理和日誌記錄
+
+### Instagram Business Cloud API 部署
+
+#### Webhook 設定
+Instagram Business Cloud API 需要特殊的 webhook 設定：
+
+1. **Meta 開發者控制台設定**
+   - 登入 [Meta for Developers](https://developers.facebook.com/)
+   - 選擇您的 Instagram App（或建立新的 Business 應用程式）
+   - 設定 Webhook URL: `https://your-domain.com/webhooks/instagram`
+   - 驗證 Token: 與環境變數 `INSTAGRAM_VERIFY_TOKEN` 相同
+
+2. **Instagram 商業帳號連結**
+   - 必須有一個 Instagram 商業帳號（Business Account）
+   - 將 Instagram 帳號連接到 Facebook 頁面
+   - 在 Instagram Basic Display 中設定權限
+
+3. **HTTPS 需求**
+   - Instagram 要求必須使用 HTTPS
+   - 確保 SSL 證書有效
+   - 支援 TLS 1.2 或更高版本
+
+4. **網域驗證**
+   - 網域必須可公開訪問
+   - 不能使用 localhost 或內部 IP
+   - 建議使用 Load Balancer 提供穩定的端點
+
+#### 環境變數設定
+確保以下 Instagram 環境變數已正確設定：
+
+```bash
+# 在 Cloud Run 中設定
+gcloud run services update chatgpt-line-bot \
+    --region=asia-east1 \
+    --set-env-vars INSTAGRAM_APP_ID=projects/PROJECT_ID/secrets/instagram-app-id/versions/latest \
+    --set-env-vars INSTAGRAM_APP_SECRET=projects/PROJECT_ID/secrets/instagram-app-secret/versions/latest \
+    --set-env-vars INSTAGRAM_PAGE_ACCESS_TOKEN=projects/PROJECT_ID/secrets/instagram-page-access-token/versions/latest \
+    --set-env-vars INSTAGRAM_VERIFY_TOKEN=projects/PROJECT_ID/secrets/instagram-verify-token/versions/latest
+```
+
+#### 測試 Instagram 整合
+```bash
+# 測試 webhook 驗證
+curl -X GET "https://your-domain.com/webhooks/instagram?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test_challenge"
+
+# 檢查平台狀態
+curl https://your-domain.com/health | jq '.checks.platforms'
+
+# 查看 Instagram 日誌
+gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"[INSTAGRAM]"' --limit=50
+```
+
+#### 申請流程
+1. **Facebook 開發者帳號**: 建立或使用現有帳號
+2. **Facebook 應用程式**: 建立 Business 類型應用程式
+3. **Instagram 商業帳號**: 確保有 Instagram 商業帳號
+4. **Facebook 頁面連結**: 將 Instagram 帳號連接到 Facebook 頁面
+5. **Instagram Basic Display**: 設定和配置權限
+6. **測試**: 使用測試帳號進行初步測試
+7. **App Review**: 如需完整功能，需通過 Meta 審核
+
+#### Instagram 功能支援
+Instagram 平台已支援以下功能：
+- ✅ **文字訊息**: 完整的文字內容接收和發送
+- ✅ **音訊訊息**: 自動下載和轉錄為文字（如同 LINE 平台）
+- ✅ **圖片訊息**: 自動下載圖片檔案
+- ✅ **影片訊息**: 支援影片檔案處理
+- ✅ **檔案訊息**: 支援各種檔案格式
+- ✅ **Story 回覆**: 回覆用戶的 Story 提及和互動
+- ✅ **簽名驗證**: HMAC-SHA1 webhook 安全驗證
+
+#### ⚠️ Instagram 限制說明
+- **商業帳號**: 僅支援 Instagram 商業帳號
+- **用戶發起**: 只能回覆用戶主動發送的訊息
+- **24小時窗口**: 使用者互動後24小時內可自由回覆
+- **Story 回覆**: 僅能回覆提及商業帳號的 Story
+- **頁面綁定**: 需要將 Instagram 帳號連接到 Facebook 頁面
+- **審核流程**: 某些功能需要 Meta 審核
 
 ## 📞 支援和聯繫
 
@@ -447,12 +613,58 @@ gcloud logging read 'resource.type="cloud_run_revision" AND textPayload:"[WHATSA
 3. 檢查監控和日誌
 4. 聯繫開發團隊
 
-### WhatsApp 特殊問題
+### 多平台特殊問題
+
+#### WhatsApp 特殊問題
 - **Webhook 驗證失敗**: 檢查 verify_token 是否正確
 - **訊息發送失敗**: 確認 24 小時窗口限制
 - **API 認證錯誤**: 檢查 access_token 是否有效
 - **媒體下載失敗**: 確認網路連線和權限
 
+#### Messenger 特殊問題
+- **Webhook 驗證失敗**: 檢查 verify_token 是否正確
+- **頁面權杖錯誤**: 確認 Page Access Token 有效且權限正確
+- **簽名驗證失敗**: 檢查 App Secret 設定
+- **Echo 訊息問題**: 確認 echo 訊息過濾機制正常
+- **用戶資訊取得失敗**: 檢查 Graph API 權限
+- **音訊轉錄失敗**: 確認媒體下載和處理流程
+
+#### Instagram 特殊問題
+- **Webhook 驗證失敗**: 檢查 verify_token 是否正確
+- **商業帳號連結失敗**: 確認 Instagram 帳號已連接到 Facebook 頁面
+- **頁面權杖錯誤**: 確認 Page Access Token 有效且權限正確
+- **簽名驗證失敗**: 檢查 App Secret 設定
+- **Story 回覆失敗**: 確認 Story 提及商業帳號且在24小時窗口內
+- **用戶資訊取得失敗**: 檢查 Instagram Basic Display API 權限
+- **音訊轉錄失敗**: 確認媒體下載和處理流程
+- **API 權限錯誤**: 確認已通過 Meta App Review 流程
+
+---
+
+### 常用部署指令
+
+```bash
+# 一鍵部署所有平台（包含 Messenger 和 Instagram）
+./scripts/deploy/deploy-to-cloudrun.sh --all-platforms
+
+# 僅部署特定平台
+./scripts/deploy/deploy-to-cloudrun.sh --platform messenger
+./scripts/deploy/deploy-to-cloudrun.sh --platform instagram
+
+# 檢查所有平台狀態
+curl https://your-domain.com/health | jq '.checks.platforms'
+
+# 測試所有 webhook 驗證
+for platform in line discord telegram whatsapp messenger instagram; do
+  echo "Testing $platform webhook..."
+  curl -X GET "https://your-domain.com/webhooks/$platform?hub.mode=subscribe&hub.verify_token=test&hub.challenge=test" || echo "$platform webhook not configured"
+done
+```
+
 ---
 
 **注意**: 本部署指南假設你已經熟悉 Google Cloud Platform 和 Docker 的基本概念。如果你是新手，建議先閱讀相關的入門文件。
+
+**Messenger 部署注意事項**: Messenger 平台支援音訊訊息轉錄功能，與 LINE 平台提供相同的使用體驗。確保在部署時正確設定 Facebook App ID、App Secret、Page Access Token 和 Verify Token。
+
+**Instagram 部署注意事項**: Instagram 平台支援音訊訊息轉錄功能、Story 回覆等特色功能，與其他平台提供一致的使用體驗。部署時需要確保 Instagram 商業帳號已正確連接到 Facebook 頁面，並且正確設定 Instagram App ID、App Secret、Page Access Token 和 Verify Token。

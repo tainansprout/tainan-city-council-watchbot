@@ -10,6 +10,8 @@
 - **Telegram Bot** - 豐富互動和檔案傳輸
 - **Slack Bot** - 企業級聊天機器人
 - **WhatsApp Bot** - 企業級客服，支援媒體訊息
+- **Messenger Bot** - Facebook 頁面聊天機器人，支援豐富互動
+- **Instagram Bot** - Instagram 商業帳號聊天機器人，支援 Story 回覆
 
 ### 🤖 支援的 AI 模型
 - **OpenAI GPT** - GPT-4 系列，Assistant API
@@ -80,6 +82,134 @@ curl http://your-domain.com/health | jq '.checks.platforms'
 
 # 測試 webhook 驗證
 curl -X GET "https://your-domain.com/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test"
+```
+
+## 🌟 Messenger 平台功能
+
+### 📱 Facebook Messenger Platform
+Messenger 平台使用 Meta 官方的 Messenger Platform API，提供企業級的聊天機器人服務。
+
+#### 支援功能
+- ✅ **文字訊息**: 完整的文字內容接收和發送
+- ✅ **音訊訊息**: 自動下載和轉錄為文字（如同 LINE）
+- ✅ **圖片訊息**: 自動下載圖片檔案
+- ✅ **影片訊息**: 支援影片檔案處理
+- ✅ **位置訊息**: 經緯度座標和地址資訊
+- ✅ **快速回覆**: 互動式快速回覆按鈕
+- ✅ **簽名驗證**: HMAC-SHA1 webhook 安全驗證
+
+#### 技術特色
+- **官方 API**: 使用 Meta 官方 Messenger Platform API
+- **統一介面**: 與其他平台使用相同的聊天服務
+- **媒體處理**: 自動媒體檔案下載和處理
+- **用戶資訊**: 自動獲取用戶姓名和資料
+- **Echo 過濾**: 自動過濾機器人自己發送的訊息
+
+#### 申請要求
+- Facebook 開發者帳號
+- Facebook 應用程式
+- Facebook 頁面（企業頁面）
+- Messenger Platform 設定
+
+#### 限制說明
+- **用戶發起**: 只能回覆用戶主動發送的訊息
+- **24小時窗口**: 使用者互動後24小時內可自由回覆
+- **頁面綁定**: 需要綁定到特定 Facebook 頁面
+- **審核流程**: 某些功能需要 Facebook 審核
+
+### 🔧 Messenger 設定
+```yaml
+platforms:
+  messenger:
+    enabled: true
+    app_id: "${FACEBOOK_APP_ID}"
+    app_secret: "${FACEBOOK_APP_SECRET}"
+    page_access_token: "${FACEBOOK_PAGE_ACCESS_TOKEN}"
+    verify_token: "${FACEBOOK_VERIFY_TOKEN}"
+    api_version: "v19.0"
+```
+
+### 📞 Webhook 設定
+- **Webhook URL**: `https://your-domain.com/webhooks/messenger`
+- **驗證方式**: GET 請求與 verify_token 驗證
+- **接收方式**: POST 請求包含訊息資料
+- **簽名驗證**: 使用 App Secret 進行 HMAC-SHA1 驗證
+
+### 🧪 測試命令
+```bash
+# 執行 Messenger 測試
+python -m pytest tests/unit/platforms/test_messenger_handler.py -v
+
+# 檢查平台狀態
+curl http://your-domain.com/health | jq '.checks.platforms'
+
+# 測試 webhook 驗證
+curl -X GET "https://your-domain.com/webhooks/messenger?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test"
+```
+
+## 🌟 Instagram 平台功能
+
+### 📱 Instagram Business Cloud API
+Instagram 平台使用 Meta 官方的 Instagram Business Cloud API，提供企業級的私訊聊天機器人服務。
+
+#### 支援功能
+- ✅ **文字訊息**: 完整的文字內容接收和發送
+- ✅ **音訊訊息**: 自動下載和轉錄為文字（如同 LINE）
+- ✅ **圖片訊息**: 自動下載圖片檔案
+- ✅ **影片訊息**: 支援影片檔案處理
+- ✅ **檔案訊息**: 支援各種檔案格式
+- ✅ **Story 回覆**: 回覆用戶的 Story 提及和互動
+- ✅ **簽名驗證**: HMAC-SHA1 webhook 安全驗證
+
+#### 技術特色
+- **官方 API**: 使用 Meta 官方 Instagram Business Cloud API
+- **統一介面**: 與其他平台使用相同的聊天服務
+- **媒體處理**: 自動媒體檔案下載和處理
+- **用戶資訊**: 自動獲取用戶名稱和資料
+- **Story 互動**: 支援 Story 提及和回覆功能
+
+#### 申請要求
+- Facebook 開發者帳號
+- Facebook 應用程式
+- Instagram 商業帳號（Business Account）
+- 將 Instagram 帳號連接到 Facebook 頁面
+- Instagram Basic Display 或 Business Discovery API 權限
+
+#### 限制說明
+- **商業帳號**: 僅支援 Instagram 商業帳號
+- **用戶發起**: 只能回覆用戶主動發送的訊息
+- **24小時窗口**: 使用者互動後24小時內可自由回覆
+- **Story 回覆**: 僅能回覆提及商業帳號的 Story
+- **頁面綁定**: 需要將 Instagram 帳號連接到 Facebook 頁面
+
+### 🔧 Instagram 設定
+```yaml
+platforms:
+  instagram:
+    enabled: true
+    app_id: "${INSTAGRAM_APP_ID}"
+    app_secret: "${INSTAGRAM_APP_SECRET}"
+    page_access_token: "${INSTAGRAM_PAGE_ACCESS_TOKEN}"
+    verify_token: "${INSTAGRAM_VERIFY_TOKEN}"
+    api_version: "v19.0"
+```
+
+### 📞 Webhook 設定
+- **Webhook URL**: `https://your-domain.com/webhooks/instagram`
+- **驗證方式**: GET 請求與 verify_token 驗證
+- **接收方式**: POST 請求包含訊息資料
+- **簽名驗證**: 使用 App Secret 進行 HMAC-SHA1 驗證
+
+### 🧪 測試命令
+```bash
+# 執行 Instagram 測試
+python -m pytest tests/unit/platforms/test_instagram_handler.py -v
+
+# 檢查平台狀態
+curl http://your-domain.com/health | jq '.checks.platforms'
+
+# 測試 webhook 驗證
+curl -X GET "https://your-domain.com/webhooks/instagram?hub.mode=subscribe&hub.verify_token=your_verify_token&hub.challenge=test"
 ```
 
 ## 📁 項目結構

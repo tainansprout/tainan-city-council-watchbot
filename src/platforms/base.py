@@ -17,6 +17,8 @@ class PlatformType(Enum):
     TELEGRAM = "telegram"
     SLACK = "slack"
     WHATSAPP = "whatsapp"
+    MESSENGER = "messenger"
+    INSTAGRAM = "instagram"
     WEB = "web"
     API = "api"
 
@@ -88,13 +90,13 @@ class PlatformHandlerInterface(ABC):
         pass
     
     @abstractmethod
-    def handle_webhook(self, request_body: str, signature: str) -> List[PlatformMessage]:
+    def handle_webhook(self, request_body: str, headers: Dict[str, str]) -> List[PlatformMessage]:
         """
         處理 webhook 請求
         
         Args:
             request_body: 請求內容
-            signature: 請求簽名
+            headers: 請求標頭
             
         Returns:
             List[PlatformMessage]: 解析出的訊息列表
@@ -186,7 +188,7 @@ class PlatformManager:
         """取得所有啟用的平台列表"""
         return list(self._handlers.keys())
     
-    def handle_platform_webhook(self, platform_type: PlatformType, request_body: str, signature: str) -> List[PlatformMessage]:
+    def handle_platform_webhook(self, platform_type: PlatformType, request_body: str, headers: Dict[str, str]) -> List[PlatformMessage]:
         """處理指定平台的 webhook"""
         handler = self.get_handler(platform_type)
         if not handler:
@@ -194,7 +196,7 @@ class PlatformManager:
             return []
         
         try:
-            return handler.handle_webhook(request_body, signature)
+            return handler.handle_webhook(request_body, headers)
         except Exception as e:
             logger.error(f"Error handling {platform_type.value} webhook: {e}")
             return []

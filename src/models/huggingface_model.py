@@ -27,12 +27,25 @@ class HuggingFaceModel(FullLLMInterface):
     """
     Hugging Face API 模型實作
     
-    支援功能:
-    - 基礎聊天對話 (Inference API)
-    - 對話歷史管理 (本地管理)
-    - RAG 知識庫檢索 (組合多服務)
-    - 語音轉文字 (Whisper 模型)
-    - 圖片生成 (Stable Diffusion)
+    📋 架構職責分工：
+    ✅ RESPONSIBILITIES (模型層職責):
+      - 實作統一的 FullLLMInterface 接口
+      - 提供 chat_with_user() 文字對話功能
+      - 提供 transcribe_audio() 音訊轉錄功能
+      - 管理對話歷史和上下文
+      - 處理 Hugging Face API 限流和重試邏輯
+
+    🎯 模型特色：
+    - 支援多種開源模型 (Mistral, Llama, CodeLlama等)
+    - Inference API 彈性使用不同模型
+    - 語音轉文字 (Whisper/Wav2Vec2 模型)
+    - 圖片生成 (Stable Diffusion系列)
+    - 對話歷史管理 (本地資料庫)
+
+    ⚠️ 功能限制：
+    - 模型可用性: 依賴 Hugging Face 服務和模型狀態
+    - 音訊轉錄: 依賴特定ASR模型是否可用
+    - 連線狀態: 服務可能因負載過高而不可用
     """
     
     def __init__(self, 
