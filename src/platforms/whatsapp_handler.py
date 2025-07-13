@@ -1,13 +1,13 @@
 """
 WhatsApp Business Cloud API 平台處理器
-使用 Meta 官方的 WhatsApp Business Cloud API
+繼承自 MetaBaseHandler，實現 WhatsApp 特定的功能
 
 📋 架構職責分工：
 ✅ RESPONSIBILITIES (平台層職責):
   - 解析 WhatsApp Business webhooks
   - 透過 Graph API 下載媒體檔案 (音訊、圖片等)
   - 使用 Graph API 發送訊息
-  - Meta webhook 簽名驗證 (X-Hub-Signature-256)
+  - WhatsApp 特定的訊息類型處理
 
 ❌ NEVER DO (絕對禁止):
   - 呼叫 AI 模型 API (音訊轉錄、文字生成)
@@ -23,54 +23,86 @@ WhatsApp Business Cloud API 平台處理器
   - 使用手機號碼作為用戶識別
   - 支援多種媒體類型和互動式訊息
   - 需要商業驗證和 Meta 審核
-  - 媒體檔案透過 Media ID 下載
-  - Webhook 驗證使用 verify_token
+  - 媒體檔案透過 Media ID 下載 (兩步驟)
+  - 使用 phone_number_id 發送訊息
 """
-import json
+
 import requests
 from typing import List, Optional, Any, Dict
 from ..core.logger import get_logger
-from ..utils.webhook import verify_meta_signature
-from .base import BasePlatformHandler, PlatformType, PlatformUser, PlatformMessage, PlatformResponse
+from .base import PlatformType, PlatformUser, PlatformMessage
+from .meta_base_handler import MetaBaseHandler
 
 logger = get_logger(__name__)
 
 
-class WhatsAppHandler(BasePlatformHandler):
+class WhatsAppHandler(MetaBaseHandler):
     """
     WhatsApp Business Cloud API 平台處理器
     使用 Meta 官方的 WhatsApp Business Cloud API
     """
     
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.access_token = self.get_config('access_token')
-        self.phone_number_id = self.get_config('phone_number_id')
-        self.app_secret = self.get_config('app_secret')
-        self.verify_token = self.get_config('verify_token')
-        self.api_version = self.get_config('api_version', 'v13.0')
-        self.base_url = f'https://graph.facebook.com/{self.api_version}'
-        
-        
-        if self.is_enabled() and self.validate_config():
-            self.headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Content-Type': 'application/json'
-            }
-            logger.info("WhatsApp Business Cloud API handler initialized")
-        elif self.is_enabled():
-            logger.error("WhatsApp handler initialization failed due to invalid config")
-
     def get_platform_type(self) -> PlatformType:
         return PlatformType.WHATSAPP
-
+    
+    def get_platform_name(self) -> str:
+        return "WHATSAPP"
+    
+    def get_default_api_version(self) -> str:
+        return 'v13.0'
+    
+    def get_webhook_object_type(self) -> str:
+        return 'whatsapp_business_account'
+    
+    def _setup_platform_config(self):
+        """WhatsApp 特定配置"""
+        self.access_token = self.get_config('access_token')
+        self.phone_number_id = self.get_config('phone_number_id')
+    
     def get_required_config_fields(self) -> List[str]:
         return ['access_token', 'phone_number_id', 'verify_token']
-
+    
+    def _get_recipient_id(self, message: PlatformMessage) -> str:
+        """WhatsApp 使用用戶的手機號碼作為接收者 ID"""
+        return message.user.user_id
+    
+    def _download_media(self, media_id: str) -> Optional[bytes]:
+        """下載媒體檔案 (向後兼容方法名)"""
+        return self._download_media_from_id(media_id)
+    
+    # =============================================================================
+    # Webhook 訊息處理 (WhatsApp 特定)
+    # =============================================================================
+    
+    def _process_webhook_messages(self, webhook_data: Dict[str, Any]) -> List[PlatformMessage]:
+        """處理 WhatsApp webhook 訊息"""
+        messages: List[PlatformMessage] = []
+        
+        try:
+            for entry in webhook_data.get('entry', []):
+                for change in entry.get('changes', []):
+                    value = change.get('value', {})
+                    
+                    # 建構完整的事件對象傳給 parse_message
+                    event = {
+                        'object': 'whatsapp_business_account',
+                        'entry': [{'changes': [{'value': value}]}]
+                    }
+                    
+                    for message_data in value.get('messages', []):
+                        message = self.parse_message(event)
+                        if message:
+                            messages.append(message)
+        except Exception as e:
+            logger.error(f"[WHATSAPP] Webhook message processing error: {e}")
+        
+        return messages
+    
     def parse_message(self, event: Any) -> Optional[PlatformMessage]:
         """解析 WhatsApp webhook 事件"""
         try:
             if isinstance(event, str):
+                import json
                 event = json.loads(event)
             
             logger.debug(f"[WHATSAPP] parse_message received event: {event}")
@@ -199,56 +231,13 @@ class WhatsAppHandler(BasePlatformHandler):
         except Exception as e:
             logger.error(f"[WHATSAPP] parse_message error: {e}")
             return None
-
-    def _download_media(self, media_id: str) -> Optional[bytes]:
-        """下載媒體檔案"""
-        try:
-            # 步驟 1: 取得媒體 URL
-            url = f"{self.base_url}/{media_id}"
-            response = requests.get(url, headers=self.headers, timeout=30)
-            
-            if response.status_code != 200:
-                logger.error(f"[WHATSAPP] _download_media failed to get media info: {response.status_code}")
-                return None
-            
-            media_info = response.json()
-            media_url = media_info.get('url')
-            
-            if not media_url:
-                logger.error("[WHATSAPP] _download_media no media URL found")
-                return None
-            
-            # 步驟 2: 下載媒體檔案
-            media_response = requests.get(media_url, headers=self.headers, timeout=30)
-            
-            if media_response.status_code == 200:
-                logger.debug(f"[WHATSAPP] _download_media success ({len(media_response.content)} bytes)")
-                return media_response.content
-            else:
-                logger.error(f"[WHATSAPP] _download_media failed to download: {media_response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"[WHATSAPP] _download_media error: {e}")
-            return None
-
-    def send_response(self, response: PlatformResponse, message: PlatformMessage) -> bool:
-        """發送回應到 WhatsApp"""
-        try:
-            to_number = message.user.user_id
-            
-            if response.response_type == "text":
-                return self._send_text_message(to_number, response.content)
-            else:
-                logger.warning(f"[WHATSAPP] send_response unsupported response type: {response.response_type}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"[WHATSAPP] send_response error: {e}")
-            return False
-
+    
+    # =============================================================================
+    # 發送訊息 (WhatsApp 特定)
+    # =============================================================================
+    
     def _send_text_message(self, to_number: str, text: str) -> bool:
-        """發送文字訊息"""
+        """發送 WhatsApp 文字訊息"""
         try:
             url = f"{self.base_url}/{self.phone_number_id}/messages"
             
@@ -275,77 +264,15 @@ class WhatsAppHandler(BasePlatformHandler):
         except Exception as e:
             logger.error(f"[WHATSAPP] _send_text_message error: {e}")
             return False
-
-    def _verify_signature(self, request_body: str, signature: str) -> bool:
-        """驗證 WhatsApp webhook 簽名"""
-        try:
-            if isinstance(request_body, str):
-                body_bytes = request_body.encode('utf-8')
-            else:
-                body_bytes = request_body
-            
-            return verify_meta_signature(self.app_secret, body_bytes, signature)
-        except Exception as e:
-            logger.error(f"[WHATSAPP] Signature verification error: {e}")
-            return False
-
-    def handle_webhook(self, request_body: str, headers: Dict[str, str]) -> List[PlatformMessage]:
-        """處理 WhatsApp webhook 請求"""
-        signature = headers.get('X-Hub-Signature') or headers.get('X-Hub-Signature-256')
-        if self.app_secret and signature and not self._verify_signature(request_body, signature):
-            logger.error("[WHATSAPP] Webhook signature verification failed.")
-            return []
-
-        messages: List[PlatformMessage] = []
-        try:
-            webhook_data = json.loads(request_body)
-            if webhook_data.get('object') != 'whatsapp_business_account':
-                return []
-
-            for entry in webhook_data.get('entry', []):
-                for change in entry.get('changes', []):
-                    value = change.get('value', {})
-                    
-                    # 建構完整的事件對象傳給 parse_message
-                    event = {
-                        'object': 'whatsapp_business_account',
-                        'entry': [{
-                            'changes': [{'value': value}]
-                        }]
-                    }
-                    
-                    for message_data in value.get('messages', []):
-                        message = self.parse_message(event)
-                        if message:
-                            messages.append(message)
-
-        except json.JSONDecodeError as e:
-            logger.error(f"[WHATSAPP] JSON decode error: {e}")
-        except Exception as e:
-            logger.error(f"[WHATSAPP] Webhook handling error: {e}")
-        
-        return messages
-
-    def verify_webhook(self, verify_token: str, challenge: str) -> Optional[str]:
-        """驗證 webhook 設定"""
-        try:
-            if verify_token == self.verify_token:
-                logger.info("[WHATSAPP] verify_webhook success")
-                return challenge
-            else:
-                logger.error("[WHATSAPP] verify_webhook failed - invalid token")
-                return None
-                
-        except Exception as e:
-            logger.error(f"[WHATSAPP] verify_webhook error: {e}")
-            return None
-
+    
+    # =============================================================================
+    # Webhook 資訊 (WhatsApp 特定)
+    # =============================================================================
+    
     def get_webhook_info(self) -> Dict[str, Any]:
-        """取得 webhook 資訊"""
-        return {
-            'platform': 'whatsapp',
-            'webhook_url': f'/webhooks/whatsapp',
-            'verify_token': self.verify_token,
+        """取得 WhatsApp webhook 資訊"""
+        base_info = super().get_webhook_info()
+        base_info.update({
             'phone_number_id': self.phone_number_id,
-            'api_version': self.api_version
-        }
+        })
+        return base_info

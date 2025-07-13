@@ -5,7 +5,6 @@ import pytest
 import json
 from unittest.mock import Mock, patch, MagicMock
 from src.platforms.messenger_handler import MessengerHandler
-from src.utils.webhook import verify_meta_signature
 from src.platforms.base import PlatformType, PlatformUser, PlatformMessage, PlatformResponse
 
 

@@ -618,7 +618,7 @@ class AudioInterface(ABC):
         音訊處理要求:
             - 自動格式轉換和壓縮
             - 處理不同平台的音訊編碼
-            - 控制轉錄質量和速度平衡
+            - 控制轉錄品質和速度平衡
             - 支援時間戳標記（可選）
         
         語言支援:
@@ -669,7 +669,7 @@ class ImageInterface(ABC):
         
         預期行為:
             - 解析中文和英文的圖片描述
-            - 生成高質量的圖片
+            - 生成高品質的圖片
             - 返回圖片 URL 或 base64 編碼
             - 處理不當內容的過濾
             - 支援不同的圖片尺寸和風格
@@ -695,7 +695,7 @@ class ImageInterface(ABC):
             **kwargs: 生成參數
                 - size: 圖片尺寸（如 "512x512", "1024x1024"）
                 - n: 生成圖片數量（通常限制為 1-4）
-                - quality: 圖片質量（standard, hd）
+                - quality: 圖片品質（standard, hd）
                 - style: 藝術風格（natural, vivid）
         
         Returns:
@@ -762,7 +762,7 @@ class FullLLMInterface(BaseLLMInterface, UserConversationInterface, RAGInterface
           └─ 連線狀態: ⚠️ 依賴Hugging Face服務和模型狀態
           
         - OllamaModel: ⚠️ 基本功能正常 (本地部署，功能受限)
-          ├─ 對話: ✅ 本地LLM (Llama2, Mistral等)
+          ├─ 對話: ✅ 本地LLM (Llama4, Mistral等)
           ├─ 音訊轉錄: ⚠️ 需本地安裝Whisper (`pip install openai-whisper`)
           ├─ 圖片生成: ❌ 目前不支援
           └─ 連線狀態: ⚠️ 依賴本地Ollama服務狀態

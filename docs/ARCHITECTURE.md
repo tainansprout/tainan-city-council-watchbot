@@ -41,6 +41,36 @@ All platform handlers MUST implement these standard methods:
 - `verify_webhook(verify_token, challenge) -> str` (for Meta platforms)
 - `get_platform_type() -> PlatformType`
 
+**Meta Platform Handler Inheritance**:
+Meta platforms (WhatsApp, Instagram, Messenger) share common functionality through inheritance:
+```
+BasePlatformHandler (abstract base)
+    ↓
+MetaBaseHandler (shared Meta functionality)
+    ↓ ↓ ↓
+WhatsAppHandler  InstagramHandler  MessengerHandler
+```
+
+**MetaBaseHandler** (`src/platforms/meta_base_handler.py`) provides shared functionality:
+- **Webhook Signature Verification**: Support for both SHA256 (`X-Hub-Signature-256`) and SHA1 (`X-Hub-Signature`) 
+- **Media Download**: Two modes - URL-based (Instagram/Messenger) and ID-based (WhatsApp)
+- **Graph API Configuration**: Unified base URL and headers setup
+- **Common Error Handling**: Centralized logging and exception management
+- **Unified Webhook Processing**: Standard flow for all Meta platforms
+- **Configuration Management**: Shared Meta-specific config validation
+
+**Platform-specific implementations** handle:
+- **Configuration Setup**: Platform-specific tokens (WhatsApp: `access_token`, Others: `page_access_token`)
+- **Message Parsing**: Platform-specific webhook structures and message formats
+- **Response Sending**: Platform-specific API endpoints and payload formats
+- **Unique Features**: WhatsApp media IDs, Instagram story replies, Messenger quick replies
+
+**Benefits of Inheritance Structure**:
+- **Code Reuse**: 80%+ shared logic eliminated duplication
+- **Consistent Behavior**: All Meta platforms handle webhooks and signatures identically
+- **Simplified Maintenance**: Bug fixes in MetaBaseHandler apply to all platforms
+- **Easy Extension**: New Meta platforms can inherit common functionality
+
 **Audio Message Handling**:
 ```python
 # ✅ CORRECT: Platform only provides raw data
