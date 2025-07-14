@@ -17,7 +17,7 @@ class SmartPollingStrategy:
         # 🔥 用戶建議的等待序列：5秒 → 3秒 → 2秒 → 1秒 → 之後都1秒
         self.wait_sequence = [5, 3, 2, 1]
         self.final_interval = 1  # 之後固定1秒
-        self.max_wait_time = 90  # 降低最大等待時間到90秒
+        self.max_wait_time = 120  # 增加最大等待時間支援 MCP
         
     def get_wait_time(self, attempt: int, status: str) -> float:
         """
@@ -219,8 +219,8 @@ class OpenAIPollingStrategy(SmartPollingStrategy):
     
     def __init__(self):
         super().__init__()
-        # OpenAI 特定配置
-        self.max_wait_time = 90  # OpenAI Assistant 通常在90秒內完成
+        # OpenAI 特定配置 - 增加 MCP function calling 支援時間
+        self.max_wait_time = 180  # 增加到180秒支援 MCP function calling
         
         # OpenAI 狀態特定的調整
         self.status_multipliers = {

@@ -301,7 +301,7 @@ class OpenAIModel(FullLLMInterface):
         if max_wait_time:
             self.polling_strategy.max_wait_time = max_wait_time
         
-        max_iterations = 10  # 防止無限循環
+        max_iterations = 60  # 增加到 60 次檢查 (約 2 分鐘)
         iteration = 0
         
         while iteration < max_iterations:
@@ -342,11 +342,24 @@ class OpenAIModel(FullLLMInterface):
                 # 繼續等待
                 pass
             
-            # 等待一段時間再檢查
+            # 等待一段時間再檢查 - 用戶建議的等待策略：5秒→3秒→2秒→1秒→之後都1秒
             import time
-            time.sleep(1)
+            if iteration == 1:
+                sleep_time = 5  # 第一次等5秒
+            elif iteration == 2:
+                sleep_time = 3  # 第二次等3秒
+            elif iteration == 3:
+                sleep_time = 2  # 第三次等2秒
+            elif iteration == 4:
+                sleep_time = 1  # 第四次等1秒
+            else:
+                sleep_time = 1  # 之後每秒檢查
+            
+            logger.debug(f"Waiting {sleep_time}s before next check (iteration {iteration}/{max_iterations})")
+            time.sleep(sleep_time)
         
-        return False, None, f"Run did not complete within {max_iterations} iterations"
+        total_wait_time = 5 + 3 + 2 + 1 + (max_iterations - 4) * 1  # 5s + 3s + 2s + 1s + 56*1s = 67秒
+        return False, None, f"Run did not complete within {max_iterations} iterations (~{total_wait_time}s total wait time)"
     
     async def _handle_mcp_function_calls(self, thread_id: str, run_id: str, run_response: Dict) -> bool:
         """處理 MCP function calls"""
