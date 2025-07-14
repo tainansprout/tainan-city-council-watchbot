@@ -125,12 +125,17 @@ class OpenAIModel(FullLLMInterface):
             logger.info(f"Creating MCP-enabled assistant with {len(function_schemas)} functions")
             
             # 創建包含 MCP functions 的 Assistant
+            instructions = kwargs.get('instructions', 'You are a helpful assistant with access to external tools.')
+            # 加入 token 限制指引
+            instructions += "\n\nIMPORTANT: Keep responses concise and under 1000 tokens. Use external tools efficiently and summarize results clearly."
+            
             json_body = {
                 'name': kwargs.get('name', 'MCP-Enabled Assistant'),
-                'instructions': kwargs.get('instructions', 'You are a helpful assistant with access to external tools.'),
+                'instructions': instructions,
                 'model': kwargs.get('model', 'gpt-4'),
                 'tools': function_schemas,
-                'temperature': kwargs.get('temperature', 0.01)
+                'temperature': kwargs.get('temperature', 0.01),
+                'response_format': {"type": "text"}
             }
             
             is_successful, response, error_message = self._request('POST', '/assistants', body=json_body, assistant=True)
@@ -313,7 +318,17 @@ class OpenAIModel(FullLLMInterface):
             if status == 'completed':
                 return True, response, None
             elif status in ['failed', 'expired', 'cancelled']:
-                return False, None, f"Run {status}: {response.get('last_error', {}).get('message', 'Unknown error')}"
+                error_info = response.get('last_error', {})
+                error_message = error_info.get('message', 'Unknown error')
+                error_code = error_info.get('code', 'unknown')
+                
+                # 檢查是否為速率限制錯誤
+                if 'rate limit' in error_message.lower() or error_code == 'rate_limit_exceeded':
+                    logger.warning(f"⚠️ OpenAI Rate limit hit for run {run_id}: {error_message}")
+                    return False, None, f"API 速率限制: {error_message}"
+                else:
+                    logger.error(f"❌ OpenAI Run {run_id} {status}: {error_message}")
+                    return False, None, f"Run {status}: {error_message}"
             elif status == 'requires_action':
                 # 處理 MCP function calling
                 logger.info(f"🔧 OpenAI Run {run_id} requires action - processing MCP function calls")
