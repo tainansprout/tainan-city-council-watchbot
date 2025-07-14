@@ -245,16 +245,84 @@ class MCPService:
         except Exception as e:
             return False, str(e)
     
-    async def list_available_tools(self) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str]]:
-        """取得 MCP 伺服器可用工具列表"""
+    async def initialize_connection(self) -> Tuple[bool, Optional[str]]:
+        """
+        初始化 MCP 連線並宣告客戶端功能
+        
+        Returns:
+            Tuple[bool, Optional[str]]: (成功, 錯誤訊息)
+        """
         if not self.is_enabled:
-            return False, None, "MCP service is not enabled"
+            return False, "MCP service is not enabled"
         
         try:
             async with self.mcp_client as client:
-                return await client.list_tools()
+                return await client.initialize_capabilities()
         except Exception as e:
-            return False, None, str(e)
+            logger.error(f"Failed to initialize MCP connection: {e}")
+            return False, str(e)
+    
+    async def setup_oauth_authentication(self, authorization_url: str, redirect_uri: str) -> Tuple[bool, Optional[str]]:
+        """
+        設定 OAuth 認證
+        
+        Args:
+            authorization_url: 授權服務器 URL
+            redirect_uri: 重定向 URI
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (成功, 授權 URL 或錯誤訊息)
+        """
+        if not self.is_enabled:
+            return False, "MCP service is not enabled"
+        
+        try:
+            async with self.mcp_client as client:
+                return await client.authenticate_oauth(authorization_url, redirect_uri)
+        except Exception as e:
+            logger.error(f"Failed to setup OAuth authentication: {e}")
+            return False, str(e)
+    
+    async def complete_oauth_authentication(self, authorization_code: str, redirect_uri: str, token_url: str) -> Tuple[bool, Optional[str]]:
+        """
+        完成 OAuth 認證流程
+        
+        Args:
+            authorization_code: 授權碼
+            redirect_uri: 重定向 URI
+            token_url: Token 端點 URL
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (成功, 錯誤訊息)
+        """
+        if not self.is_enabled:
+            return False, "MCP service is not enabled"
+        
+        try:
+            async with self.mcp_client as client:
+                return await client.complete_oauth_flow(authorization_code, redirect_uri, token_url)
+        except Exception as e:
+            logger.error(f"Failed to complete OAuth authentication: {e}")
+            return False, str(e)
+    
+    async def list_available_tools(self, cursor: Optional[str] = None) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str], Optional[str]]:
+        """
+        取得 MCP 伺服器可用工具列表 (支援分頁)
+        
+        Args:
+            cursor: 分頁游標
+        
+        Returns:
+            Tuple[bool, Optional[List], Optional[str], Optional[str]]: (成功, 工具列表, 下一頁游標, 錯誤訊息)
+        """
+        if not self.is_enabled:
+            return False, None, None, "MCP service is not enabled"
+        
+        try:
+            async with self.mcp_client as client:
+                return await client.list_tools(cursor)
+        except Exception as e:
+            return False, None, None, str(e)
     
     def get_configured_functions(self) -> List[Dict[str, Any]]:
         """取得已設定的函數列表"""
@@ -281,13 +349,24 @@ class MCPService:
     
     def get_service_info(self) -> Dict[str, Any]:
         """取得 MCP 服務資訊"""
-        return {
+        info = {
             "enabled": self.is_enabled,
             "config_dir": self.config_dir,
             "config_name": self.config_name,
             "available_configs": self.config_manager.list_available_configs(),
             "configured_functions": len(self.get_configured_functions()) if self.is_enabled else 0
         }
+        
+        if self.is_enabled and self.mcp_client:
+            info.update({
+                "server_url": self.mcp_client.base_url,
+                "timeout": self.mcp_client.timeout,
+                "auth_configured": bool(self.mcp_client.auth_config),
+                "capabilities": list(self.mcp_client.capabilities.keys()),
+                "has_access_token": bool(self.mcp_client.access_token)
+            })
+        
+        return info
 
 
 # 全域 MCP 服務實例

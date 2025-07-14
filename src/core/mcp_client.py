@@ -27,11 +27,24 @@ class MCPClient:
         self.retry_attempts = server_config.get('retry_attempts', 3)
         self.retry_delay = server_config.get('retry_delay', 1.0)
         
+        # Authorization configuration
+        self.auth_config = server_config.get('authorization', {})
+        self.access_token = None
+        
+        # Client capabilities
+        self.capabilities = server_config.get('capabilities', {
+            'roots': {'listChanged': False},
+            'sampling': {},
+            'elicitation': {}
+        })
+        
         # 建立 session 設定
         self.session_timeout = aiohttp.ClientTimeout(total=self.timeout)
         self._session = None
         
         logger.info(f"Initialized MCP client for: {self.base_url}")
+        if self.auth_config:
+            logger.info(f"Authorization configured: {list(self.auth_config.keys())}")
     
     async def __aenter__(self):
         """異步上下文管理器進入"""
@@ -87,13 +100,16 @@ class MCPClient:
             # 發送 HTTP 請求到 MCP 端點
             endpoint = self.base_url
             
+            headers = await self._get_auth_headers()
+            headers.update({
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            })
+            
             async with self._session.post(
                 endpoint,
                 json=mcp_request,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                headers=headers
             ) as response:
                 # 記錄回應狀態
                 elapsed_time = time.time() - start_time
@@ -278,6 +294,201 @@ class MCPClient:
         
         return sources
     
+    async def _get_auth_headers(self) -> Dict[str, str]:
+        """
+        建構認證標頭
+        
+        Returns:
+            Dict[str, str]: HTTP 標頭
+        """
+        headers = {}
+        
+        if self.access_token:
+            headers['Authorization'] = f'Bearer {self.access_token}'
+        elif self.auth_config.get('api_key'):
+            headers['Authorization'] = f'Bearer {self.auth_config["api_key"]}'
+        
+        return headers
+    
+    async def initialize_capabilities(self) -> Tuple[bool, Optional[str]]:
+        """
+        初始化客戶端功能宣告
+        
+        Returns:
+            Tuple[bool, Optional[str]]: (成功, 錯誤訊息)
+        """
+        try:
+            await self._ensure_session()
+            
+            import time
+            request_id = int(time.time() * 1000) % 100000
+            
+            rpc_request = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": self.capabilities,
+                    "clientInfo": {
+                        "name": "ChatGPT-Line-Bot",
+                        "version": "2.2.0"
+                    }
+                }
+            }
+            
+            headers = await self._get_auth_headers()
+            headers.update({
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            })
+            
+            async with self._session.post(
+                self.base_url,
+                json=rpc_request,
+                headers=headers
+            ) as response:
+                response_text = await response.text()
+                
+                if response.status != 200:
+                    error_msg = f"Failed to initialize: HTTP {response.status} - {response_text}"
+                    logger.error(error_msg)
+                    return False, error_msg
+                
+                try:
+                    data = json.loads(response_text)
+                    
+                    if 'error' in data:
+                        error_msg = data['error'].get('message', 'Unknown initialization error')
+                        logger.error(f"Initialization error: {error_msg}")
+                        return False, error_msg
+                    
+                    result = data.get('result', {})
+                    server_capabilities = result.get('capabilities', {})
+                    logger.info(f"MCP server capabilities: {list(server_capabilities.keys())}")
+                    
+                    return True, None
+                    
+                except json.JSONDecodeError as e:
+                    error_msg = f"Invalid JSON response from initialize: {e}"
+                    logger.error(error_msg)
+                    return False, error_msg
+                    
+        except Exception as e:
+            error_msg = f"Error initializing MCP client: {e}"
+            logger.error(error_msg)
+            return False, error_msg
+    
+    async def authenticate_oauth(self, authorization_url: str, redirect_uri: str) -> Tuple[bool, Optional[str]]:
+        """
+        執行 OAuth 2.1 認證流程
+        
+        Args:
+            authorization_url: 授權服務器 URL
+            redirect_uri: 重定向 URI
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (成功, 錯誤訊息或授權 URL)
+        """
+        try:
+            if not self.auth_config.get('client_id'):
+                return False, "OAuth client_id not configured"
+            
+            # 生成 PKCE 參數
+            import base64
+            import hashlib
+            import secrets
+            
+            code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+            code_challenge = base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode('utf-8')).digest()
+            ).decode('utf-8').rstrip('=')
+            
+            # 建構授權 URL
+            auth_params = {
+                'response_type': 'code',
+                'client_id': self.auth_config['client_id'],
+                'redirect_uri': redirect_uri,
+                'code_challenge': code_challenge,
+                'code_challenge_method': 'S256',
+                'scope': self.auth_config.get('scope', 'read')
+            }
+            
+            import urllib.parse
+            auth_url = f"{authorization_url}?{urllib.parse.urlencode(auth_params)}"
+            
+            # 儲存 code_verifier 供稍後使用
+            self.auth_config['_code_verifier'] = code_verifier
+            
+            logger.info("OAuth authorization URL generated")
+            return True, auth_url
+            
+        except Exception as e:
+            error_msg = f"Error generating OAuth URL: {e}"
+            logger.error(error_msg)
+            return False, error_msg
+    
+    async def complete_oauth_flow(self, authorization_code: str, redirect_uri: str, token_url: str) -> Tuple[bool, Optional[str]]:
+        """
+        完成 OAuth 認證流程並取得 access token
+        
+        Args:
+            authorization_code: 授權碼
+            redirect_uri: 重定向 URI
+            token_url: Token 端點 URL
+            
+        Returns:
+            Tuple[bool, Optional[str]]: (成功, 錯誤訊息)
+        """
+        try:
+            await self._ensure_session()
+            
+            code_verifier = self.auth_config.get('_code_verifier')
+            if not code_verifier:
+                return False, "OAuth flow not properly initialized"
+            
+            token_data = {
+                'grant_type': 'authorization_code',
+                'client_id': self.auth_config['client_id'],
+                'code': authorization_code,
+                'redirect_uri': redirect_uri,
+                'code_verifier': code_verifier
+            }
+            
+            async with self._session.post(
+                token_url,
+                data=token_data,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            ) as response:
+                response_text = await response.text()
+                
+                if response.status != 200:
+                    error_msg = f"Token request failed: HTTP {response.status} - {response_text}"
+                    logger.error(error_msg)
+                    return False, error_msg
+                
+                try:
+                    token_response = json.loads(response_text)
+                    
+                    if 'access_token' in token_response:
+                        self.access_token = token_response['access_token']
+                        logger.info("OAuth authentication successful")
+                        return True, None
+                    else:
+                        error_msg = f"No access token in response: {token_response}"
+                        logger.error(error_msg)
+                        return False, error_msg
+                        
+                except json.JSONDecodeError as e:
+                    error_msg = f"Invalid JSON token response: {e}"
+                    logger.error(error_msg)
+                    return False, error_msg
+                    
+        except Exception as e:
+            error_msg = f"Error completing OAuth flow: {e}"
+            logger.error(error_msg)
+            return False, error_msg
+    
     async def health_check(self) -> Tuple[bool, Optional[str]]:
         """
         檢查 MCP 伺服器健康狀態
@@ -305,12 +516,15 @@ class MCPClient:
             logger.warning(error_msg)
             return False, error_msg
     
-    async def list_tools(self) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str]]:
+    async def list_tools(self, cursor: Optional[str] = None) -> Tuple[bool, Optional[List[Dict[str, Any]]], Optional[str], Optional[str]]:
         """
-        取得 MCP 伺服器可用工具列表
+        取得 MCP 伺服器可用工具列表 (支援分頁)
         
+        Args:
+            cursor: 分頁游標
+            
         Returns:
-            Tuple[bool, Optional[List], Optional[str]]: (成功, 工具列表, 錯誤訊息)
+            Tuple[bool, Optional[List], Optional[str], Optional[str]]: (成功, 工具列表, 下一頁游標, 錯誤訊息)
         """
         try:
             await self._ensure_session()
@@ -319,27 +533,34 @@ class MCPClient:
             import time
             request_id = int(time.time() * 1000) % 100000
             
+            params = {}
+            if cursor:
+                params['cursor'] = cursor
+            
             rpc_request = {
                 "jsonrpc": "2.0",
                 "id": request_id,
                 "method": "tools/list",
-                "params": {}
+                "params": params
             }
+            
+            headers = await self._get_auth_headers()
+            headers.update({
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            })
             
             async with self._session.post(
                 self.base_url,
                 json=rpc_request,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                headers=headers
             ) as response:
                 response_text = await response.text()
                 
                 if response.status != 200:
                     error_msg = f"Failed to list tools: HTTP {response.status} - {response_text}"
                     logger.error(error_msg)
-                    return False, None, error_msg
+                    return False, None, None, error_msg
                 
                 try:
                     data = json.loads(response_text)
@@ -348,23 +569,28 @@ class MCPClient:
                     if 'error' in data:
                         error_msg = data['error'].get('message', 'Unknown RPC error')
                         logger.error(f"RPC error listing tools: {error_msg}")
-                        return False, None, error_msg
+                        return False, None, None, error_msg
                     
-                    # 提取工具列表
+                    # 提取工具列表和分頁資訊
                     result = data.get('result', {})
                     tools = result.get('tools', [])
+                    next_cursor = result.get('nextCursor')
+                    
                     logger.debug(f"Retrieved {len(tools)} tools from MCP server")
-                    return True, tools, None
+                    if next_cursor:
+                        logger.debug(f"Next page available with cursor: {next_cursor[:20]}...")
+                    
+                    return True, tools, next_cursor, None
                     
                 except json.JSONDecodeError as e:
                     error_msg = f"Invalid JSON response from tools/list: {e}"
                     logger.error(error_msg)
-                    return False, None, error_msg
+                    return False, None, None, error_msg
                     
         except Exception as e:
             error_msg = f"Error listing MCP tools: {e}"
             logger.error(error_msg)
-            return False, None, error_msg
+            return False, None, None, error_msg
 
 
 class MCPClientError(Exception):

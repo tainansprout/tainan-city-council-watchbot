@@ -2,7 +2,7 @@
 
 ## 📋 **概述**
 
-本文件描述 Multi-Platform Chatbot 項目的測試架構設計和實現。我們採用分層測試策略，確保代碼質量和系統可靠性。
+本文件描述 Multi-Platform Chatbot 項目的測試架構設計和實現。我們採用分層測試策略，確保代碼品質和系統可靠性。
 
 ## 🏗️ **測試架構總覽**
 
@@ -230,7 +230,7 @@ python -m pytest --cov=src --cov-report=term-missing
 pytest -m "not slow and not external"
 ```
 
-## 📊 **測試質量指標**
+## 📊 **測試品質指標**
 
 ### **當前覆蓋率**
 | 模組 | 測試數量 | 覆蓋率 | 狀態 |
@@ -240,7 +240,7 @@ pytest -m "not slow and not external"
 | models/ | 30+ | 目標75% | 🔄 開發中 |
 | services/ | 20+ | 目標80% | 🔄 開發中 |
 
-### **質量標準**
+### **品質標準**
 - ✅ **單元測試**: 新代碼必須有對應測試
 - ✅ **覆蓋率**: 新模組最低 75% 覆蓋率
 - ✅ **平台測試**: 所有平台 handler 必須通過測試
@@ -302,4 +302,4 @@ class TestPlatformHandler:
         # Test edge cases and error conditions
 ```
 
-這個測試架構確保了系統的可靠性、可維護性和擴展性，為多平台聊天機器人提供了堅實的質量保證基礎。
+這個測試架構確保了系統的可靠性、可維護性和擴展性，為多平台聊天機器人提供了堅實的品質保證基礎。
