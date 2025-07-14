@@ -12,13 +12,11 @@ google-generativeai>=0.4.0,<1.0.0
 
 # Hugging Face integration
 huggingface-hub>=0.20.0,<1.0.0
-transformers>=4.36.0,<5.0.0
-sentence-transformers>=2.2.2,<3.0.0
+# transformers and sentence-transformers are not required for API-based embedding.
+# torch is not required if you are not running models locally.
 
 # Text processing
 opencc-python-reimplemented>=0.1.6,<1.0.0
-# beautifulsoup4>=4.12.0,<5.0.0  # Not used
-# youtube-transcript-api>=0.6.0,<1.0.0  # Not used
 
 # Configuration and data
 pyyaml>=6.0,<7.0
@@ -50,7 +48,7 @@ python-dotenv>=1.0.0,<2.0.0
 # Discord platform support
 # discord.py>=2.4.0,<3.0.0
 
-# Telegram platform support  
+# Telegram platform support
 # python-telegram-bot>=22.0,<23.0
 
 # Slack platform support
@@ -69,7 +67,7 @@ requests-toolbelt>=1.0.0,<2.0.0
 # ==========================================
 # MULTI-PLATFORM SUPPORT INSTALLATION GUIDE
 # ==========================================
-# 
+#
 # To enable additional platforms, uncomment the relevant packages above and run:
 #
 # For Discord support:
@@ -96,3 +94,40 @@ requests-toolbelt>=1.0.0,<2.0.0
 #       enabled: true
 #       bot_token: "your_slack_bot_token"
 #       signing_secret: "your_slack_signing_secret"
+
+# ==========================================
+# OPTIONAL DEPENDENCIES FOR ADVANCED FEATURES
+# ==========================================
+#
+# For advanced text processing and web scraping:
+#   pip install "beautifulsoup4>=4.12.0,<5.0.0"
+#
+# For YouTube transcript fetching:
+#   pip install "youtube-transcript-api>=0.6.0,<1.0.0"
+#
+# For local model support with Ollama (if you choose to use the SDK):
+#   pip install "ollama>=0.2.0,<1.0.0"
+#
+# ==========================================
+# DEVELOPMENT AND TESTING DEPENDENCIES
+# ==========================================
+#
+# For development and running tests, install the dependencies from requirements-test.txt:
+#   pip install -r requirements-test.txt
+#
+# This will install pytest, mocking libraries, and other development tools.
+#
+# ==========================================
+# DATABASE SETUP
+# ==========================================
+#
+# This project uses PostgreSQL. Ensure you have it installed and running.
+# The `psycopg2-binary` package is used to connect to the database.
+# For database migrations, `Flask-Migrate` (which uses Alembic) is included.
+#
+# To initialize the database and run migrations:
+#   flask db init  # (if you haven't already)
+#   flask db migrate -m "Initial migration"
+#   flask db upgrade
+#
+# ==========================================

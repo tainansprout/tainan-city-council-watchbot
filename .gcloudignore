@@ -7,3 +7,4 @@
 !config/ssl/server-ca.pem
 !config/ssl/ssl-cert.crt
 !config/ssl/ssl-key.key
+!config/mcp/*.json
