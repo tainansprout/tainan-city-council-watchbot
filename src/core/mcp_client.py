@@ -80,12 +80,12 @@ class MCPClient:
             
             # 記錄詳細的請求日志
             logger.info(f"[{request_id}] 🔌 MCP Request - Tool: {tool_name}")
-            logger.info(f"[{request_id}] 📤 Request URL: {self.base_url}/tools/call")
+            logger.info(f"[{request_id}] 📤 Request URL: {self.base_url}")
             logger.info(f"[{request_id}] 📊 Request Arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
             logger.debug(f"[{request_id}] 📋 Full MCP Request: {json.dumps(mcp_request, ensure_ascii=False, indent=2)}")
             
-            # 發送 HTTP 請求
-            endpoint = f"{self.base_url}/tools/call"
+            # 發送 HTTP 請求到 MCP 端點
+            endpoint = self.base_url
             
             async with self._session.post(
                 endpoint,
@@ -153,8 +153,13 @@ class MCPClient:
             raise MCPClientError(error_msg)
     
     def _build_mcp_request(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """建構 MCP 請求格式"""
+        """建構 MCP 請求格式 (JSON-RPC 2.0)"""
+        import time
+        request_id = int(time.time() * 1000) % 100000  # 生成請求 ID
+        
         return {
+            "jsonrpc": "2.0",
+            "id": request_id,
             "method": "tools/call",
             "params": {
                 "name": tool_name,
@@ -310,9 +315,25 @@ class MCPClient:
         try:
             await self._ensure_session()
             
-            endpoint = f"{self.base_url}/tools/list"
+            # 建構 JSON-RPC 2.0 請求
+            import time
+            request_id = int(time.time() * 1000) % 100000
             
-            async with self._session.get(endpoint) as response:
+            rpc_request = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/list",
+                "params": {}
+            }
+            
+            async with self._session.post(
+                self.base_url,
+                json=rpc_request,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            ) as response:
                 response_text = await response.text()
                 
                 if response.status != 200:
@@ -322,9 +343,19 @@ class MCPClient:
                 
                 try:
                     data = json.loads(response_text)
-                    tools = data.get('tools', [])
+                    
+                    # 檢查 JSON-RPC 錯誤
+                    if 'error' in data:
+                        error_msg = data['error'].get('message', 'Unknown RPC error')
+                        logger.error(f"RPC error listing tools: {error_msg}")
+                        return False, None, error_msg
+                    
+                    # 提取工具列表
+                    result = data.get('result', {})
+                    tools = result.get('tools', [])
                     logger.debug(f"Retrieved {len(tools)} tools from MCP server")
                     return True, tools, None
+                    
                 except json.JSONDecodeError as e:
                     error_msg = f"Invalid JSON response from tools/list: {e}"
                     logger.error(error_msg)
