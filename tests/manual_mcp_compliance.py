@@ -6,11 +6,13 @@ MCP Protocol Compliance Test Script
 
 import asyncio
 import json
+import os
 import sys
 from typing import Dict, Any
 
 # Add src to path
-sys.path.insert(0, 'src')
+project_root = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, project_root)
 
 from src.core.mcp_config import MCPConfigManager
 from src.core.mcp_client import MCPClient
