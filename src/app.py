@@ -414,9 +414,43 @@ class MultiPlatformChatBot:
                 # 使用錯誤處理器取得詳細的錯誤訊息（用於測試介面）
                 detailed_error = self.error_handler.get_error_message(e, use_detailed=True)
                 
-                return jsonify({'error': detailed_error}), 500
+                # 根據錯誤類型決定 HTTP 狀態碼
+                status_code = self._get_error_status_code(e, detailed_error)
+                
+                return jsonify({
+                    'error': detailed_error,
+                    'error_type': self.error_handler._classify_error(str(e)),
+                    'timestamp': __import__('time').time()
+                }), status_code
         
         logger.info("Routes registered successfully")
+    
+    def _get_error_status_code(self, error: Exception, error_message: str) -> int:
+        """根據錯誤類型決定適當的 HTTP 狀態碼"""
+        error_str = str(error).lower()
+        
+        # 速率限制 - 429 Too Many Requests
+        if 'rate limit' in error_str or 'api 速率限制' in error_str:
+            return 429
+        
+        # 認證錯誤 - 401 Unauthorized  
+        if 'api key' in error_str or 'unauthorized' in error_str:
+            return 401
+        
+        # 配額錯誤 - 402 Payment Required
+        if 'quota exceeded' in error_str or 'billing' in error_str:
+            return 402
+        
+        # 服務不可用 - 503 Service Unavailable
+        if 'overloaded' in error_str or 'timeout' in error_str or 'connection' in error_str:
+            return 503
+        
+        # MCP 相關錯誤 - 502 Bad Gateway (外部服務問題)
+        if 'mcp' in error_str:
+            return 502
+        
+        # 預設為 500 Internal Server Error
+        return 500
     
     def _handle_webhook_verification(self, platform_name: str):
         """處理 webhook 驗證請求（主要用於 WhatsApp、Messenger 和 Instagram）"""

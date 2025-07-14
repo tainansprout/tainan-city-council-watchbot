@@ -28,6 +28,9 @@ class ErrorHandler:
         'platform_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
         'validation_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
         'configuration_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
+        'mcp_server_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
+        'mcp_function_failed': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
+        'mcp_timeout': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
         'unknown_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。'
     }
     
@@ -37,6 +40,9 @@ class ErrorHandler:
         'openai_overloaded': 'OpenAI 服務過載：伺服器目前繁忙，請稍後再試。',
         'openai_rate_limit': 'OpenAI API 速率限制：請求頻率過高，請稍後再試。',
         'openai_quota_exceeded': 'OpenAI API 配額超出：請檢查帳戶使用量和付費狀態。',
+        'mcp_server_error': 'MCP 外部工具服務錯誤：無法連接到外部資料服務，請稍後再試。',
+        'mcp_function_failed': 'MCP 工具調用失敗：外部工具執行時發生錯誤，請嘗試調整查詢條件。',
+        'mcp_timeout': 'MCP 工具調用超時：外部服務回應時間過長，請稍後再試。',
         'anthropic_api_key_invalid': 'Anthropic API Token 錯誤：請檢查 ANTHROPIC_API_KEY 環境變數設定。',
         'anthropic_overloaded': 'Anthropic 服務過載：伺服器目前繁忙，請稍後再試。',
         'anthropic_rate_limit': 'Anthropic API 速率限制：請求頻率過高，請稍後再試。',
@@ -82,7 +88,15 @@ class ErrorHandler:
         error_key = self._classify_error(error_str)
         
         if use_detailed:
-            return self.DETAILED_ERROR_MESSAGES.get(error_key, self.DETAILED_ERROR_MESSAGES['unknown_error'])
+            base_message = self.DETAILED_ERROR_MESSAGES.get(error_key, self.DETAILED_ERROR_MESSAGES['unknown_error'])
+            
+            # 對於速率限制錯誤，嘗試提取重試時間
+            if error_key == 'openai_rate_limit':
+                retry_time = self._extract_retry_time(error_str)
+                if retry_time:
+                    base_message += f" 建議等待 {retry_time} 秒後重試。"
+            
+            return base_message
         else:
             return self.SIMPLE_ERROR_MESSAGES.get(error_key, self.SIMPLE_ERROR_MESSAGES['unknown_error'])
     
@@ -95,7 +109,7 @@ class ErrorHandler:
             return 'openai_api_key_invalid'
         elif 'overloaded with other requests' in error_str_lower:
             return 'openai_overloaded'
-        elif 'rate limit' in error_str_lower and 'openai' in error_str_lower:
+        elif 'rate limit' in error_str_lower or 'api 速率限制' in error_str_lower:
             return 'openai_rate_limit'
         elif 'quota exceeded' in error_str_lower or 'billing' in error_str_lower:
             return 'openai_quota_exceeded'
@@ -149,6 +163,16 @@ class ErrorHandler:
         elif 'invalid format' in error_str_lower or 'format error' in error_str_lower:
             return 'validation_invalid_format'
         
+        # MCP 相關錯誤
+        elif 'mcp' in error_str_lower and ('server' in error_str_lower or 'connection' in error_str_lower):
+            return 'mcp_server_error'
+        elif 'mcp' in error_str_lower and ('function' in error_str_lower or 'tool' in error_str_lower):
+            return 'mcp_function_failed'
+        elif 'mcp' in error_str_lower and 'timeout' in error_str_lower:
+            return 'mcp_timeout'
+        elif 'failed to handle mcp' in error_str_lower:
+            return 'mcp_function_failed'
+        
         # 配置相關錯誤
         elif 'config' in error_str_lower and 'missing' in error_str_lower:
             return 'configuration_missing'
@@ -157,6 +181,22 @@ class ErrorHandler:
         
         else:
             return 'unknown_error'
+    
+    def _extract_retry_time(self, error_str: str) -> Optional[str]:
+        """從錯誤訊息中提取重試等待時間"""
+        import re
+        
+        # 匹配 "try again in X.XXXs" 格式
+        match = re.search(r'try again in (\d+\.?\d*)s', error_str, re.IGNORECASE)
+        if match:
+            seconds = float(match.group(1))
+            if seconds < 60:
+                return f"{seconds:.1f}"
+            else:
+                minutes = seconds / 60
+                return f"{minutes:.1f} 分鐘 ({seconds:.1f} 秒)"
+        
+        return None
     
     def _handle_chatbot_error(self, error: ChatBotError, use_detailed: bool = False) -> str:
         """處理自定義錯誤"""
