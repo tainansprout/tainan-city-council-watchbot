@@ -42,7 +42,7 @@ from ..core.logger import get_logger
 from ..core.api_timeouts import SmartTimeoutConfig, TimeoutContext
 from ..core.smart_polling import OpenAIPollingStrategy, PollingContext
 import re
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 import time
 
 logger = get_logger(__name__)
@@ -63,14 +63,113 @@ from ..utils import s2t_converter, dedup_citation_blocks
 class OpenAIModel(FullLLMInterface):
     """OpenAI 模型實作"""
     
-    def __init__(self, api_key: str, assistant_id: str = None, base_url: str = None):
+    def __init__(self, api_key: str, assistant_id: str = None, base_url: str = None, enable_mcp: bool = None):
         self.api_key = api_key
         self.assistant_id = assistant_id
         self.base_url = base_url or 'https://api.openai.com/v1'
         self.polling_strategy = OpenAIPollingStrategy()
+        
+        # MCP 支援 - 從設定檔讀取
+        if enable_mcp is None:
+            try:
+                from ..core.config import get_value
+                feature_enabled = get_value('features.enable_mcp', False)
+                mcp_enabled = get_value('mcp.enabled', False)
+                self.enable_mcp = feature_enabled and mcp_enabled
+            except Exception as e:
+                logger.warning(f"Error reading MCP config: {e}")
+                self.enable_mcp = False
+        else:
+            self.enable_mcp = enable_mcp
+            
+        self.mcp_service = None
+        if self.enable_mcp:
+            self._init_mcp_service()
+        
+        # 建構 system prompt（為未來的 Chat Completion API 準備）
+        self.system_prompt = self._build_system_prompt()
     
     def get_provider(self) -> ModelProvider:
         return ModelProvider.OPENAI
+    
+    def _init_mcp_service(self) -> None:
+        """初始化 MCP 服務"""
+        try:
+            from ..services.mcp_service import get_mcp_service
+            
+            mcp_service = get_mcp_service()
+            if mcp_service.is_enabled:
+                self.mcp_service = mcp_service
+                logger.info("OpenAI Model: MCP service initialized successfully")
+            else:
+                logger.warning("OpenAI Model: MCP service is not enabled")
+                self.enable_mcp = False
+        except Exception as e:
+            logger.warning(f"OpenAI Model: Failed to initialize MCP service: {e}")
+            self.enable_mcp = False
+            self.mcp_service = None
+    
+    def create_assistant_with_mcp_functions(self, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
+        """創建包含 MCP functions 的 Assistant"""
+        try:
+            if not self.enable_mcp or not self.mcp_service:
+                logger.info("Creating regular assistant (MCP disabled)")
+                return self._create_regular_assistant(**kwargs)
+            
+            # 取得 MCP function schemas
+            function_schemas = self.mcp_service.get_function_schemas_for_openai()
+            if not function_schemas:
+                logger.warning("No MCP function schemas available, creating regular assistant")
+                return self._create_regular_assistant(**kwargs)
+            
+            logger.info(f"Creating MCP-enabled assistant with {len(function_schemas)} functions")
+            
+            # 創建包含 MCP functions 的 Assistant
+            json_body = {
+                'name': kwargs.get('name', 'MCP-Enabled Assistant'),
+                'instructions': kwargs.get('instructions', 'You are a helpful assistant with access to external tools.'),
+                'model': kwargs.get('model', 'gpt-4'),
+                'tools': function_schemas,
+                'temperature': kwargs.get('temperature', 0.01)
+            }
+            
+            is_successful, response, error_message = self._request('POST', '/assistants', body=json_body, assistant=True)
+            
+            if is_successful:
+                assistant_id = response['id']
+                self.assistant_id = assistant_id
+                logger.info(f"Created MCP-enabled assistant: {assistant_id}")
+                return True, assistant_id, None
+            else:
+                logger.error(f"Failed to create MCP assistant: {error_message}")
+                return False, None, error_message
+                
+        except Exception as e:
+            logger.error(f"Error creating MCP assistant: {e}")
+            return False, None, str(e)
+    
+    def _create_regular_assistant(self, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
+        """創建一般的 Assistant（無 MCP functions）"""
+        try:
+            json_body = {
+                'name': kwargs.get('name', 'Regular Assistant'),
+                'instructions': kwargs.get('instructions', 'You are a helpful assistant.'),
+                'model': kwargs.get('model', 'gpt-4'),
+                'temperature': kwargs.get('temperature', 0.01)
+            }
+            
+            is_successful, response, error_message = self._request('POST', '/assistants', body=json_body, assistant=True)
+            
+            if is_successful:
+                assistant_id = response['id']
+                self.assistant_id = assistant_id
+                logger.info(f"Created regular assistant: {assistant_id}")
+                return True, assistant_id, None
+            else:
+                return False, None, error_message
+                
+        except Exception as e:
+            return False, None, str(e)
     
     def check_connection(self) -> Tuple[bool, Optional[str]]:
         """檢查 OpenAI API 連線"""
@@ -159,7 +258,7 @@ class OpenAIModel(FullLLMInterface):
             return False, str(e)
     
     def run_assistant(self, thread_id: str, **kwargs) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
-        """執行 OpenAI Assistant"""
+        """執行 OpenAI Assistant（支援 MCP function calling）"""
         try:
             # 啟動執行
             endpoint = f'/threads/{thread_id}/runs'
@@ -172,9 +271,15 @@ class OpenAIModel(FullLLMInterface):
             if not is_successful:
                 return False, None, error_message
             
-            # 等待完成
+            # 等待完成（包含 MCP function calling 處理）
             run_id = run_response['id']
-            is_successful, final_response, error_message = self._wait_for_run_completion(thread_id, run_id)
+            if self.enable_mcp and self.mcp_service:
+                import asyncio
+                is_successful, final_response, error_message = asyncio.run(
+                    self._wait_for_run_completion_with_mcp(thread_id, run_id)
+                )
+            else:
+                is_successful, final_response, error_message = self._wait_for_run_completion(thread_id, run_id)
 
             if not is_successful:
                 return False, None, f"Assistant run failed: {error_message}"
@@ -184,6 +289,178 @@ class OpenAIModel(FullLLMInterface):
             
         except Exception as e:
             return False, None, str(e)
+    
+    async def _wait_for_run_completion_with_mcp(self, thread_id: str, run_id: str, max_wait_time: int = None) -> Tuple[bool, Optional[Dict], Optional[str]]:
+        """智慧等待執行完成（支援 MCP function calling）"""
+        
+        if max_wait_time:
+            self.polling_strategy.max_wait_time = max_wait_time
+        
+        max_iterations = 10  # 防止無限循環
+        iteration = 0
+        
+        while iteration < max_iterations:
+            iteration += 1
+            
+            # 檢查執行狀態
+            is_successful, response, error_message = self.retrieve_thread_run(thread_id, run_id)
+            if not is_successful:
+                return False, None, error_message
+            
+            status = response['status']
+            logger.debug(f"Run {run_id} status: {status} (iteration {iteration})")
+            
+            if status == 'completed':
+                return True, response, None
+            elif status in ['failed', 'expired', 'cancelled']:
+                return False, None, f"Run {status}: {response.get('last_error', {}).get('message', 'Unknown error')}"
+            elif status == 'requires_action':
+                # 處理 MCP function calling
+                logger.info("Run requires action - processing MCP function calls")
+                success = await self._handle_mcp_function_calls(thread_id, run_id, response)
+                if not success:
+                    return False, None, "Failed to handle MCP function calls"
+                # 繼續輪詢
+            elif status in ['queued', 'in_progress']:
+                # 繼續等待
+                pass
+            
+            # 等待一段時間再檢查
+            import time
+            time.sleep(1)
+        
+        return False, None, f"Run did not complete within {max_iterations} iterations"
+    
+    async def _handle_mcp_function_calls(self, thread_id: str, run_id: str, run_response: Dict) -> bool:
+        """處理 MCP function calls"""
+        try:
+            required_action = run_response.get('required_action', {})
+            tool_calls = required_action.get('submit_tool_outputs', {}).get('tool_calls', [])
+            
+            if not tool_calls:
+                logger.warning("No tool calls found in requires_action")
+                return False
+            
+            logger.info(f"Processing {len(tool_calls)} MCP function calls")
+            tool_outputs = []
+            
+            for tool_call in tool_calls:
+                function_name = tool_call['function']['name']
+                arguments_str = tool_call['function']['arguments']
+                
+                try:
+                    import json
+                    arguments = json.loads(arguments_str)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON in function arguments: {e}")
+                    tool_outputs.append({
+                        "tool_call_id": tool_call['id'],
+                        "output": json.dumps({
+                            "success": False,
+                            "error": "Invalid function arguments format"
+                        }, ensure_ascii=False)
+                    })
+                    continue
+                
+                logger.info(f"Executing MCP function: {function_name} with args: {arguments}")
+                
+                # 執行 MCP function call
+                result = await self.mcp_service.handle_function_call(function_name, arguments)
+                
+                tool_outputs.append({
+                    "tool_call_id": tool_call['id'],
+                    "output": json.dumps(result, ensure_ascii=False)
+                })
+            
+            # 提交 tool outputs 到 OpenAI
+            endpoint = f'/threads/{thread_id}/runs/{run_id}/submit_tool_outputs'
+            json_body = {
+                "tool_outputs": tool_outputs
+            }
+            
+            is_successful, response, error_message = self._request('POST', endpoint, body=json_body, assistant=True)
+            
+            if is_successful:
+                logger.info(f"Successfully submitted {len(tool_outputs)} tool outputs")
+                return True
+            else:
+                logger.error(f"Failed to submit tool outputs: {error_message}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error handling MCP function calls: {e}")
+            return False
+    
+    def get_mcp_status(self) -> Dict[str, Any]:
+        """取得 MCP 服務狀態"""
+        return {
+            "enabled": self.enable_mcp,
+            "service_available": self.mcp_service is not None,
+            "service_info": self.mcp_service.get_service_info() if self.mcp_service else None
+        }
+    
+    def reload_mcp_config(self) -> bool:
+        """重新載入 MCP 設定"""
+        if self.mcp_service:
+            success = self.mcp_service.reload_config()
+            if success:
+                # 重新建構 system prompt
+                self.system_prompt = self._build_system_prompt()
+                logger.info("OpenAI Model: MCP config reloaded and system prompt updated")
+            return success
+        return False
+    
+    def _build_system_prompt(self) -> str:
+        """建構 system prompt（為未來 Chat Completion API 使用）
+        
+        注意：OpenAI Assistant API 使用預設的 instructions，不會直接使用此 system prompt。
+        但保留此功能以便未來可能的 Chat Completion API 整合。
+        """
+        # 從設定檔讀取基礎 system prompt
+        if self.enable_mcp:
+            try:
+                from ..core.config import get_value
+                base_prompt = get_value('mcp.system_prompt', "You are a helpful AI assistant.")
+            except Exception:
+                base_prompt = "You are a helpful AI assistant."
+        else:
+            base_prompt = "You are a helpful AI assistant."
+        
+        if self.enable_mcp and self.mcp_service:
+            try:
+                # 取得可用的 function schemas
+                function_schemas = self.mcp_service.get_function_schemas_for_openai()
+                if function_schemas:
+                    base_prompt += """
+
+## 工具調用能力 (Function Calling Capabilities)
+
+您具備調用外部工具的能力，請遵循以下指引：
+
+### 調用原則：
+- 僅在用戶明確需要或有明確指示時調用工具
+- 調用前向用戶說明將要執行的操作
+- 對工具返回的結果進行適當的解釋和分析
+- 明確標示資訊來源，提升回應的透明度
+
+### 安全考量：
+- 確保參數的準確性和完整性
+- 對敏感查詢提供適當的上下文
+- 保護用戶查詢的隱私性
+- 遵循最小權限原則
+
+### 錯誤處理：
+- 如果工具調用失敗，解釋問題並提供替代方案
+- 對不確定的結果進行適當的警示
+- 引導用戶提供更明確的查詢條件
+
+這些工具將通過 OpenAI function calling 機制自動調用，您無需手動格式化函數調用。"""
+                    
+                    logger.info("OpenAI Model: Added MCP tool usage guidelines to system prompt")
+            except Exception as e:
+                logger.error(f"Failed to add MCP guidelines to system prompt: {e}")
+        
+        return base_prompt
     
     # === RAG 介面實作（使用 OpenAI Assistant API） ===
     

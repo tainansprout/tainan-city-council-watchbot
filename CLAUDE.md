@@ -8,6 +8,8 @@ This is a **Multi-Platform Chatbot** supporting LINE, Discord, Telegram and othe
 
 **v2.1 Core Infrastructure Integration**: Integrated high-performance logging and security modules for optimal performance and simplified maintenance.
 
+**v2.2 MCP Integration**: Added Model Context Protocol (MCP) support for external tool calling across OpenAI, Anthropic, and Gemini models.
+
 ## Development Commands
 
 ### Local Development
@@ -69,6 +71,11 @@ gcloud run deploy {service-name} \
 - **src/core/security.py**: Security middleware with O(1) rate limiting
 - **src/core/memory_monitor.py**: Memory monitoring and garbage collection
 - **src/core/smart_polling.py**: Intelligent polling strategies
+
+#### MCP Infrastructure (v2.2)
+- **src/core/mcp_config.py**: MCP configuration management and validation
+- **src/core/mcp_client.py**: HTTP client for MCP server communication
+- **src/services/mcp_service.py**: MCP function calling service layer
 
 #### Model Layer (Factory Pattern)
 - **src/models/base.py**: Abstract model interfaces
@@ -138,6 +145,7 @@ User → Platform Handler → App.py → AudioService → Model (transcription) 
 3. **Audio transcription MUST happen in AudioService, not platforms**
 4. **App.py is the ONLY coordinator between layers**
 5. **Each layer should have single responsibility**
+6. **MCP function calls MUST be handled by MCPService, not models directly**
 
 📖 **For detailed documentation, see:**
 - **Architecture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -176,6 +184,19 @@ db:
 auth:
   method: "simple_password"
   password: "${TEST_PASSWORD}"
+
+# MCP (Model Context Protocol) Configuration
+mcp:
+  enabled: true
+  config_dir: "config/mcp"
+  system_prompt: |
+    You are an AI assistant with external tool capabilities...
+
+# Feature Toggles
+features:
+  enable_mcp: true
+  audio_transcription: true
+  rag_search: true
 ```
 
 ### Environment Variables
@@ -242,6 +263,109 @@ python scripts/db_migration.py upgrade
 - `GET /login`: Login page
 - `GET /chat`: Chat interface (requires authentication)
 - `POST /ask`: Chat API (requires authentication)
+
+## MCP (Model Context Protocol) Integration
+
+### Overview
+
+The system supports MCP for external tool calling across all AI model providers. MCP enables models to access external APIs, databases, and services through a standardized protocol.
+
+### Architecture
+
+```
+User Input → Model → Function Call Detection → MCP Service → MCP Client → External Tool
+                                                ↓
+User ← Model ← Function Results Integration ← Tool Response
+```
+
+### Configuration
+
+#### MCP Configuration Files (config/mcp/)
+
+```json
+{
+  "mcp_server": {
+    "base_url": "http://localhost:3000/api/mcp",
+    "timeout": 30,
+    "retry_attempts": 3
+  },
+  "functions": [
+    {
+      "name": "search_data",
+      "description": "Search external data sources",
+      "mcp_tool": "search_tool",
+      "enabled": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Search query"}
+        }
+      }
+    }
+  ]
+}
+```
+
+### Implementation
+
+#### Model-Specific Function Calling
+
+**OpenAI Assistant API**:
+- Uses native function calling mechanism
+- Functions defined in Assistant configuration
+- Automatic tool execution through Assistant API
+
+**Anthropic Messages API**:
+- Manual function call detection via JSON parsing
+- Pattern: `{"function_name": "tool", "arguments": {...}}`
+- Two-step process: initial response → function execution → final response
+
+**Gemini API**:
+- Uses `function_declarations` in tools parameter
+- Handles `functionCall` and `functionResponse` objects
+- Native Google AI function calling protocol
+
+#### Security Best Practices
+
+1. **Input Validation**: All function arguments validated before execution
+2. **Access Control**: Function access controlled via configuration
+3. **Error Handling**: Graceful degradation when tools fail
+4. **Transparency**: Clear user notification of tool usage
+5. **Rate Limiting**: Built-in protection against abuse
+
+### Usage Examples
+
+#### Enable MCP in Models
+
+```python
+# Enable MCP via configuration (automatic)
+model = AnthropicModel(api_key="key")  # Reads from config.yml
+
+# Enable MCP explicitly
+model = AnthropicModel(api_key="key", enable_mcp=True)
+
+# Check MCP status
+status = model.get_mcp_status()
+```
+
+#### Function Call Flow
+
+```python
+# 1. User message triggers function call
+user_message = "Search for recent discussions about traffic"
+
+# 2. Model detects need for tool
+response = await model.chat_completion_with_mcp(messages)
+
+# 3. System executes MCP function
+result = await mcp_service.handle_function_call(
+    "search_transcripts", 
+    {"query": "traffic", "committees": ["交通委員會"]}
+)
+
+# 4. Model processes results and responds
+final_response = model.generate_final_response(result)
+```
 
 ## Testing
 

@@ -59,17 +59,53 @@ class AnthropicModel(FullLLMInterface):
     Anthropic Claude 2024 模型實作
     """
     
-    def __init__(self, api_key: str, model_name: str = "claude-3-5-sonnet-20240620", base_url: str = None):
+    def __init__(self, api_key: str, model_name: str = "claude-3-5-sonnet-20240620", base_url: str = None, enable_mcp: bool = None):
         self.api_key = api_key
         self.model_name = model_name
         self.base_url = base_url or "https://api.anthropic.com/v1"
         self.file_cache = FileCache(max_files=300, file_ttl=3600)
-        self.system_prompt = self._build_system_prompt()
         self.speech_service = None
         self.conversation_manager = get_conversation_manager()
+        
+        # MCP 支援 - 從設定檔讀取
+        if enable_mcp is None:
+            try:
+                from ..core.config import get_value
+                feature_enabled = get_value('features.enable_mcp', False)
+                mcp_enabled = get_value('mcp.enabled', False)
+                self.enable_mcp = feature_enabled and mcp_enabled
+            except Exception as e:
+                logger.warning(f"Error reading MCP config: {e}")
+                self.enable_mcp = False
+        else:
+            self.enable_mcp = enable_mcp
+            
+        self.mcp_service = None
+        if self.enable_mcp:
+            self._init_mcp_service()
+        
+        # 根據 MCP 狀態建立 system prompt
+        self.system_prompt = self._build_system_prompt()
 
     def get_provider(self) -> ModelProvider:
         return ModelProvider.ANTHROPIC
+    
+    def _init_mcp_service(self) -> None:
+        """初始化 MCP 服務"""
+        try:
+            from ..services.mcp_service import get_mcp_service
+            
+            mcp_service = get_mcp_service()
+            if mcp_service.is_enabled:
+                self.mcp_service = mcp_service
+                logger.info("Anthropic Model: MCP service initialized successfully")
+            else:
+                logger.warning("Anthropic Model: MCP service is not enabled")
+                self.enable_mcp = False
+        except Exception as e:
+            logger.warning(f"Anthropic Model: Failed to initialize MCP service: {e}")
+            self.enable_mcp = False
+            self.mcp_service = None
 
     def check_connection(self) -> Tuple[bool, Optional[str]]:
         try:
@@ -115,16 +151,66 @@ class AnthropicModel(FullLLMInterface):
             conversations = self._get_recent_conversations(user_id, platform, kwargs.get('conversation_limit', 10))
             messages = self._build_conversation_context(conversations, message)
             
-            is_successful, response, error = self.query_with_rag(message, context_messages=messages, **kwargs)
+            # 使用 MCP function calling 如果啟用
+            if self.enable_mcp and self.mcp_service:
+                import asyncio
+                is_successful, response, error = asyncio.run(
+                    self.query_with_rag_and_mcp(message, context_messages=messages, **kwargs)
+                )
+            else:
+                is_successful, response, error = self.query_with_rag(message, context_messages=messages, **kwargs)
             
             if not is_successful:
                 return False, None, error
             
             self.conversation_manager.add_message(user_id, 'anthropic', 'assistant', response.answer, platform)
-            response.metadata.update({'user_id': user_id, 'model_provider': 'anthropic'})
+            response.metadata.update({'user_id': user_id, 'model_provider': 'anthropic', 'mcp_enabled': self.enable_mcp})
             return True, response, None
         except Exception as e:
             logger.error(f"Error in chat_with_user for {user_id}: {e}")
+            return False, None, str(e)
+    
+    async def query_with_rag_and_mcp(self, query: str, context_messages: List[ChatMessage] = None, **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """支援 MCP function calling 的 RAG 查詢"""
+        messages = context_messages if context_messages else [ChatMessage(role="user", content=query)]
+        return await self._perform_rag_query_with_mcp(messages, **kwargs)
+
+    async def _perform_rag_query_with_mcp(self, messages: List[ChatMessage], **kwargs: Any) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """執行 RAG 查詢（支援 MCP function calling）"""
+        try:
+            system_prompt = self._build_files_context() if self.file_cache else self.system_prompt
+            is_successful, response, error = await self.chat_completion_with_mcp(messages, system=system_prompt, **kwargs)
+            
+            if not is_successful:
+                return False, None, error
+            
+            # 處理來源信息
+            sources = []
+            
+            # 從回應中提取的傳統來源
+            traditional_sources = self._extract_sources_from_response(response.content)
+            sources.extend(traditional_sources)
+            
+            # 從 MCP function calls 中提取的來源
+            if response.metadata and 'sources' in response.metadata:
+                mcp_sources = response.metadata['sources']
+                sources.extend(mcp_sources)
+            
+            # 創建 RAGResponse
+            rag_response = RAGResponse(
+                answer=response.content, 
+                sources=sources, 
+                metadata={
+                    **response.metadata,
+                    'mcp_enabled': True,
+                    'sources_count': len(sources)
+                }
+            )
+            
+            return True, rag_response, None
+            
+        except Exception as e:
+            logger.error(f"Error in _perform_rag_query_with_mcp: {e}")
             return False, None, str(e)
 
     def query_with_rag(self, query: str, context_messages: List[ChatMessage] = None, **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
@@ -235,7 +321,194 @@ class AnthropicModel(FullLLMInterface):
         return messages
 
     def _build_system_prompt(self) -> str:
-        return "You are a helpful assistant."
+        """建構 system prompt（包含 MCP function schemas）"""
+        # 從設定檔讀取基礎 system prompt
+        if self.enable_mcp:
+            try:
+                from ..core.config import get_value
+                base_prompt = get_value('mcp.system_prompt', "You are a helpful assistant.")
+            except Exception:
+                base_prompt = "You are a helpful assistant."
+        else:
+            base_prompt = "You are a helpful assistant."
+        
+        if self.enable_mcp and self.mcp_service:
+            try:
+                # 取得 MCP function schemas 為 Anthropic 格式
+                function_schemas_prompt = self.mcp_service.get_function_schemas_for_anthropic()
+                if function_schemas_prompt:
+                    base_prompt += f"\n\n{function_schemas_prompt}"
+                    
+                    # 加入 MCP 最佳實踐的工具使用指引
+                    base_prompt += """
+
+## 工具使用指引 (Tool Usage Guidelines)
+
+### 安全原則：
+- 僅在用戶明確請求或需要時使用工具
+- 在調用工具前說明您將執行的操作
+- 引用工具結果時註明資料來源
+- 對敏感查詢提供適當的上下文說明
+
+### 工具調用格式：
+當您需要使用工具時，請使用以下 JSON 格式：
+```json
+{"function_name": "工具名稱", "arguments": {"參數名": "參數值"}}
+```
+
+### 工具調用最佳實踐：
+1. **明確意圖**：清楚說明為什麼需要使用這個工具
+2. **參數驗證**：確保提供的參數完整且正確
+3. **結果處理**：對工具返回的結果進行適當的解釋和整理
+4. **錯誤處理**：如果工具調用失敗，向用戶說明情況並提供替代方案
+5. **來源引用**：明確標示資訊來源，提高透明度"""
+                    
+                    logger.info("Anthropic Model: Added MCP function schemas and security guidelines to system prompt")
+            except Exception as e:
+                logger.error(f"Failed to add MCP function schemas to system prompt: {e}")
+        
+        return base_prompt
+    
+    def _has_function_calls(self, response_text: str) -> bool:
+        """檢查回應是否包含 function calls"""
+        import re
+        # 檢查是否有 JSON 格式的 function call
+        json_pattern = r'```json\s*\{[^}]*"function_name"[^}]*\}[^`]*```'
+        return bool(re.search(json_pattern, response_text, re.DOTALL))
+    
+    def _extract_function_calls(self, response_text: str) -> List[Dict[str, Any]]:
+        """從回應中提取 function calls"""
+        import re
+        import json
+        
+        function_calls = []
+        json_pattern = r'```json\s*(\{[^}]*"function_name"[^}]*\})[^`]*```'
+        matches = re.findall(json_pattern, response_text, re.DOTALL)
+        
+        for match in matches:
+            try:
+                function_call = json.loads(match.strip())
+                if 'function_name' in function_call and 'arguments' in function_call:
+                    function_calls.append(function_call)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse function call JSON: {e}")
+                continue
+        
+        return function_calls
+    
+    async def chat_completion_with_mcp(self, messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
+        """支援 MCP function calling 的對話完成"""
+        if not self.enable_mcp or not self.mcp_service:
+            return self.chat_completion(messages, **kwargs)
+        
+        try:
+            # 執行初始對話
+            is_successful, chat_response, error = self.chat_completion(messages, **kwargs)
+            if not is_successful:
+                return False, None, error
+            
+            response_text = chat_response.content
+            
+            # 檢查是否有 function calls
+            if not self._has_function_calls(response_text):
+                return True, chat_response, None
+            
+            # 提取並執行 function calls
+            function_calls = self._extract_function_calls(response_text)
+            if not function_calls:
+                return True, chat_response, None
+            
+            logger.info(f"Processing {len(function_calls)} function calls")
+            
+            # 執行 function calls 並收集結果
+            function_results = []
+            for function_call in function_calls:
+                function_name = function_call['function_name']
+                arguments = function_call['arguments']
+                
+                logger.info(f"Executing MCP function: {function_name} with args: {arguments}")
+                result = await self.mcp_service.handle_function_call(function_name, arguments)
+                
+                function_results.append({
+                    'function_name': function_name,
+                    'arguments': arguments,
+                    'result': result
+                })
+            
+            # 建構包含 function results 的新對話
+            function_results_text = self._format_function_results(function_results)
+            
+            # 添加 function results 並繼續對話
+            extended_messages = messages.copy()
+            extended_messages.append(ChatMessage(role='assistant', content=response_text))
+            extended_messages.append(ChatMessage(role='user', content=f"Function call results:\n{function_results_text}\n\nPlease provide a final response based on these results."))
+            
+            # 執行最終對話
+            final_success, final_response, final_error = self.chat_completion(extended_messages, **kwargs)
+            
+            if final_success:
+                # 組合最終回應，包含來源信息
+                sources = self._extract_sources_from_function_results(function_results)
+                final_response.metadata = final_response.metadata or {}
+                final_response.metadata['function_calls'] = function_calls
+                final_response.metadata['function_results'] = function_results
+                final_response.metadata['sources'] = sources
+                
+                return True, final_response, None
+            else:
+                return False, None, final_error
+                
+        except Exception as e:
+            logger.error(f"Error in chat_completion_with_mcp: {e}")
+            return False, None, str(e)
+    
+    def _format_function_results(self, function_results: List[Dict[str, Any]]) -> str:
+        """格式化 function results 為文字"""
+        formatted_results = []
+        
+        for i, result in enumerate(function_results, 1):
+            function_name = result['function_name']
+            success = result['result'].get('success', False)
+            
+            if success:
+                data = result['result'].get('data', 'No data')
+                formatted_results.append(f"{i}. {function_name}: {data}")
+            else:
+                error = result['result'].get('error', 'Unknown error')
+                formatted_results.append(f"{i}. {function_name}: Error - {error}")
+        
+        return '\n'.join(formatted_results)
+    
+    def _extract_sources_from_function_results(self, function_results: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """從 function results 中提取來源信息"""
+        sources = []
+        
+        for result in function_results:
+            if result['result'].get('success'):
+                metadata = result['result'].get('metadata', {})
+                if 'sources' in metadata:
+                    sources.extend(metadata['sources'])
+        
+        return sources
+    
+    def get_mcp_status(self) -> Dict[str, Any]:
+        """取得 MCP 服務狀態"""
+        return {
+            "enabled": self.enable_mcp,
+            "service_available": self.mcp_service is not None,
+            "service_info": self.mcp_service.get_service_info() if self.mcp_service else None
+        }
+    
+    def reload_mcp_config(self) -> bool:
+        """重新載入 MCP 設定"""
+        if self.mcp_service:
+            success = self.mcp_service.reload_config()
+            if success:
+                # 重新建立 system prompt
+                self.system_prompt = self._build_system_prompt()
+                logger.info("Anthropic Model: MCP config reloaded and system prompt updated")
+            return success
+        return False
 
     def _build_files_context(self) -> str:
         files_context = "\n".join([f"- {info.filename}" for info in self.file_cache.values()])

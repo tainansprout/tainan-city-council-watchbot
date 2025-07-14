@@ -338,3 +338,6 @@ dist
 .pnp.*
 
 docs/plan/
+
+# MCP 設定檔案 (包含敏感資訊)
+config/mcp/

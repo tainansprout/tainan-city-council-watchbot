@@ -2,7 +2,7 @@ import requests
 import json
 import time
 import uuid
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from .base import (
     FullLLMInterface, 
     ModelProvider, 
@@ -44,11 +44,32 @@ class GeminiModel(FullLLMInterface):
     - Ranking API: 智慧重排序提升檢索品質
     """
     
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", base_url: str = None, project_id: str = None):
+    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", base_url: str = None, project_id: str = None, enable_mcp: bool = None):
         self.api_key = api_key
         self.model_name = model_name
         self.base_url = base_url or "https://generativelanguage.googleapis.com/v1beta"
+        
         self.project_id = project_id  # Google Cloud 專案 ID，用於 Vertex AI
+        
+        # MCP 支援 - 從設定檔讀取
+        if enable_mcp is None:
+            try:
+                from ..core.config import get_value
+                feature_enabled = get_value('features.enable_mcp', False)
+                mcp_enabled = get_value('mcp.enabled', False)
+                self.enable_mcp = feature_enabled and mcp_enabled
+            except Exception as e:
+                logger.warning(f"Error reading MCP config: {e}")
+                self.enable_mcp = False
+        else:
+            self.enable_mcp = enable_mcp
+            
+        self.mcp_service = None
+        if self.enable_mcp:
+            self._init_mcp_service()
+        
+        # 建構 system instruction（包含 MCP 指引）
+        self.system_instruction = self._build_system_instruction()
         
         # Semantic Retrieval API 支援 - 使用有界快取
         from ..core.bounded_cache import BoundedCache
@@ -70,6 +91,23 @@ class GeminiModel(FullLLMInterface):
     
     def get_provider(self) -> ModelProvider:
         return ModelProvider.GEMINI
+    
+    def _init_mcp_service(self) -> None:
+        """初始化 MCP 服務"""
+        try:
+            from ..services.mcp_service import get_mcp_service
+            
+            mcp_service = get_mcp_service()
+            if mcp_service.is_enabled:
+                self.mcp_service = mcp_service
+                logger.info("Gemini Model: MCP service initialized successfully")
+            else:
+                logger.warning("Gemini Model: MCP service is not enabled")
+                self.enable_mcp = False
+        except Exception as e:
+            logger.warning(f"Gemini Model: Failed to initialize MCP service: {e}")
+            self.enable_mcp = False
+            self.mcp_service = None
     
     def check_connection(self) -> Tuple[bool, Optional[str]]:
         """檢查 Gemini API 連線"""
@@ -786,9 +824,16 @@ class GeminiModel(FullLLMInterface):
             # 3. 建立長上下文對話
             messages = self._build_long_conversation_context(recent_conversations, message)
             
-            # 4. 使用 Semantic Retrieval API 進行 RAG 查詢（包含長上下文）
-            rag_kwargs = {**kwargs, 'context_messages': messages}
-            is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
+            # 4. 使用 MCP function calling 或一般 RAG 查詢
+            if self.enable_mcp and self.mcp_service:
+                import asyncio
+                is_successful, rag_response, error = asyncio.run(
+                    self.query_with_rag_and_mcp(message, context_messages=messages, **kwargs)
+                )
+            else:
+                # 一般 Semantic Retrieval API 進行 RAG 查詢（包含長上下文）
+                rag_kwargs = {**kwargs, 'context_messages': messages}
+                is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
             
             if not is_successful:
                 return False, None, error
@@ -802,7 +847,8 @@ class GeminiModel(FullLLMInterface):
                 'context_tokens_used': len(str(messages)),  # 估算值
                 'long_context_enabled': len(recent_conversations) > 10,
                 'user_id': user_id,
-                'model_provider': 'gemini'
+                'model_provider': 'gemini',
+                'mcp_enabled': self.enable_mcp
             })
             
             logger.info(f"Completed Gemini chat with user {user_id}, context turns: {len(recent_conversations)}, response length: {len(rag_response.answer)}")
@@ -812,6 +858,49 @@ class GeminiModel(FullLLMInterface):
             logger.error(f"Error in chat_with_user for user {user_id}: {e}")
             return False, None, str(e)
     
+    async def query_with_rag_and_mcp(self, query: str, context_messages: List[ChatMessage] = None, **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """支援 MCP function calling 的 RAG 查詢"""
+        messages = context_messages if context_messages else [ChatMessage(role="user", content=query)]
+        return await self._perform_rag_query_with_mcp(messages, **kwargs)
+
+    async def _perform_rag_query_with_mcp(self, messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """執行 RAG 查詢（支援 MCP function calling）"""
+        try:
+            # 使用 MCP function calling
+            is_successful, response, error = await self.chat_completion_with_mcp(messages, **kwargs)
+            
+            if not is_successful:
+                return False, None, error
+            
+            # 處理來源信息
+            sources = []
+            
+            # 從回應中提取的傳統來源
+            traditional_sources = self._extract_sources_from_response(response.content)
+            sources.extend(traditional_sources)
+            
+            # 從 MCP function calls 中提取的來源
+            if response.metadata and 'sources' in response.metadata:
+                mcp_sources = response.metadata['sources']
+                sources.extend(mcp_sources)
+            
+            # 創建 RAGResponse
+            rag_response = RAGResponse(
+                answer=response.content, 
+                sources=sources, 
+                metadata={
+                    **response.metadata,
+                    'mcp_enabled': True,
+                    'sources_count': len(sources)
+                }
+            )
+            
+            return True, rag_response, None
+            
+        except Exception as e:
+            logger.error(f"Error in _perform_rag_query_with_mcp: {e}")
+            return False, None, str(e)
+
     def clear_user_history(self, user_id: str, platform: str = 'line') -> Tuple[bool, Optional[str]]:
         """清除用戶對話歷史"""
         try:
@@ -939,3 +1028,288 @@ class GeminiModel(FullLLMInterface):
         # except Exception as e:
         #     logger.error(f"Failed to upload multimodal file to GCS: {e}")
         #     return False, None, f"多模態檔案上傳失敗: {e}"
+    
+    # === MCP Function Calling 支援 ===
+    
+    async def chat_completion_with_mcp(self, messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
+        """支援 MCP function calling 的對話完成"""
+        if not self.enable_mcp or not self.mcp_service:
+            return self.chat_completion(messages, **kwargs)
+        
+        try:
+            # 設定 Gemini function calling tools
+            function_schemas = self.mcp_service.get_function_schemas_for_gemini()
+            tools = [{"function_declarations": function_schemas}] if function_schemas else None
+            
+            # 執行對話
+            is_successful, response, error = await self._chat_with_tools(messages, tools, **kwargs)
+            
+            if not is_successful:
+                return False, None, error
+            
+            # 檢查是否有 function calls
+            if self._has_function_calls(response):
+                return await self._handle_gemini_function_calls(messages, response, tools, **kwargs)
+            
+            return True, response, None
+            
+        except Exception as e:
+            logger.error(f"Error in chat_completion_with_mcp: {e}")
+            return False, None, str(e)
+    
+    async def _chat_with_tools(self, messages: List[ChatMessage], tools: List[Dict], **kwargs) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
+        """使用 tools 進行 Gemini 對話"""
+        try:
+            # 準備對話內容
+            gemini_contents = []
+            
+            # 優先使用參數中的 system instruction，否則使用預建構的
+            system_instruction = kwargs.get('system')
+            if not system_instruction:
+                system_instruction = self.system_instruction
+            
+            for msg in messages:
+                if msg.role == 'system':
+                    system_instruction = msg.content
+                    continue
+                
+                # 支援多模態內容
+                if hasattr(msg, 'parts') and msg.parts:
+                    parts = msg.parts
+                else:
+                    parts = [{"text": msg.content}]
+                
+                gemini_contents.append({
+                    "role": "user" if msg.role == "user" else "model",
+                    "parts": parts
+                })
+            
+            json_body = {
+                "contents": gemini_contents,
+                "generationConfig": {
+                    "temperature": kwargs.get('temperature', 0.01),
+                    "maxOutputTokens": min(kwargs.get('max_tokens', 8192), 8192),
+                    "topP": kwargs.get('top_p', 0.8),
+                    "topK": kwargs.get('top_k', 40)
+                }
+            }
+            
+            # 加入 tools 設定
+            if tools:
+                json_body["tools"] = tools
+            
+            # 系統指令支援
+            if system_instruction:
+                json_body["systemInstruction"] = {
+                    "parts": [{"text": system_instruction}]
+                }
+            
+            # 安全設定
+            json_body["safetySettings"] = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"}
+            ]
+            
+            endpoint = f'/models/{self.model_name}:generateContent'
+            is_successful, response, error_message = self._request('POST', endpoint, body=json_body)
+            
+            if not is_successful:
+                return False, None, error_message
+            
+            if 'candidates' not in response or not response['candidates']:
+                return False, None, "No response generated"
+            
+            candidate = response['candidates'][0]
+            
+            # 檢查是否有 function calls
+            if 'content' in candidate and 'parts' in candidate['content']:
+                parts = candidate['content']['parts']
+                for part in parts:
+                    if 'functionCall' in part:
+                        # 有 function call，回傳特殊的 ChatResponse
+                        chat_response = ChatResponse(
+                            content="[Function Call]",
+                            finish_reason=candidate.get('finishReason', 'STOP'),
+                            metadata={
+                                'usage': response.get('usageMetadata', {}),
+                                'model': response.get('modelVersion', self.model_name),
+                                'function_calls': parts
+                            }
+                        )
+                        return True, chat_response, None
+            
+            # 一般回應處理
+            if 'content' not in candidate or not candidate['content']['parts']:
+                return False, None, "No content in response"
+            
+            content = candidate['content']['parts'][0].get('text', '')
+            finish_reason = candidate.get('finishReason', 'STOP')
+            
+            chat_response = ChatResponse(
+                content=content,
+                finish_reason=finish_reason,
+                metadata={
+                    'usage': response.get('usageMetadata', {}),
+                    'model': response.get('modelVersion', self.model_name),
+                    'safety_ratings': candidate.get('safetyRatings', [])
+                }
+            )
+            
+            return True, chat_response, None
+            
+        except Exception as e:
+            logger.error(f"Error in _chat_with_tools: {e}")
+            return False, None, str(e)
+    
+    def _has_function_calls(self, response: ChatResponse) -> bool:
+        """檢查回應是否包含 function calls"""
+        if not response or not response.metadata:
+            return False
+        
+        function_calls = response.metadata.get('function_calls', [])
+        if not function_calls:
+            return False
+        
+        # 檢查是否有任何 part 包含 functionCall
+        for part in function_calls:
+            if isinstance(part, dict) and 'functionCall' in part:
+                return True
+        
+        return False
+    
+    async def _handle_gemini_function_calls(self, original_messages: List[ChatMessage], response_with_calls: ChatResponse, tools: List[Dict], **kwargs) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
+        """處理 Gemini function calls"""
+        try:
+            function_calls = response_with_calls.metadata.get('function_calls', [])
+            
+            # 執行 function calls 並收集結果
+            function_results = []
+            for part in function_calls:
+                if 'functionCall' in part:
+                    function_call = part['functionCall']
+                    function_name = function_call['name']
+                    arguments = function_call.get('args', {})
+                    
+                    logger.info(f"Executing MCP function: {function_name} with args: {arguments}")
+                    result = await self.mcp_service.handle_function_call(function_name, arguments)
+                    
+                    function_results.append({
+                        'functionResponse': {
+                            'name': function_name,
+                            'response': result
+                        }
+                    })
+            
+            # 建構包含 function results 的新對話
+            extended_messages = original_messages.copy()
+            
+            # 添加 function call message
+            extended_messages.append(ChatMessage(
+                role='model',
+                content="[Function Call]",
+                parts=function_calls
+            ))
+            
+            # 添加 function results
+            extended_messages.append(ChatMessage(
+                role='function',
+                content="[Function Results]",
+                parts=function_results
+            ))
+            
+            # 執行最終對話
+            final_success, final_response, final_error = await self._chat_with_tools(extended_messages, tools, **kwargs)
+            
+            if final_success:
+                # 組合最終回應，包含來源信息
+                sources = self._extract_sources_from_function_results(function_results)
+                final_response.metadata = final_response.metadata or {}
+                final_response.metadata['function_calls'] = function_calls
+                final_response.metadata['function_results'] = function_results
+                final_response.metadata['sources'] = sources
+                
+                return True, final_response, None
+            else:
+                return False, None, final_error
+                
+        except Exception as e:
+            logger.error(f"Error in _handle_gemini_function_calls: {e}")
+            return False, None, str(e)
+    
+    def _extract_sources_from_function_results(self, function_results: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """從 function results 中提取來源信息"""
+        sources = []
+        
+        for result in function_results:
+            if 'functionResponse' in result:
+                response_data = result['functionResponse'].get('response', {})
+                if response_data.get('success'):
+                    metadata = response_data.get('metadata', {})
+                    if 'sources' in metadata:
+                        sources.extend(metadata['sources'])
+        
+        return sources
+    
+    def get_mcp_status(self) -> Dict[str, Any]:
+        """取得 MCP 服務狀態"""
+        return {
+            "enabled": self.enable_mcp,
+            "service_available": self.mcp_service is not None,
+            "service_info": self.mcp_service.get_service_info() if self.mcp_service else None
+        }
+    
+    def reload_mcp_config(self) -> bool:
+        """重新載入 MCP 設定"""
+        if self.mcp_service:
+            success = self.mcp_service.reload_config()
+            if success:
+                logger.info("Gemini Model: MCP config reloaded")
+            return success
+        return False
+    
+    def _build_system_instruction(self) -> str:
+        """建構 Gemini system instruction（包含 MCP 工具使用指引）"""
+        # 從設定檔讀取基礎 system instruction
+        if self.enable_mcp:
+            try:
+                from ..core.config import get_value
+                base_instruction = get_value('mcp.system_prompt', "You are a helpful AI assistant.")
+            except Exception:
+                base_instruction = "You are a helpful AI assistant."
+        else:
+            base_instruction = "You are a helpful AI assistant."
+        
+        if self.enable_mcp and self.mcp_service:
+            try:
+                # Gemini 使用 function_declarations，但我們仍需在 system instruction 中說明使用方式
+                available_functions = self.mcp_service.get_configured_functions()
+                if available_functions:
+                    base_instruction += """
+
+## 可用工具與使用指引
+
+您具備調用外部工具的能力，請遵循以下原則：
+
+### 安全使用原則：
+- 只在用戶明確需要或請求時調用工具
+- 調用前向用戶說明將要執行的操作
+- 引用工具結果時明確標示資料來源
+- 對查詢結果進行適當的分析和整理
+
+### 工具調用最佳實踐：
+1. **透明操作**：明確告知用戶您將使用什麼工具以及原因
+2. **參數準確性**：確保提供正確和完整的參數
+3. **結果驗證**：對工具返回的結果進行合理性檢查
+4. **錯誤處理**：如果工具調用失敗，提供替代方案或解釋
+5. **資料引用**：清楚標示資訊來源，提升回應的可信度
+
+### 隱私保護：
+- 不會洩露工具調用的技術細節
+- 保護用戶查詢的隱私性
+- 僅使用工具提供的公開資訊"""
+                    
+                    logger.info("Gemini Model: Added MCP tool usage guidelines to system instruction")
+            except Exception as e:
+                logger.error(f"Failed to add MCP guidelines to system instruction: {e}")
+        
+        return base_instruction

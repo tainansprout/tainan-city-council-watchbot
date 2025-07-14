@@ -21,7 +21,8 @@
 📚 **RAG 知識庫**: 所有模型支援文檔檢索與引用功能  
 🔗 **統一引用處理**: 跨模型的一致引用格式化  
 🛡️ **企業級安全**: 輸入驗證、速率限制、錯誤處理  
-📊 **監控與日志**: 完整的系統監控和性能指標
+📊 **監控與日志**: 完整的系統監控和性能指標  
+🔌 **MCP 整合**: 支援 Model Context Protocol 外部工具調用
 
 ## 快速開始
 
@@ -75,6 +76,19 @@ db:
   db_name: "${DB_NAME}"
   user: "${DB_USER}"
   password: "${DB_PASSWORD}"
+
+# MCP (Model Context Protocol) 配置
+mcp:
+  enabled: true
+  config_dir: "config/mcp"
+  system_prompt: |
+    您是一個具備外部工具調用能力的 AI 助理...
+
+# 功能開關
+features:
+  enable_mcp: true  # 啟用 MCP 功能
+  audio_transcription: true
+  rag_search: true
 ```
 
 ### 環境變數設定
@@ -202,6 +216,75 @@ python -m pytest tests/integration/
 - `GET /login`: 登入頁面
 - `GET /chat`: 聊天介面（需要認證）
 - `POST /ask`: 聊天 API（需要認證）
+
+## 🔌 MCP (Model Context Protocol) 整合
+
+本專案支援 MCP 協議，讓 AI 模型能夠調用外部工具和服務，提供更豐富的功能。
+
+### MCP 功能特色
+
+- **統一工具調用**: 透過標準化協議調用外部 API 和服務
+- **多模型支援**: OpenAI、Anthropic、Gemini 三大模型都支援 MCP
+- **安全設計**: 遵循 MCP 安全最佳實踐，包含用戶同意機制
+- **彈性配置**: 可選式啟用，不影響現有功能
+
+### 快速設定 MCP
+
+1. **啟用 MCP 功能**
+```yaml
+# config/config.yml
+features:
+  enable_mcp: true
+
+mcp:
+  enabled: true
+  config_dir: "config/mcp"
+```
+
+2. **建立 MCP 設定檔案**
+```bash
+# 參考範例檔案
+cp config/mcp/example.json.example config/mcp/my_tools.json
+# 編輯 my_tools.json，設定您的 MCP Server 和工具
+```
+
+3. **MCP 設定檔案格式**
+```json
+{
+  "mcp_server": {
+    "base_url": "http://localhost:3000/api/mcp",
+    "timeout": 30
+  },
+  "functions": [
+    {
+      "name": "search_data",
+      "description": "搜尋資料",
+      "mcp_tool": "search_tool",
+      "enabled": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "搜尋關鍵字"}
+        }
+      }
+    }
+  ]
+}
+```
+
+### MCP 工作流程
+
+1. **用戶輸入**: 用戶發送訊息給 AI 模型
+2. **模型判斷**: AI 模型判斷是否需要調用外部工具
+3. **工具調用**: 系統透過 MCP Client 向 MCP Server 請求工具執行
+4. **結果整合**: 將工具執行結果回傳給 AI 模型
+5. **最終回應**: AI 模型基於工具結果生成最終回應給用戶
+
+### 支援的 MCP 模式
+
+- **OpenAI Assistant API**: 透過 function calling 機制
+- **Anthropic Messages API**: 透過 JSON 格式的 function call
+- **Gemini API**: 透過 function_declarations 和 functionCall
 
 ## 📚 詳細文檔
 

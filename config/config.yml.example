@@ -120,12 +120,34 @@ rag:
   top_k: 3
   similarity_threshold: 0.1
 
+# MCP (Model Context Protocol) 設定
+mcp:
+  enabled: false  # 是否啟用 MCP Server 支援
+  config_dir: "config/mcp"  # MCP 設定檔案目錄
+  # 當 MCP 啟用時，使用的基礎 system prompt
+  system_prompt: |
+    You are a helpful AI assistant that can access external tools and services through MCP (Model Context Protocol).
+    
+    ## Your Capabilities:
+    1. **Information Retrieval**: Access external data sources and APIs
+    2. **Tool Integration**: Use various tools to provide comprehensive assistance
+    3. **Function Calling**: Execute specific functions to gather information
+    
+    ## Service Principles:
+    - Provide accurate and helpful information
+    - Use tools when necessary to enhance responses
+    - Explain your reasoning and cite sources when applicable
+    - Maintain a professional and friendly tone
+    
+    When you need to use a tool, clearly explain what you're doing and why.
+
 # 功能開關
 features:
   audio_transcription: true
   image_generation: false
   rag_search: true
-  multi_provider: false 
+  multi_provider: false
+  enable_mcp: false  # 總開關：是否啟用 MCP 功能 
 
 db:
   host: ${DB_HOST}

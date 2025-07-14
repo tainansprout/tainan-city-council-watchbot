@@ -1,0 +1,128 @@
+{
+  "mcp_server": {
+    "base_url": "http://localhost:3000/api/mcp",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "retry_delay": 1.0
+  },
+  "assistant": {
+    "name": "Your MCP Assistant",
+    "model": "gpt-4",
+    "instructions": {
+      "main": "你是一個專門的助手，可以使用提供的工具來協助用戶。",
+      "guidelines": [
+        "根據用戶的問題，使用提供的工具搜尋相關資料",
+        "基於實際的搜尋結果回答問題，提供有憑有據的分析",
+        "如果找不到相關資料，請明確說明並建議調整搜尋條件"
+      ],
+      "response_format": [
+        "引用具體的內容，使用引號標示",
+        "標註來源和相關資訊",
+        "提供客觀的分析，避免主觀推測"
+      ],
+      "search_strategies": [
+        "對於特定查詢：使用精確的關鍵字搜尋",
+        "對於複雜查詢：組合使用多個搜尋條件",
+        "對於時間相關查詢：結合日期範圍搜尋"
+      ]
+    },
+    "temperature": 0.3,
+    "top_p": 0.9
+  },
+  "function_calling": {
+    "auto_invoke": true,
+    "max_iterations": 10,
+    "timeout_seconds": 60,
+    "retry_on_error": true,
+    "max_retries": 2
+  },
+  "response_limits": {
+    "max_response_length": 4000,
+    "max_search_results_per_call": 20,
+    "max_concurrent_functions": 3
+  },
+  "default_search_params": {
+    "max_results": 10
+  },
+  "error_handling": {
+    "graceful_degradation": true,
+    "fallback_messages": {
+      "no_results": "很抱歉，根據您的搜尋條件沒有找到相關資料。建議您：\n1. 調整關鍵字或使用同義詞\n2. 擴大搜尋範圍\n3. 減少搜尋條件的限制",
+      "connection_error": "目前無法連接到資料庫，請稍後再試。",
+      "timeout_error": "搜尋請求處理時間過長，請嘗試使用更具體的搜尋條件。"
+    }
+  },
+  "functions": [
+    {
+      "name": "example_search",
+      "description": "範例搜尋功能",
+      "mcp_tool": "example_search",
+      "enabled": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "搜尋關鍵字",
+            "examples": ["範例關鍵字", "搜尋內容"]
+          },
+          "max_results": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "回傳結果數量上限"
+          }
+        },
+        "required": ["query"]
+      },
+      "usage_examples": [
+        {
+          "description": "範例搜尋",
+          "arguments": {
+            "query": "搜尋範例",
+            "max_results": 10
+          }
+        }
+      ]
+    }
+  ],
+  "tools": {
+    "example_search": {
+      "endpoint": "tools/call",
+      "method": "POST",
+      "mcp_method": "tools/call",
+      "mcp_tool_name": "example_search",
+      "cache_ttl": 300,
+      "max_concurrent_requests": 5,
+      "parameter_mapping": {
+        "query": "query",
+        "max_results": "max_results"
+      },
+      "validation": {
+        "required_fields": ["query"],
+        "field_limits": {
+          "query": {
+            "max_length": 500
+          },
+          "max_results": {
+            "min": 1,
+            "max": 50
+          }
+        }
+      }
+    }
+  },
+  "response_format": {
+    "success_wrapper": "result.content[0].text",
+    "parse_json": true,
+    "error_field": "error",
+    "expected_format": "json"
+  },
+  "monitoring": {
+    "log_requests": true,
+    "log_responses": false,
+    "log_errors": true,
+    "metrics_enabled": true
+  }
+}
