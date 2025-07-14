@@ -316,10 +316,12 @@ class OpenAIModel(FullLLMInterface):
                 return False, None, f"Run {status}: {response.get('last_error', {}).get('message', 'Unknown error')}"
             elif status == 'requires_action':
                 # 處理 MCP function calling
-                logger.info("Run requires action - processing MCP function calls")
+                logger.info(f"🔧 OpenAI Run {run_id} requires action - processing MCP function calls")
                 success = await self._handle_mcp_function_calls(thread_id, run_id, response)
                 if not success:
+                    logger.error(f"❌ Failed to handle MCP function calls for run {run_id}")
                     return False, None, "Failed to handle MCP function calls"
+                logger.info(f"✅ MCP function calls handled successfully for run {run_id}")
                 # 繼續輪詢
             elif status in ['queued', 'in_progress']:
                 # 繼續等待
@@ -333,28 +335,44 @@ class OpenAIModel(FullLLMInterface):
     
     async def _handle_mcp_function_calls(self, thread_id: str, run_id: str, run_response: Dict) -> bool:
         """處理 MCP function calls"""
+        import time
+        import json
+        
+        start_time = time.time()
+        call_id = f"openai-mcp-{int(start_time * 1000) % 100000}"
+        
         try:
+            logger.info(f"[{call_id}] 🔧 OpenAI Model: Starting MCP function call handling")
+            logger.info(f"[{call_id}] 🆔 Thread: {thread_id}, Run: {run_id}")
+            
             required_action = run_response.get('required_action', {})
             tool_calls = required_action.get('submit_tool_outputs', {}).get('tool_calls', [])
             
+            logger.debug(f"[{call_id}] 📋 Required action: {json.dumps(required_action, ensure_ascii=False, indent=2)}")
+            
             if not tool_calls:
-                logger.warning("No tool calls found in requires_action")
+                logger.warning(f"[{call_id}] ⚠️ No tool calls found in requires_action")
                 return False
             
-            logger.info(f"Processing {len(tool_calls)} MCP function calls")
+            logger.info(f"[{call_id}] 🎯 Processing {len(tool_calls)} OpenAI function calls")
             tool_outputs = []
             
-            for tool_call in tool_calls:
+            for i, tool_call in enumerate(tool_calls, 1):
+                tool_call_id = tool_call['id']
                 function_name = tool_call['function']['name']
                 arguments_str = tool_call['function']['arguments']
                 
+                logger.info(f"[{call_id}] 📞 Function {i}/{len(tool_calls)}: {function_name}")
+                logger.info(f"[{call_id}] 🆔 Tool Call ID: {tool_call_id}")
+                logger.debug(f"[{call_id}] 📄 Raw Arguments: {arguments_str}")
+                
                 try:
-                    import json
                     arguments = json.loads(arguments_str)
+                    logger.debug(f"[{call_id}] 📊 Parsed Arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
                 except json.JSONDecodeError as e:
-                    logger.error(f"Invalid JSON in function arguments: {e}")
+                    logger.error(f"[{call_id}] ❌ Invalid JSON in function arguments: {e}")
                     tool_outputs.append({
-                        "tool_call_id": tool_call['id'],
+                        "tool_call_id": tool_call_id,
                         "output": json.dumps({
                             "success": False,
                             "error": "Invalid function arguments format"
@@ -362,33 +380,51 @@ class OpenAIModel(FullLLMInterface):
                     })
                     continue
                 
-                logger.info(f"Executing MCP function: {function_name} with args: {arguments}")
-                
                 # 執行 MCP function call
+                logger.info(f"[{call_id}] 🚀 Executing MCP function: {function_name}")
                 result = await self.mcp_service.handle_function_call(function_name, arguments)
                 
+                if result.get('success', False):
+                    logger.info(f"[{call_id}] ✅ Function {function_name} executed successfully")
+                    output_size = len(str(result.get('data', '')))
+                    logger.debug(f"[{call_id}] 📊 Result size: {output_size} chars")
+                else:
+                    error_msg = result.get('error', 'Unknown error')
+                    logger.error(f"[{call_id}] ❌ Function {function_name} failed: {error_msg}")
+                
+                output_json = json.dumps(result, ensure_ascii=False)
                 tool_outputs.append({
-                    "tool_call_id": tool_call['id'],
-                    "output": json.dumps(result, ensure_ascii=False)
+                    "tool_call_id": tool_call_id,
+                    "output": output_json
                 })
+                
+                logger.debug(f"[{call_id}] 📋 Tool output for {tool_call_id}: {output_json[:200]}...")
             
             # 提交 tool outputs 到 OpenAI
+            logger.info(f"[{call_id}] 📤 Submitting {len(tool_outputs)} tool outputs to OpenAI")
             endpoint = f'/threads/{thread_id}/runs/{run_id}/submit_tool_outputs'
             json_body = {
                 "tool_outputs": tool_outputs
             }
             
+            logger.debug(f"[{call_id}] 📋 Submit tool outputs request: {json.dumps(json_body, ensure_ascii=False, indent=2)}")
+            
             is_successful, response, error_message = self._request('POST', endpoint, body=json_body, assistant=True)
             
+            execution_time = time.time() - start_time
+            
             if is_successful:
-                logger.info(f"Successfully submitted {len(tool_outputs)} tool outputs")
+                logger.info(f"[{call_id}] ✅ Successfully submitted {len(tool_outputs)} tool outputs (Time: {execution_time:.2f}s)")
+                logger.debug(f"[{call_id}] 📋 Submit response: {json.dumps(response, ensure_ascii=False, indent=2)}")
                 return True
             else:
-                logger.error(f"Failed to submit tool outputs: {error_message}")
+                logger.error(f"[{call_id}] ❌ Failed to submit tool outputs: {error_message} (Time: {execution_time:.2f}s)")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error handling MCP function calls: {e}")
+            execution_time = time.time() - start_time
+            logger.error(f"[{call_id}] 💥 Error handling MCP function calls: {e} (Time: {execution_time:.2f}s)")
+            logger.exception(f"[{call_id}] 📄 Full Exception Details:")
             return False
     
     def get_mcp_status(self) -> Dict[str, Any]:

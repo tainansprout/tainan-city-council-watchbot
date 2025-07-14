@@ -37,6 +37,7 @@ import requests
 import json
 import time
 import uuid
+import re
 from ..core.logger import get_logger
 from typing import List, Dict, Tuple, Optional, Any
 from .base import (
@@ -378,22 +379,34 @@ class AnthropicModel(FullLLMInterface):
     
     def _extract_function_calls(self, response_text: str) -> List[Dict[str, Any]]:
         """從回應中提取 function calls"""
-        import re
-        import json
-        
         function_calls = []
         json_pattern = r'```json\s*(\{[^}]*"function_name"[^}]*\})[^`]*```'
-        matches = re.findall(json_pattern, response_text, re.DOTALL)
         
-        for match in matches:
+        logger.debug(f"🔍 Anthropic Model: Searching for function calls in response")
+        logger.debug(f"📝 Response text length: {len(response_text)} chars")
+        
+        matches = re.findall(json_pattern, response_text, re.DOTALL)
+        logger.info(f"🎯 Found {len(matches)} potential function call matches")
+        
+        for i, match in enumerate(matches, 1):
             try:
+                logger.debug(f"📋 Parsing function call {i}: {match.strip()}")
                 function_call = json.loads(match.strip())
+                
                 if 'function_name' in function_call and 'arguments' in function_call:
+                    function_name = function_call['function_name']
+                    logger.info(f"✅ Valid function call {i}: {function_name}")
+                    logger.debug(f"📊 Arguments: {json.dumps(function_call['arguments'], ensure_ascii=False)}")
                     function_calls.append(function_call)
+                else:
+                    logger.warning(f"⚠️ Invalid function call structure {i}: missing function_name or arguments")
+                    
             except json.JSONDecodeError as e:
-                logger.warning(f"Failed to parse function call JSON: {e}")
+                logger.warning(f"❌ Failed to parse function call JSON {i}: {e}")
+                logger.debug(f"📄 Invalid JSON: {match.strip()}")
                 continue
         
+        logger.info(f"📋 Extracted {len(function_calls)} valid function calls")
         return function_calls
     
     async def chat_completion_with_mcp(self, messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
@@ -411,23 +424,34 @@ class AnthropicModel(FullLLMInterface):
             
             # 檢查是否有 function calls
             if not self._has_function_calls(response_text):
+                logger.debug("No function calls detected in response")
                 return True, chat_response, None
             
             # 提取並執行 function calls
             function_calls = self._extract_function_calls(response_text)
             if not function_calls:
+                logger.warning("Function call pattern detected but extraction failed")
                 return True, chat_response, None
             
-            logger.info(f"Processing {len(function_calls)} function calls")
+            logger.info(f"🔧 Anthropic Model: Processing {len(function_calls)} function calls")
+            logger.debug(f"📋 Function calls detected: {[call['function_name'] for call in function_calls]}")
             
             # 執行 function calls 並收集結果
             function_results = []
-            for function_call in function_calls:
+            for i, function_call in enumerate(function_calls, 1):
                 function_name = function_call['function_name']
                 arguments = function_call['arguments']
                 
-                logger.info(f"Executing MCP function: {function_name} with args: {arguments}")
+                logger.info(f"🎯 Anthropic Model: Executing function {i}/{len(function_calls)}: {function_name}")
+                logger.debug(f"📊 Function arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
+                
                 result = await self.mcp_service.handle_function_call(function_name, arguments)
+                
+                if result.get('success', False):
+                    logger.info(f"✅ Function {function_name} executed successfully")
+                else:
+                    error_msg = result.get('error', 'Unknown error')
+                    logger.error(f"❌ Function {function_name} failed: {error_msg}")
                 
                 function_results.append({
                     'function_name': function_name,
@@ -436,12 +460,16 @@ class AnthropicModel(FullLLMInterface):
                 })
             
             # 建構包含 function results 的新對話
+            logger.info("🔄 Anthropic Model: Formatting function results for final response")
             function_results_text = self._format_function_results(function_results)
+            logger.debug(f"📄 Formatted function results: {function_results_text[:500]}...")
             
             # 添加 function results 並繼續對話
             extended_messages = messages.copy()
             extended_messages.append(ChatMessage(role='assistant', content=response_text))
             extended_messages.append(ChatMessage(role='user', content=f"Function call results:\n{function_results_text}\n\nPlease provide a final response based on these results."))
+            
+            logger.info(f"📤 Anthropic Model: Sending final request with {len(extended_messages)} messages")
             
             # 執行最終對話
             final_success, final_response, final_error = self.chat_completion(extended_messages, **kwargs)
@@ -454,8 +482,13 @@ class AnthropicModel(FullLLMInterface):
                 final_response.metadata['function_results'] = function_results
                 final_response.metadata['sources'] = sources
                 
+                logger.info(f"✅ Anthropic Model: MCP workflow completed successfully")
+                logger.info(f"📊 Final response: {len(final_response.content)} chars, {len(sources)} sources")
+                logger.debug(f"📚 Sources extracted: {[source.get('filename', 'Unknown') for source in sources[:3]]}")
+                
                 return True, final_response, None
             else:
+                logger.error(f"❌ Anthropic Model: Final response failed: {final_error}")
                 return False, None, final_error
                 
         except Exception as e:

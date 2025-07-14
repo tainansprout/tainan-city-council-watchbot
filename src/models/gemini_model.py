@@ -1182,16 +1182,30 @@ class GeminiModel(FullLLMInterface):
         try:
             function_calls = response_with_calls.metadata.get('function_calls', [])
             
+            logger.info(f"🔧 Gemini Model: Processing {len(function_calls)} function call parts")
+            logger.debug(f"📋 Function call metadata: {json.dumps(function_calls, ensure_ascii=False, indent=2)}")
+            
             # 執行 function calls 並收集結果
             function_results = []
-            for part in function_calls:
+            valid_calls = 0
+            
+            for i, part in enumerate(function_calls, 1):
                 if 'functionCall' in part:
                     function_call = part['functionCall']
                     function_name = function_call['name']
                     arguments = function_call.get('args', {})
+                    valid_calls += 1
                     
-                    logger.info(f"Executing MCP function: {function_name} with args: {arguments}")
+                    logger.info(f"🎯 Gemini Model: Executing function {valid_calls}: {function_name}")
+                    logger.debug(f"📊 Function arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
+                    
                     result = await self.mcp_service.handle_function_call(function_name, arguments)
+                    
+                    if result.get('success', False):
+                        logger.info(f"✅ Gemini function {function_name} executed successfully")
+                    else:
+                        error_msg = result.get('error', 'Unknown error')
+                        logger.error(f"❌ Gemini function {function_name} failed: {error_msg}")
                     
                     function_results.append({
                         'functionResponse': {
@@ -1201,6 +1215,7 @@ class GeminiModel(FullLLMInterface):
                     })
             
             # 建構包含 function results 的新對話
+            logger.info(f"🔄 Gemini Model: Building extended conversation with {valid_calls} function results")
             extended_messages = original_messages.copy()
             
             # 添加 function call message
@@ -1217,6 +1232,8 @@ class GeminiModel(FullLLMInterface):
                 parts=function_results
             ))
             
+            logger.info(f"📤 Gemini Model: Sending final request with {len(extended_messages)} messages")
+            
             # 執行最終對話
             final_success, final_response, final_error = await self._chat_with_tools(extended_messages, tools, **kwargs)
             
@@ -1228,8 +1245,13 @@ class GeminiModel(FullLLMInterface):
                 final_response.metadata['function_results'] = function_results
                 final_response.metadata['sources'] = sources
                 
+                logger.info(f"✅ Gemini Model: MCP workflow completed successfully")
+                logger.info(f"📊 Final response: {len(final_response.content)} chars, {len(sources)} sources")
+                logger.debug(f"📚 Sources extracted: {[source.get('filename', 'Unknown') for source in sources[:3]]}")
+                
                 return True, final_response, None
             else:
+                logger.error(f"❌ Gemini Model: Final response failed: {final_error}")
                 return False, None, final_error
                 
         except Exception as e:
