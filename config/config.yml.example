@@ -170,7 +170,7 @@ text_processing:
     - type: "replace_date_string"
 
 # 日誌配置
-log_level: DEBUG  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 log_format: simple  # simple 或 structured
 logfile: ./logs/chatbot.log
 

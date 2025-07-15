@@ -21,7 +21,7 @@
 
 ### 1. 基本部署
 ```bash
-# 1. 克隆專案
+# 1. 複製專案
 git clone <repository-url>
 cd ChatGPT-Line-Bot
 
