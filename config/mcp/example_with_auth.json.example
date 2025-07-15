@@ -1,0 +1,185 @@
+{
+  "mcp_server": {
+    "base_url": "http://localhost:3000/api/mcp",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "retry_delay": 1.0,
+    "authorization": {
+      "type": "oauth2",
+      "client_id": "${MCP_CLIENT_ID}",
+      "client_secret": "${MCP_CLIENT_SECRET}",
+      "scope": "read write",
+      "authorization_server": "https://auth.example.com",
+      "token_endpoint": "https://auth.example.com/oauth/token"
+    },
+    "capabilities": {
+      "roots": {
+        "listChanged": false
+      },
+      "sampling": {},
+      "elicitation": {}
+    }
+  },
+  "assistant": {
+    "name": "Authenticated MCP Assistant",
+    "model": "gpt-4",
+    "instructions": {
+      "main": "你是一個可以安全存取外部資源的專門助手，使用OAuth認證來確保資料安全。",
+      "guidelines": [
+        "根據用戶的問題，使用提供的工具搜尋相關資料",
+        "基於實際的搜尋結果回答問題，提供有憑有據的分析",
+        "如果找不到相關資料，請明確說明並建議調整搜尋條件",
+        "確保所有外部資源存取都經過適當的認證和授權"
+      ],
+      "response_format": [
+        "引用具體的內容，使用引號標示",
+        "標註來源和相關資訊",
+        "提供客觀的分析，避免主觀推測",
+        "在必要時說明資料來源的認證狀態"
+      ],
+      "search_strategies": [
+        "對於特定查詢：使用精確的關鍵字搜尋",
+        "對於複雜查詢：組合使用多個搜尋條件",
+        "對於時間相關查詢：結合日期範圍搜尋",
+        "對於敏感查詢：確認具備適當的存取權限"
+      ]
+    },
+    "temperature": 0.3,
+    "top_p": 0.9
+  },
+  "function_calling": {
+    "auto_invoke": true,
+    "max_iterations": 10,
+    "timeout_seconds": 60,
+    "retry_on_error": true,
+    "max_retries": 2
+  },
+  "response_limits": {
+    "max_response_length": 4000,
+    "max_search_results_per_call": 20,
+    "max_concurrent_functions": 3
+  },
+  "default_search_params": {
+    "max_results": 10
+  },
+  "error_handling": {
+    "graceful_degradation": true,
+    "fallback_messages": {
+      "no_results": "很抱歉，根據您的搜尋條件沒有找到相關資料。建議您：\n1. 調整關鍵字或使用同義詞\n2. 擴大搜尋範圍\n3. 減少搜尋條件的限制",
+      "connection_error": "目前無法連接到資料庫，請稍後再試。",
+      "timeout_error": "搜尋請求處理時間過長，請嘗試使用更具體的搜尋條件。",
+      "auth_error": "認證失敗，請檢查存取權限設定或聯繫系統管理員。",
+      "forbidden_error": "存取被拒絕，您可能沒有足夠的權限存取此資源。"
+    },
+    "auth_retry": {
+      "enabled": true,
+      "max_retries": 2,
+      "retry_delay": 5.0
+    }
+  },
+  "functions": [
+    {
+      "name": "secure_search",
+      "description": "安全搜尋功能（需要認證）",
+      "mcp_tool": "secure_search",
+      "enabled": true,
+      "requires_auth": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "搜尋關鍵字",
+            "examples": ["敏感資料搜尋", "內部文件"]
+          },
+          "max_results": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "回傳結果數量上限"
+          },
+          "access_level": {
+            "type": "string",
+            "enum": ["public", "internal", "confidential"],
+            "default": "public",
+            "description": "存取權限等級"
+          }
+        },
+        "required": ["query"]
+      },
+      "usage_examples": [
+        {
+          "description": "一般搜尋",
+          "arguments": {
+            "query": "公開資訊搜尋",
+            "max_results": 10,
+            "access_level": "public"
+          }
+        },
+        {
+          "description": "內部資料搜尋",
+          "arguments": {
+            "query": "內部文件搜尋",
+            "max_results": 5,
+            "access_level": "internal"
+          }
+        }
+      ]
+    }
+  ],
+  "tools": {
+    "secure_search": {
+      "endpoint": "tools/call",
+      "method": "POST",
+      "mcp_method": "tools/call",
+      "mcp_tool_name": "secure_search",
+      "cache_ttl": 300,
+      "max_concurrent_requests": 5,
+      "requires_authorization": true,
+      "parameter_mapping": {
+        "query": "query",
+        "max_results": "max_results",
+        "access_level": "access_level"
+      },
+      "validation": {
+        "required_fields": ["query"],
+        "field_limits": {
+          "query": {
+            "max_length": 500
+          },
+          "max_results": {
+            "min": 1,
+            "max": 50
+          },
+          "access_level": {
+            "allowed_values": ["public", "internal", "confidential"]
+          }
+        },
+        "auth_requirements": {
+          "scopes": ["read"],
+          "min_auth_level": "authenticated"
+        }
+      }
+    }
+  },
+  "response_format": {
+    "success_wrapper": "result.content[0].text",
+    "parse_json": true,
+    "error_field": "error",
+    "expected_format": "json"
+  },
+  "monitoring": {
+    "log_requests": true,
+    "log_responses": false,
+    "log_errors": true,
+    "metrics_enabled": true,
+    "log_auth_events": true
+  },
+  "security": {
+    "validate_ssl": true,
+    "token_refresh_threshold": 300,
+    "max_token_age": 3600,
+    "sensitive_params": ["authorization", "client_secret", "access_token"]
+  }
+}

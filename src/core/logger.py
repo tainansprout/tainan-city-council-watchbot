@@ -398,7 +398,7 @@ class LoggerManager:
     def _load_default_config(self) -> Dict[str, Any]:
         """載入預設配置"""
         default_config = {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'file_path': './logs/chatbot.log',
             'max_bytes': 10 * 1024 * 1024,  # 10MB
             'backup_count': 5,
@@ -452,10 +452,10 @@ class LoggerManager:
         default_config['dev_mode'] = is_dev_environment
         
         if is_dev_environment:
-            # 在開發模式下，如果沒有明確設置 LOG_LEVEL，預設使用 DEBUG
+            # 在開發模式下，如果沒有明確設置 LOG_LEVEL，預設使用 INFO or DEBUG
             if not env_log_level and default_config['level'] not in ['DEBUG']:
-                default_config['level'] = 'DEBUG'
-                print("🚀 Development mode detected: Setting log level to DEBUG for detailed output")
+                default_config['level'] = 'INFO'
+                print("🚀 Development mode detected: Setting log level to INFO for simple output")
             
             # 開發模式強制啟用控制台輸出
             default_config['enable_console'] = True
