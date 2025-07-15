@@ -18,10 +18,11 @@ class TestOpenAIModelInitialization:
     
     def test_openai_model_initialization_basic(self):
         """測試基本初始化"""
-        model = OpenAIModel(
-            api_key="test_api_key",
-            assistant_id="test_assistant_id"
-        )
+        with patch('src.core.config.get_value', return_value=False):
+            model = OpenAIModel(
+                api_key="test_api_key",
+                assistant_id="test_assistant_id"
+            )
         
         assert model.api_key == "test_api_key"
         assert model.assistant_id == "test_assistant_id"
@@ -30,17 +31,19 @@ class TestOpenAIModelInitialization:
     def test_openai_model_initialization_with_custom_base_url(self):
         """測試使用自定義 base URL 初始化"""
         custom_url = "https://custom-api.example.com/v1"
-        model = OpenAIModel(
-            api_key="test_api_key",
-            assistant_id="test_assistant_id",
-            base_url=custom_url
-        )
+        with patch('src.core.config.get_value', return_value=False):
+            model = OpenAIModel(
+                api_key="test_api_key",
+                assistant_id="test_assistant_id",
+                base_url=custom_url
+            )
         
         assert model.base_url == custom_url
     
     def test_get_provider(self):
         """測試獲取模型提供商"""
-        model = OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            model = OpenAIModel("test_key", "test_assistant")
         assert model.get_provider() == ModelProvider.OPENAI
 
 
@@ -49,7 +52,8 @@ class TestConnectionCheck:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_check_connection_success(self, model):
         """測試成功的連線檢查"""
@@ -85,7 +89,8 @@ class TestChatCompletion:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_chat_completion_success(self, model):
         """測試成功的聊天完成"""
@@ -157,7 +162,8 @@ class TestThreadManagement:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_create_thread_success(self, model):
         """測試成功創建對話串"""
@@ -237,7 +243,8 @@ class TestAssistantExecution:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant_123")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant_123")
     
     def test_run_assistant_success(self, model):
         """測試成功執行助理"""
@@ -291,7 +298,8 @@ class TestFileOperations:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_upload_knowledge_file_success(self, model):
         """測試成功上傳知識檔案"""
@@ -413,7 +421,8 @@ class TestRAGFunctionality:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_query_with_rag_with_existing_thread(self, model):
         """測試使用現有 thread 的 RAG 查詢"""
@@ -488,7 +497,8 @@ class TestAudioTranscription:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_transcribe_audio_success(self, model):
         """測試成功的音訊轉錄"""
@@ -550,7 +560,8 @@ class TestImageGeneration:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_generate_image_success(self, model):
         """測試成功生成圖片"""
@@ -600,7 +611,8 @@ class TestResponseProcessing:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_process_openai_response_with_citations(self, model):
         """測試處理帶引用的 OpenAI 回應"""
@@ -767,7 +779,8 @@ class TestBackwardCompatibility:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_check_token_valid(self, model):
         """測試 check_token_valid 向後相容方法"""
@@ -845,7 +858,8 @@ class TestInternalMethods:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_request_get_method(self, model):
         """測試 GET 請求"""
@@ -1102,7 +1116,8 @@ class TestUserLevelConversationManagement:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_chat_with_user_existing_thread(self, model):
         """測試使用現有 thread 的用戶對話"""
@@ -1252,7 +1267,8 @@ class TestEdgeCases:
     
     @pytest.fixture
     def model(self):
-        return OpenAIModel("test_key", "test_assistant")
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
     
     def test_empty_api_key(self):
         """測試空 API key"""

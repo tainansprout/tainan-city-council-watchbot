@@ -5,6 +5,7 @@
 """
 
 import os
+import sys
 import logging
 import logging.handlers
 import json
@@ -237,11 +238,12 @@ class ColoredConsoleFormatter(logging.Formatter):
     
     RESET = '\x1b[0m'
     
-    def __init__(self, fmt=None, datefmt=None):
+    def __init__(self, fmt=None, datefmt=None, dev_mode=False):
         super().__init__(fmt, datefmt)
         # 🔥 預建立時間格式，避免重複 strftime 調用
         self._last_time_cache = {}
         self._time_cache_lock = threading.Lock()
+        self.dev_mode = dev_mode
     
     def format(self, record):
         """優化的彩色格式化"""
@@ -258,7 +260,33 @@ class ColoredConsoleFormatter(logging.Formatter):
         colored_record.msg = message
         
         timestamp = self._get_formatted_time()
-        return f"{timestamp} - {colored_record.name} - {colored_record.levelname} - {message}"
+        
+        # 🔥 開發模式：顯示更詳細的資訊
+        if self.dev_mode:
+            # 模組路徑簡化顯示
+            module_name = colored_record.name
+            if len(module_name) > 30:
+                # 縮短長模組名，保留重要部分
+                parts = module_name.split('.')
+                if len(parts) > 3:
+                    module_name = f"{parts[0]}...{parts[-2]}.{parts[-1]}"
+            
+            # 函數和行號資訊
+            location_info = ""
+            if hasattr(colored_record, 'funcName') and hasattr(colored_record, 'lineno'):
+                location_info = f" [{colored_record.funcName}:{colored_record.lineno}]"
+            
+            # 額外的上下文資訊
+            context_info = ""
+            if hasattr(colored_record, 'user_id'):
+                context_info += f" [user:{colored_record.user_id}]"
+            if hasattr(colored_record, 'request_id'):
+                context_info += f" [req:{colored_record.request_id}]"
+            
+            return f"{timestamp} - {module_name}{location_info} - {colored_record.levelname}{context_info} - {message}"
+        else:
+            # 一般模式：保持簡潔
+            return f"{timestamp} - {colored_record.name} - {colored_record.levelname} - {message}"
     
     def _get_formatted_time(self) -> str:
         """優化的時間格式化"""
@@ -394,6 +422,45 @@ class LoggerManager:
         except Exception as e:
             print(f"Warning: Could not load config file, using defaults: {e}")
         
+        # 🔥 環境變數覆寫：支援開發模式動態調整 log level
+        env_log_level = os.getenv('LOG_LEVEL')
+        if env_log_level:
+            env_log_level = env_log_level.upper()
+            # 驗證 log level 是否有效
+            valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+            if env_log_level in valid_levels:
+                default_config['level'] = env_log_level
+                print(f"📝 Log level overridden by environment variable: {env_log_level}")
+            else:
+                print(f"⚠️  Invalid LOG_LEVEL environment variable: {env_log_level}. Using config file setting: {default_config['level']}")
+        
+        # 🔥 開發模式檢測：如果是開發模式，啟用更詳細的控制台輸出
+        dev_mode = os.getenv('DEV_MODE', '').lower() in ['true', '1', 'yes', 'development']
+        flask_env = os.getenv('FLASK_ENV', '').lower()
+        python_env = os.getenv('PYTHON_ENV', '').lower()
+        
+        # 檢測開發環境的多種方式
+        is_dev_environment = (
+            dev_mode or 
+            flask_env in ['development', 'dev'] or 
+            python_env in ['development', 'dev'] or
+            # 檢測是否在使用 --debug 或 debug=True 模式
+            any('debug' in str(arg).lower() for arg in sys.argv if isinstance(arg, str))
+        )
+        
+        # 儲存開發模式狀態
+        default_config['dev_mode'] = is_dev_environment
+        
+        if is_dev_environment:
+            # 在開發模式下，如果沒有明確設置 LOG_LEVEL，預設使用 DEBUG
+            if not env_log_level and default_config['level'] not in ['DEBUG']:
+                default_config['level'] = 'DEBUG'
+                print("🚀 Development mode detected: Setting log level to DEBUG for detailed output")
+            
+            # 開發模式強制啟用控制台輸出
+            default_config['enable_console'] = True
+            print("🖥️  Development mode: Console logging enabled")
+        
         return default_config
     
     def _setup_logger(self):
@@ -422,12 +489,18 @@ class LoggerManager:
             if self.config.get('format', 'simple') == 'structured':
                 console_formatter = StructuredFormatter(enable_colors=True)
             else:
+                # 🔥 傳遞開發模式參數給 console formatter
+                dev_mode = self.config.get('dev_mode', False)
                 console_formatter = ColoredConsoleFormatter(
                     fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S'
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    dev_mode=dev_mode
                 )
             console_handler.setFormatter(console_formatter)
             console_handler.addFilter(sensitive_filter)
+            
+            # 🔥 重要：設置 console handler 的 level，確保與 logger 一致
+            console_handler.setLevel(self.logger.level)
             
             # 🔥 使用異步處理器包裝（如果啟用）
             if self.enable_async:
@@ -575,7 +648,22 @@ _performance_monitor = LoggerPerformanceMonitor()
 def get_logger(name: str = None) -> logging.Logger:
     """取得日誌記錄器"""
     if name:
-        return logging.getLogger(name)
+        # 🔥 修正：確保子 logger 繼承主 logger 的配置
+        child_logger = logging.getLogger(name)
+        
+        # 如果子 logger 沒有 handlers，讓它繼承主 logger 的配置
+        if not child_logger.handlers and logger.handlers:
+            # 設置相同的 level
+            child_logger.setLevel(logger.level)
+            
+            # 設置 propagate 為 False，避免重複輸出
+            child_logger.propagate = False
+            
+            # 複製主 logger 的 handlers
+            for handler in logger.handlers:
+                child_logger.addHandler(handler)
+        
+        return child_logger
     return logger
 
 

@@ -44,15 +44,18 @@ class GeminiModel(FullLLMInterface):
     - Ranking API: 智慧重排序提升檢索品質
     """
     
-    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", base_url: str = None, project_id: str = None, enable_mcp: bool = None):
+    def __init__(self, api_key: str, model_name: str = "gemini-1.5-pro-latest", base_url: str = None, project_id: str = None, enable_mcp: bool = False):
         self.api_key = api_key
         self.model_name = model_name
         self.base_url = base_url or "https://generativelanguage.googleapis.com/v1beta"
         
         self.project_id = project_id  # Google Cloud 專案 ID，用於 Vertex AI
         
-        # MCP 支援 - 從設定檔讀取
-        if enable_mcp is None:
+        # MCP 支援 - 預設關閉，可透過參數或設定檔啟用
+        if enable_mcp:
+            self.enable_mcp = True
+        else:
+            # 如果明確傳遞 False，則直接關閉，否則檢查設定檔
             try:
                 from ..core.config import get_value
                 feature_enabled = get_value('features.enable_mcp', False)
@@ -61,8 +64,6 @@ class GeminiModel(FullLLMInterface):
             except Exception as e:
                 logger.warning(f"Error reading MCP config: {e}")
                 self.enable_mcp = False
-        else:
-            self.enable_mcp = enable_mcp
             
         self.mcp_service = None
         if self.enable_mcp:

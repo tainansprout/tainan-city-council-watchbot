@@ -63,14 +63,17 @@ from ..utils import s2t_converter, dedup_citation_blocks
 class OpenAIModel(FullLLMInterface):
     """OpenAI 模型實作"""
     
-    def __init__(self, api_key: str, assistant_id: str = None, base_url: str = None, enable_mcp: bool = None):
+    def __init__(self, api_key: str, assistant_id: str = None, base_url: str = None, enable_mcp: bool = False):
         self.api_key = api_key
         self.assistant_id = assistant_id
         self.base_url = base_url or 'https://api.openai.com/v1'
         self.polling_strategy = OpenAIPollingStrategy()
         
-        # MCP 支援 - 從設定檔讀取
-        if enable_mcp is None:
+        # MCP 支援 - 預設關閉，可透過參數或設定檔啟用
+        if enable_mcp:
+            self.enable_mcp = True
+        else:
+            # 如果明確傳遞 False，則直接關閉，否則檢查設定檔
             try:
                 from ..core.config import get_value
                 feature_enabled = get_value('features.enable_mcp', False)
@@ -79,8 +82,6 @@ class OpenAIModel(FullLLMInterface):
             except Exception as e:
                 logger.warning(f"Error reading MCP config: {e}")
                 self.enable_mcp = False
-        else:
-            self.enable_mcp = enable_mcp
             
         self.mcp_service = None
         if self.enable_mcp:

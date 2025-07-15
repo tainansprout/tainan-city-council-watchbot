@@ -170,6 +170,41 @@
             max-width: 90%;
         }
 
+        /* 🔥 MCP 系統訊息樣式 */
+        .message.mcp {
+            display: flex;
+            justify-content: center;
+            margin: 0.5rem 0;
+        }
+
+        .message.mcp .message-content {
+            background: #f8f9fa;
+            color: #6c757d;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            max-width: 95%;
+            font-size: 0.9rem;
+            font-style: italic;
+            padding: 0.8rem 1rem;
+        }
+
+        .mcp-step {
+            margin: 0.3rem 0;
+            padding: 0.2rem 0;
+        }
+
+        .mcp-step.request {
+            color: #007bff;
+        }
+
+        .mcp-step.response {
+            color: #28a745;
+        }
+
+        .mcp-step.error {
+            color: #dc3545;
+        }
+
         .message-avatar {
             width: 40px;
             height: 40px;
@@ -441,10 +476,12 @@
                 avatarIcon = '<i class="fas fa-robot"></i>';
             } else if (type === 'error') {
                 avatarIcon = '<i class="fas fa-exclamation-triangle"></i>';
+            } else if (type === 'mcp') {
+                avatarIcon = '<i class="fas fa-cogs"></i>';
             }
 
             const messageHtml = `
-                ${type !== 'error' ? `<div class="message-avatar">${avatarIcon}</div>` : ''}
+                ${type !== 'error' && type !== 'mcp' ? `<div class="message-avatar">${avatarIcon}</div>` : ''}
                 <div class="message-content">
                     ${isHtml ? content : escapeHtml(content)}
                 </div>
@@ -461,6 +498,27 @@
 
             // 滾動到底部
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 🔥 新增 MCP 互動訊息顯示函數
+        function addMcpInteractions(interactions) {
+            if (!interactions || interactions.length === 0) return;
+
+            interactions.forEach(interaction => {
+                let mcpContent = '';
+                
+                // 顯示請求
+                mcpContent += `<div class="mcp-step request">🔧 LLM 要求調用工具：${interaction.request.function_name}</div>`;
+                
+                // 顯示回應
+                if (interaction.status === 'success') {
+                    mcpContent += `<div class="mcp-step response">✅ MCP 伺服器回應成功 (${interaction.response.execution_time.toFixed(2)}s)</div>`;
+                } else {
+                    mcpContent += `<div class="mcp-step error">❌ MCP 伺服器回應失敗：${interaction.response.error}</div>`;
+                }
+                
+                addMessage(mcpContent, 'mcp', true);
+            });
         }
 
         function escapeHtml(text) {
@@ -540,6 +598,12 @@
                 if (data.error) {
                     addMessage(data.error, 'error');
                 } else {
+                    // 🔥 先顯示 MCP 互動（如果存在）
+                    if (data.mcp_interactions) {
+                        addMcpInteractions(data.mcp_interactions);
+                    }
+                    
+                    // 然後顯示 AI 回應
                     addMessage(data.message, 'bot', false);
                 }
             })

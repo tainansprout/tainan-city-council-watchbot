@@ -27,6 +27,7 @@ class MCPService:
         self.mcp_client = None
         self.is_enabled = False
         
+        
         # 初始化 MCP 服務
         self._init_mcp_service()
     
@@ -48,6 +49,7 @@ class MCPService:
         except Exception as e:
             logger.warning(f"Failed to initialize MCP service: {e}")
             self.is_enabled = False
+    
     
     async def handle_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -72,8 +74,9 @@ class MCPService:
         logger.info(f"[{call_id}] 🏗️ Service Status: enabled={self.is_enabled}, config={self.config_name}")
         
         if not self.is_enabled:
+            error_msg = "MCP service is not enabled"
             logger.error(f"[{call_id}] ❌ MCP Service Disabled")
-            return self._format_error_response("MCP service is not enabled")
+            return self._format_error_response(error_msg)
         
         try:
             # 步驟 1: 驗證函數和參數
@@ -83,8 +86,9 @@ class MCPService:
             )
             
             if not is_valid:
+                error_msg_full = f"Parameter validation failed: {error_msg}"
                 logger.warning(f"[{call_id}] ⚠️ Validation Failed: {error_msg}")
-                return self._format_error_response(f"Parameter validation failed: {error_msg}")
+                return self._format_error_response(error_msg_full)
             
             logger.info(f"[{call_id}] ✅ Arguments validation passed")
             
@@ -92,8 +96,9 @@ class MCPService:
             logger.info(f"[{call_id}] 🔍 Step 2: Loading function configuration")
             func_config = self.config_manager.get_function_by_name(function_name, self.config_name)
             if not func_config:
+                error_msg = f"Unknown function: {function_name}"
                 logger.error(f"[{call_id}] ❌ Unknown function: {function_name}")
-                return self._format_error_response(f"Unknown function: {function_name}")
+                return self._format_error_response(error_msg)
             
             mcp_tool_name = func_config['mcp_tool']
             logger.info(f"[{call_id}] 🔧 Function Mapping: {function_name} -> {mcp_tool_name}")
@@ -134,23 +139,81 @@ class MCPService:
                         "call_id": call_id,
                         "sources": sources,
                         "execution_metadata": metadata
+                    },
+                    # 🔥 MCP 互動資訊：記錄發送與回應的 JSON 內容
+                    "mcp_interaction": {
+                        "request": {
+                            "function_name": function_name,
+                            "arguments": arguments
+                        },
+                        "response": {
+                            "success": True,
+                            "data": result.get('data'),
+                            "execution_time": execution_time
+                        },
+                        "status": "success"
                     }
                 }
             else:
                 error_msg = result.get('error', 'Unknown MCP error')
                 logger.error(f"[{call_id}] ❌ MCP Tool Failed: {error_msg}")
                 logger.debug(f"[{call_id}] 📄 Error Details: {json.dumps(result, ensure_ascii=False, indent=2)}")
-                return self._format_error_response(error_msg)
+                
+                # 🔥 失敗情況的 MCP 互動記錄
+                error_response = self._format_error_response(error_msg)
+                error_response["mcp_interaction"] = {
+                    "request": {
+                        "function_name": function_name,
+                        "arguments": arguments
+                    },
+                    "response": {
+                        "success": False,
+                        "error": error_msg,
+                        "execution_time": execution_time
+                    },
+                    "status": "failed"
+                }
+                return error_response
                 
         except (MCPClientError, MCPServerError) as e:
             execution_time = time.time() - start_time
             logger.error(f"[{call_id}] 🌐 MCP Communication Error: {e} (Time: {execution_time:.2f}s)")
-            return self._format_error_response(str(e))
+            
+            # 🔥 通訊錯誤的 MCP 互動記錄
+            error_response = self._format_error_response(str(e))
+            error_response["mcp_interaction"] = {
+                "request": {
+                    "function_name": function_name,
+                    "arguments": arguments
+                },
+                "response": {
+                    "success": False,
+                    "error": str(e),
+                    "execution_time": execution_time
+                },
+                "status": "error"
+            }
+            return error_response
         except Exception as e:
             execution_time = time.time() - start_time
             logger.error(f"[{call_id}] 💥 Unexpected Service Error: {e} (Time: {execution_time:.2f}s)")
             logger.exception(f"[{call_id}] 📄 Full Exception Details:")
-            return self._format_error_response(f"Function execution error: {str(e)}")
+            
+            # 🔥 未預期錯誤的 MCP 互動記錄
+            error_response = self._format_error_response(f"Function execution error: {str(e)}")
+            error_response["mcp_interaction"] = {
+                "request": {
+                    "function_name": function_name,
+                    "arguments": arguments
+                },
+                "response": {
+                    "success": False,
+                    "error": f"Function execution error: {str(e)}",
+                    "execution_time": execution_time
+                },
+                "status": "error"
+            }
+            return error_response
     
     def get_function_schemas_for_openai(self) -> List[Dict[str, Any]]:
         """取得 OpenAI function calling 格式的 schemas"""

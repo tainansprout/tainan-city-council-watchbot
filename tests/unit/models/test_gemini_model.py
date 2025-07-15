@@ -13,15 +13,17 @@ class TestGeminiModel:
     
     @pytest.fixture
     def gemini_model(self):
-        return GeminiModel(
-            api_key='test_key',
-            model_name='gemini-1.5-pro-latest',
-            project_id='test-project'
-        )
+        with patch('src.core.config.get_value', return_value=False):
+            return GeminiModel(
+                api_key='test_key',
+                model_name='gemini-1.5-pro-latest',
+                project_id='test-project'
+            )
     
     def test_init_with_defaults(self):
         """測試初始化預設值"""
-        model = GeminiModel(api_key='test_key')
+        with patch('src.core.config.get_value', return_value=False):
+            model = GeminiModel(api_key='test_key')
         
         assert model.api_key == 'test_key'
         assert model.model_name == 'gemini-1.5-pro-latest'

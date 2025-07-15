@@ -60,7 +60,7 @@ class AnthropicModel(FullLLMInterface):
     Anthropic Claude 2024 模型實作
     """
     
-    def __init__(self, api_key: str, model_name: str = "claude-3-5-sonnet-20240620", base_url: str = None, enable_mcp: bool = None):
+    def __init__(self, api_key: str, model_name: str = "claude-3-5-sonnet-20240620", base_url: str = None, enable_mcp: bool = False):
         self.api_key = api_key
         self.model_name = model_name
         self.base_url = base_url or "https://api.anthropic.com/v1"
@@ -68,8 +68,11 @@ class AnthropicModel(FullLLMInterface):
         self.speech_service = None
         self.conversation_manager = get_conversation_manager()
         
-        # MCP 支援 - 從設定檔讀取
-        if enable_mcp is None:
+        # MCP 支援 - 預設關閉，可透過參數或設定檔啟用
+        if enable_mcp:
+            self.enable_mcp = True
+        else:
+            # 如果明確傳遞 False，則直接關閉，否則檢查設定檔
             try:
                 from ..core.config import get_value
                 feature_enabled = get_value('features.enable_mcp', False)
@@ -78,8 +81,6 @@ class AnthropicModel(FullLLMInterface):
             except Exception as e:
                 logger.warning(f"Error reading MCP config: {e}")
                 self.enable_mcp = False
-        else:
-            self.enable_mcp = enable_mcp
             
         self.mcp_service = None
         if self.enable_mcp:
@@ -438,6 +439,7 @@ class AnthropicModel(FullLLMInterface):
             
             # 執行 function calls 並收集結果
             function_results = []
+            mcp_interactions = []  # 🔥 收集 MCP 互動資訊，用於前端顯示
             for i, function_call in enumerate(function_calls, 1):
                 function_name = function_call['function_name']
                 arguments = function_call['arguments']
@@ -458,6 +460,10 @@ class AnthropicModel(FullLLMInterface):
                     'arguments': arguments,
                     'result': result
                 })
+                
+                # 🔥 提取 MCP 互動資訊
+                if 'mcp_interaction' in result:
+                    mcp_interactions.append(result['mcp_interaction'])
             
             # 建構包含 function results 的新對話
             logger.info("🔄 Anthropic Model: Formatting function results for final response")
@@ -481,10 +487,13 @@ class AnthropicModel(FullLLMInterface):
                 final_response.metadata['function_calls'] = function_calls
                 final_response.metadata['function_results'] = function_results
                 final_response.metadata['sources'] = sources
+                # 🔥 添加 MCP 互動資訊，供前端顯示
+                final_response.metadata['mcp_interactions'] = mcp_interactions
                 
                 logger.info(f"✅ Anthropic Model: MCP workflow completed successfully")
                 logger.info(f"📊 Final response: {len(final_response.content)} chars, {len(sources)} sources")
                 logger.debug(f"📚 Sources extracted: {[source.get('filename', 'Unknown') for source in sources[:3]]}")
+                logger.info(f"🔧 MCP interactions: {len(mcp_interactions)} tool calls recorded")
                 
                 return True, final_response, None
             else:

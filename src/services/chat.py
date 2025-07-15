@@ -3,9 +3,10 @@
 """
 import time
 import os
+import sys
 from ..core.logger import get_logger
 from typing import Dict, Any, Optional, Tuple
-from ..models.base import FullLLMInterface, ModelProvider
+from ..models.base import FullLLMInterface, ModelProvider, RAGResponse
 from ..database.connection import Database
 from ..utils import preprocess_text, postprocess_text
 from ..core.exceptions import ChatBotError, DatabaseError, ThreadError
@@ -56,8 +57,10 @@ class ChatService:
         platform = user.platform.value
         try:
             logger.info(f'Processing message from {user.user_id} on {platform}: {message.content}')
-        except ValueError:
-            pass
+        except Exception as e:
+            # 如果 logger 失敗，至少在開發模式下印出到 stderr
+            if os.getenv('DEV_MODE') == 'true':
+                print(f"Logger error in handle_message: {e}", file=sys.stderr)
 
         # 處理不同類型的訊息
         if message.message_type == "text":
@@ -86,12 +89,14 @@ class ChatService:
             # 記錄詳細的錯誤 log
             try:
                 logger.error(f"Error handling text message for user {user.user_id}: {type(e).__name__}: {e}")
-            except ValueError:
-                pass
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _handle_text_message: {log_err}", file=sys.stderr)
             try:
                 logger.error(f"Error details - Platform: {platform}, Message: {text[:100]}...")
-            except ValueError:
-                pass
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _handle_text_message details: {log_err}", file=sys.stderr)
             
             # 檢查是否為測試用戶（來自 /chat 介面）
             is_test_user = user.user_id.startswith("U" + "0" * 32)
@@ -135,14 +140,16 @@ class ChatService:
             else:
                 try:
                     logger.warning(f"Failed to clear history for user {user.user_id}: {error_message}")
-                except ValueError:
-                    pass
+                except Exception as log_err:
+                    if os.getenv('DEV_MODE') == 'true':
+                        print(f"Logger error in _handle_reset_command: {log_err}", file=sys.stderr)
                 return PlatformResponse(content='Reset completed (with warnings).', response_type="text")
         except Exception as e:
             try:
                 logger.error(f"Error resetting for user {user.user_id}: {e}")
-            except ValueError:
-                pass
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _handle_reset_command exception: {log_err}", file=sys.stderr)
             raise ThreadError(f"Failed to reset: {e}")
     
     def _handle_chat_message(self, user: PlatformUser, text: str, platform: str) -> PlatformResponse:
@@ -152,31 +159,46 @@ class ChatService:
             processed_text = preprocess_text(text, self.config)
             
             # 使用統一的對話處理邏輯，thread_id 等由模型層管理
-            response_message = self._process_conversation(user, processed_text, platform)
+            rag_response = self._process_conversation(user, processed_text, platform)
             
-            # 後處理回應
-            final_response = postprocess_text(response_message, self.config)
+            # 格式化並後處理回應
+            formatted_response = self.response_formatter.format_rag_response(rag_response)
+            final_response = postprocess_text(formatted_response, self.config)
             
-            logger.info(f'Response message to {user.user_id} on {platform}: {final_response}')
+            try:
+                logger.info(f'Response message to {user.user_id} on {platform}: {final_response}')
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _handle_chat_message response: {log_err}", file=sys.stderr)
 
+            # 🔥 提取 MCP 互動資訊，如果存在的話
+            mcp_interactions = None
+            if rag_response and rag_response.metadata:
+                mcp_interactions = rag_response.metadata.get('mcp_interactions')
+            
             return PlatformResponse(
                 content=final_response,
-                response_type="text"
+                response_type="text",
+                metadata={
+                    "mcp_interactions": mcp_interactions
+                } if mcp_interactions else None
             )
             
         except Exception as e:
             # 記錄詳細的錯誤 log
             try:
                 logger.error(f"Error processing chat message for user {user.user_id}: {type(e).__name__}: {e}")
-            except ValueError:
-                pass
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _handle_chat_message: {log_err}", file=sys.stderr)
             try:
                 logger.error(f"Error details - Platform: {platform}, Processed text: {text[:100]}...")
-            except ValueError:
-                pass
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _handle_chat_message details: {log_err}", file=sys.stderr)
             raise
     
-    def _process_conversation(self, user: PlatformUser, text: str, platform: str) -> str:
+    def _process_conversation(self, user: PlatformUser, text: str, platform: str) -> RAGResponse:
         """處理對話邏輯 - 使用統一的 chat_with_user 接口，thread_id 由模型層管理"""
         try:
             is_successful, rag_response, error_message = self.model.chat_with_user(
@@ -192,12 +214,15 @@ class ChatService:
                     raise DatabaseError(error_message)
                 else:
                     raise ChatBotError(f"Chat with user failed: {error_message}")
-            formatted_response = self.response_formatter.format_rag_response(rag_response)
+            
             try:
+                formatted_response = self.response_formatter.format_rag_response(rag_response)
                 logger.debug(f"Processed conversation response length: {len(formatted_response)}")
-            except ValueError:
-                pass
-            return formatted_response
+            except Exception as log_err:
+                if os.getenv('DEV_MODE') == 'true':
+                    print(f"Logger error in _process_conversation: {log_err}", file=sys.stderr)
+            
+            return rag_response
         except Exception as e:
             if isinstance(e, (ChatBotError, DatabaseError)):
                 raise

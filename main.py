@@ -33,6 +33,17 @@ if __name__ == "__main__":
     # (e.g., `python main.py`) for local testing.
     print("🔧 Starting in development mode...")
     
+    # 🔥 設置開發模式環境變數，確保 logger 能正確檢測
+    if not os.getenv('DEV_MODE'):
+        os.environ['DEV_MODE'] = 'true'
+    if not os.getenv('FLASK_ENV'):
+        os.environ['FLASK_ENV'] = 'development'
+    
+    # 顯示當前 log level 設定
+    log_level = os.getenv('LOG_LEVEL', 'DEBUG')
+    print(f"📊 Current log level: {log_level} (set LOG_LEVEL environment variable to override)")
+    print(f"💡 Example: LOG_LEVEL=INFO python main.py")
+    
     # Load config to get host/port for the dev server
     config = load_config()
     app_config = config.get('app', {})

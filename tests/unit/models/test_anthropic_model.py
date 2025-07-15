@@ -10,9 +10,10 @@ from src.models.base import FileInfo, RAGResponse, ChatMessage, ChatResponse, Mo
 def model() -> AnthropicModel:
     """Provides a fresh, mocked instance of AnthropicModel for each test."""
     with patch('src.models.anthropic_model.get_conversation_manager', return_value=Mock()) as mock_get_manager:
-        instance = AnthropicModel(api_key='test_key')
-        instance.conversation_manager = mock_get_manager.return_value
-        yield instance
+        with patch('src.core.config.get_value', return_value=False):
+            instance = AnthropicModel(api_key='test_key')
+            instance.conversation_manager = mock_get_manager.return_value
+            yield instance
 
 class TestAnthropicModel:
 

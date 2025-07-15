@@ -29,7 +29,17 @@ class TestMCPService:
                     "name": "test_function",
                     "description": "測試函數",
                     "mcp_tool": "test_tool",
-                    "enabled": True
+                    "enabled": True,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query"
+                            }
+                        },
+                        "required": ["query"]
+                    }
                 }
             ],
             "tools": {

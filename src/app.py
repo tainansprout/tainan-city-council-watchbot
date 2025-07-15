@@ -404,7 +404,16 @@ class MultiPlatformChatBot:
                 else:
                     clean_response = InputValidator.sanitize_text(str(response))
                 
-                return jsonify({'message': clean_response})
+                # 🔥 準備回應，包含 MCP 互動資訊（如果存在）
+                response_data = {'message': clean_response}
+                
+                # 提取 MCP 互動資訊
+                if hasattr(response, 'metadata') and response.metadata:
+                    mcp_interactions = response.metadata.get('mcp_interactions')
+                    if mcp_interactions:
+                        response_data['mcp_interactions'] = mcp_interactions
+                
+                return jsonify(response_data)
                 
             except Exception as e:
                 # 記錄詳細的錯誤 log
