@@ -10,8 +10,8 @@ anthropic>=0.25.0,<1.0.0
 google-generativeai>=0.4.0,<1.0.0
 # ollama>=0.2.0,<1.0.0  # Local model, no SDK needed
 
-# Hugging Face integration
-huggingface-hub>=0.20.0,<1.0.0
+# Hugging Face integration (僅 API calls，不需要 hub)
+# huggingface-hub>=0.20.0,<1.0.0  # 未使用，可移除
 # transformers and sentence-transformers are not required for API-based embedding.
 # torch is not required if you are not running models locally.
 
@@ -22,7 +22,7 @@ opencc-python-reimplemented>=0.1.6,<1.0.0
 pyyaml>=6.0,<7.0
 psycopg2-binary>=2.9.0,<3.0.0
 SQLAlchemy>=2.0.0,<3.0.0
-Flask-Migrate>=4.0.0,<5.0.0  # Modern Flask DB migration best practice (includes Alembic)
+# Flask-Migrate>=4.0.0,<5.0.0  # 有使用但設定有問題，如不需要可移除
 
 # HTTP requests
 requests>=2.31.0,<3.0.0
@@ -37,12 +37,12 @@ python-dateutil>=2.8.0,<3.0.0
 # System resource monitoring
 psutil>=5.9.0,<6.0.0
 
-# Audio processing for voice message transcription
-pydub>=0.25.0,<1.0.0
-ffmpeg-python>=0.2.0,<1.0.0
+# Audio processing for voice message transcription (未使用，可移除)
+# pydub>=0.25.0,<1.0.0
+# ffmpeg-python>=0.2.0,<1.0.0
 
-# Environment variable management for development
-python-dotenv>=1.0.0,<2.0.0
+# Environment variable management for development (未使用，可移除)
+# python-dotenv>=1.0.0,<2.0.0
 
 # Additional platform integrations (optional, uncomment to enable)
 # Discord platform support
@@ -61,8 +61,8 @@ black>=23.0.0,<24.0.0
 flake8>=6.0.0,<7.0.0
 isort>=5.12.0,<6.0.0
 
-# Additional utilities
-requests-toolbelt>=1.0.0,<2.0.0
+# Additional utilities (未使用，可移除)
+# requests-toolbelt>=1.0.0,<2.0.0
 
 # ==========================================
 # MULTI-PLATFORM SUPPORT INSTALLATION GUIDE

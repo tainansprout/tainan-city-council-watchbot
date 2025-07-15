@@ -770,8 +770,8 @@ def create_app(config_path: str = None, migration_mode: bool = False) -> Flask:
         # 遷移模式：只創建最小 Flask 應用程式和資料庫配置
         from flask import Flask
         from .core.config import load_config
-        from .database.models import db
-        from .database.migrate_config import init_migrate
+        from .database.models import Base  # 使用 Base 而非 db
+        from sqlalchemy import create_engine
         
         # 創建最小 Flask 應用程式
         app = Flask(__name__)
@@ -803,9 +803,15 @@ def create_app(config_path: str = None, migration_mode: bool = False) -> Flask:
         app.config['SQLALCHEMY_DATABASE_URI'] = database_url
         app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
         
-        # 初始化資料庫和遷移
-        db.init_app(app)
-        init_migrate(app)
+        # 如果需要 Flask-Migrate 功能，需要先創建 migrate_config.py 檔案
+        # 目前先註解掉，避免 import 錯誤
+        # 
+        # try:
+        #     from flask_migrate import Migrate
+        #     from .database.models import db
+        #     migrate = Migrate(app, db)
+        # except ImportError:
+        #     pass  # Flask-Migrate 未安裝
         
         return app
     else:
