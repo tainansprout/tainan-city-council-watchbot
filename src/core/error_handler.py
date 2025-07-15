@@ -16,8 +16,8 @@ class ErrorHandler:
     # 簡化的錯誤訊息（用於 LINE 等平台）
     SIMPLE_ERROR_MESSAGES = {
         'openai_api_key_invalid': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
-        'openai_overloaded': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
-        'thread_busy': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
+        'openai_overloaded': '機器人已超過負荷，請稍後再試。',
+        'thread_busy': '機器人正在思考您的問題，請稍等。',
         'database_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
         'thread_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
         'model_error': '機器人發生錯誤，請換個問法，或稍後再嘗試。',
