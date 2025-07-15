@@ -41,8 +41,8 @@ psutil>=5.9.0,<6.0.0
 # pydub>=0.25.0,<1.0.0
 # ffmpeg-python>=0.2.0,<1.0.0
 
-# Environment variable management for development (未使用，可移除)
-# python-dotenv>=1.0.0,<2.0.0
+# Environment variable management for development
+python-dotenv>=1.0.0,<2.0.0
 
 # Additional platform integrations (optional, uncomment to enable)
 # Discord platform support
