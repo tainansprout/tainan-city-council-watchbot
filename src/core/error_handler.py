@@ -113,7 +113,9 @@ class ErrorHandler:
             return 'openai_rate_limit'
         elif 'quota exceeded' in error_str_lower or 'billing' in error_str_lower:
             return 'openai_quota_exceeded'
-        elif "can't add messages to thread" in error_str_lower:
+        elif "can't add messages to thread" in error_str_lower and "while a run" in error_str_lower:
+            return 'thread_busy'
+        elif "already has an active run" in error_str_lower:
             return 'thread_busy'
         
         # Anthropic 相關錯誤
@@ -200,6 +202,17 @@ class ErrorHandler:
     
     def _handle_chatbot_error(self, error: ChatBotError, use_detailed: bool = False) -> str:
         """處理自定義錯誤"""
+        # 首先檢查 ChatBotError 包裝的內部錯誤消息
+        if hasattr(error, 'message') and error.message:
+            internal_error_key = self._classify_error(error.message)
+            if internal_error_key != 'unknown_error':
+                # 如果內部錯誤消息能被分類，使用分類結果
+                if use_detailed:
+                    return self.DETAILED_ERROR_MESSAGES.get(internal_error_key, self.DETAILED_ERROR_MESSAGES['unknown_error'])
+                else:
+                    return self.SIMPLE_ERROR_MESSAGES.get(internal_error_key, self.SIMPLE_ERROR_MESSAGES['unknown_error'])
+        
+        # 回退到基於錯誤類型的處理
         if isinstance(error, OpenAIError):
             key = 'openai_api_key_invalid'
         elif isinstance(error, AnthropicError):
