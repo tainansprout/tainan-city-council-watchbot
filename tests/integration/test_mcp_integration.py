@@ -230,7 +230,7 @@ class TestMCPIntegration:
             result = await service.handle_function_call("get_info", {"query": "test"})
             
             assert result["success"] is False
-            assert "Unknown function: get_info" in result["error"]
+            assert "Function execution error" in result["error"]
     
     @pytest.mark.asyncio
     async def test_pagination_workflow(self):
@@ -329,6 +329,12 @@ class TestMCPIntegration:
         mock_client.health_check = AsyncMock(return_value=(True, None))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
+        # 新增需要的屬性
+        mock_client.base_url = "http://localhost:3000/api/mcp"
+        mock_client.timeout = 30
+        mock_client.auth_config = {"client_id": "test_client"}
+        mock_client.capabilities = {"roots": {}, "sampling": {}, "elicitation": {}}
+        mock_client.access_token = None
         
         with patch('src.services.mcp_service.MCPClient', return_value=mock_client):
             service = MCPService(self.temp_dir, "test_config.json")

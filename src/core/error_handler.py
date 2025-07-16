@@ -104,22 +104,8 @@ class ErrorHandler:
         """根據錯誤訊息分類錯誤類型"""
         error_str_lower = error_str.lower()
         
-        # OpenAI 相關錯誤
-        if 'incorrect api key' in error_str_lower or 'invalid api key' in error_str_lower:
-            return 'openai_api_key_invalid'
-        elif 'overloaded with other requests' in error_str_lower:
-            return 'openai_overloaded'
-        elif 'rate limit' in error_str_lower or 'api 速率限制' in error_str_lower:
-            return 'openai_rate_limit'
-        elif 'quota exceeded' in error_str_lower or 'billing' in error_str_lower:
-            return 'openai_quota_exceeded'
-        elif "can't add messages to thread" in error_str_lower and "while a run" in error_str_lower:
-            return 'thread_busy'
-        elif "already has an active run" in error_str_lower:
-            return 'thread_busy'
-        
         # Anthropic 相關錯誤
-        elif 'anthropic' in error_str_lower and ('api key' in error_str_lower or 'unauthorized' in error_str_lower):
+        if 'anthropic' in error_str_lower and ('api key' in error_str_lower or 'unauthorized' in error_str_lower):
             return 'anthropic_api_key_invalid'
         elif 'anthropic' in error_str_lower and 'overloaded' in error_str_lower:
             return 'anthropic_overloaded'
@@ -133,6 +119,20 @@ class ErrorHandler:
             return 'gemini_overloaded'
         elif 'gemini' in error_str_lower and 'rate limit' in error_str_lower:
             return 'gemini_rate_limit'
+        
+        # OpenAI 相關錯誤
+        elif 'incorrect api key' in error_str_lower or 'invalid api key' in error_str_lower:
+            return 'openai_api_key_invalid'
+        elif 'overloaded with other requests' in error_str_lower:
+            return 'openai_overloaded'
+        elif 'rate limit' in error_str_lower or 'api 速率限制' in error_str_lower:
+            return 'openai_rate_limit'
+        elif 'quota exceeded' in error_str_lower or 'billing' in error_str_lower:
+            return 'openai_quota_exceeded'
+        elif "can't add messages to thread" in error_str_lower and "while a run" in error_str_lower:
+            return 'thread_busy'
+        elif "already has an active run" in error_str_lower:
+            return 'thread_busy'
         
         # Ollama 相關錯誤
         elif 'ollama' in error_str_lower and 'connection' in error_str_lower:

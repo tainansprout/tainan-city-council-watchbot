@@ -197,6 +197,8 @@ python -m pytest tests/integration/
 - `POST /webhooks/line`: LINE platform webhook
 - `POST /webhooks/discord`: Discord platform webhook
 - `POST /webhooks/telegram`: Telegram platform webhook
+- `POST /webhooks/instagram`: Instagram platform webhook
+- `POST /webhooks/slack`: Slack platform webhook
 
 ### Web Interface
 - `GET /login`: Login page

@@ -1011,15 +1011,15 @@ class TestInternalMethods:
         """測試等待執行完成 - 超時"""
         thread_id = "thread_123"
         run_id = "run_456"
-        
+
         with patch.object(model, 'retrieve_thread_run', return_value=(True, {"status": "in_progress"}, None)), \
-             patch('time.time', side_effect=[0, 1, 122]):  # 模擬超時
+             patch('time.sleep'):  # 避免實際等待
             
-            success, response, error = model._wait_for_run_completion(thread_id, run_id, max_wait_time=120)
+            success, response, error = model._wait_for_run_completion(thread_id, run_id, max_wait_time=0.1)
             
             assert success is False
             assert response is None
-            assert error == "Request timeout"
+            assert "超時" in error
     
     def test_wait_for_run_completion_failed_status_with_details(self, model):
         """測試等待執行完成 - 失敗狀態帶有詳細資訊"""

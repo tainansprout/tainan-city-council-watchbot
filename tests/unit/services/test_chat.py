@@ -410,8 +410,14 @@ class TestHandleChatMessage:
     
     def test_handle_chat_message_success(self, chat_service, mock_user):
         """測試成功處理聊天訊息"""
+        mock_rag_response = RAGResponse(
+            answer="AI response",
+            sources=[],
+            metadata={}
+        )
+        
         with patch('src.services.chat.preprocess_text', return_value="processed text") as mock_preprocess, \
-             patch.object(chat_service, '_process_conversation', return_value="response text") as mock_process, \
+             patch.object(chat_service, '_process_conversation', return_value=mock_rag_response) as mock_process, \
              patch('src.services.chat.postprocess_text', return_value="final response") as mock_postprocess:
             
             result = chat_service._handle_chat_message(mock_user, "Hello", "line")
@@ -420,7 +426,7 @@ class TestHandleChatMessage:
             assert result.response_type == "text"
             mock_preprocess.assert_called_once_with("Hello", chat_service.config)
             mock_process.assert_called_once_with(mock_user, "processed text", "line")
-            mock_postprocess.assert_called_once_with("response text", chat_service.config)
+            mock_postprocess.assert_called_once_with("AI response", chat_service.config)
     
     def test_handle_chat_message_exception(self, chat_service, mock_user):
         """測試聊天訊息處理異常"""
@@ -472,7 +478,7 @@ class TestProcessConversation:
         with patch.object(chat_service.response_formatter, 'format_rag_response', return_value="formatted response") as mock_format:
             result = chat_service._process_conversation(mock_user, "Hello", "line")
             
-            assert result == "formatted response"
+            assert result == mock_rag_response
             chat_service.model.chat_with_user.assert_called_once_with(
                 user_id=mock_user.user_id,
                 message="Hello",

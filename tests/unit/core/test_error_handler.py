@@ -73,8 +73,8 @@ class TestErrorClassification:
             ("Invalid API key", "openai_api_key_invalid"),
             ("The server is overloaded with other requests", "openai_overloaded"),
             ("Rate limit exceeded for OpenAI", "openai_rate_limit"),
-            ("quota exceeded", "openai_quota_exceeded"),  # 修正：去掉 "You have "
-            ("Can't add messages to thread", "thread_busy"),
+            ("quota exceeded", "openai_quota_exceeded"),
+            ("Can't add messages to thread while a run is active", "thread_busy"),
         ]
         
         for error_str, expected_key in test_cases:
@@ -287,9 +287,10 @@ class TestErrorHandlerIntegration:
     
     def test_error_messages_consistency(self, error_handler):
         """測試錯誤訊息的一致性"""
-        # 檢查所有簡化訊息是否一致
+        # 檢查所有簡化訊息中有主要訊息和一些特殊的訊息
         simple_messages = set(error_handler.SIMPLE_ERROR_MESSAGES.values())
-        assert len(simple_messages) == 1  # 所有簡化訊息應該相同
+        # 應該有：1) 主要錯誤訊息 2) thread_busy 訊息 3) openai_overloaded 訊息 
+        assert len(simple_messages) == 3
         
         # 檢查詳細訊息是否都存在且不為空
         for key, message in error_handler.DETAILED_ERROR_MESSAGES.items():

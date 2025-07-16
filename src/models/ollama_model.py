@@ -3,7 +3,7 @@ import json
 import hashlib
 import time
 import uuid
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from .base import (
     FullLLMInterface, 
     ModelProvider, 
@@ -47,7 +47,7 @@ class OllamaModel(FullLLMInterface):
     - 需要充足的硬體資源 (RAM/GPU)
     """
     
-    def __init__(self, base_url: str = "http://localhost:11434", model_name: str = "llama3.1:8b", embedding_model: str = "nomic-embed-text"):
+    def __init__(self, base_url: str = "http://localhost:11434", model_name: str = "llama3.1:8b", embedding_model: str = "nomic-embed-text", enable_mcp: bool = False):
         self.base_url = base_url.rstrip('/')
         self.model_name = model_name
         self.embedding_model = embedding_model  # 本地 embedding 模型
@@ -66,9 +66,43 @@ class OllamaModel(FullLLMInterface):
         
         # 本地 Whisper 支援
         self.whisper_model = None  # 需要額外設定
+
+        # MCP 支援
+        if enable_mcp:
+            self.enable_mcp = True
+        else:
+            try:
+                from ..core.config import get_value
+                feature_enabled = get_value('features.enable_mcp', False)
+                mcp_enabled = get_value('mcp.enabled', False)
+                self.enable_mcp = feature_enabled and mcp_enabled
+            except Exception as e:
+                logger.warning(f"Error reading MCP config: {e}")
+                self.enable_mcp = False
+        
+        self.mcp_service = None
+        if self.enable_mcp:
+            self._init_mcp_service()
     
     def get_provider(self) -> ModelProvider:
         return ModelProvider.OLLAMA
+
+    def _init_mcp_service(self) -> None:
+        """初始化 MCP 服務"""
+        try:
+            from ..services.mcp_service import get_mcp_service
+            
+            mcp_service = get_mcp_service()
+            if mcp_service.is_enabled:
+                self.mcp_service = mcp_service
+                logger.info("Ollama Model: MCP service initialized successfully")
+            else:
+                logger.warning("Ollama Model: MCP service is not enabled")
+                self.enable_mcp = False
+        except Exception as e:
+            logger.warning(f"Ollama Model: Failed to initialize MCP service: {e}")
+            self.enable_mcp = False
+            self.mcp_service = None
     
     def check_connection(self) -> Tuple[bool, Optional[str]]:
         """檢查 Ollama 連線和模型可用性"""
@@ -110,7 +144,8 @@ class OllamaModel(FullLLMInterface):
                 }
             }
             
-            is_successful, response, error_message = self._request('POST', '/api/chat', body=json_body)
+            import asyncio
+            is_successful, response, error_message = await asyncio.to_thread(self._request, 'POST', '/api/chat', body=json_body)
             
             if not is_successful:
                 return False, None, error_message
@@ -253,7 +288,7 @@ class OllamaModel(FullLLMInterface):
                 return self._fallback_chat_completion(query, context_messages, **kwargs)
             
             # 整合本地知識庫和對話上下文
-            context = "\\n\\n".join([chunk['text'] for chunk in relevant_chunks])
+            context = "\n\n".join([chunk['text'] for chunk in relevant_chunks])
             
             if context_messages:
                 # 有上下文訊息，整合本地知識庫
@@ -535,7 +570,7 @@ class OllamaModel(FullLLMInterface):
         Args:
             user_id: 用戶 ID (如 Line user ID)
             message: 用戶訊息
-            platform: 平台識別 (\'line\', \'discord\', \'telegram\')
+            platform: 平台識別 ('line', 'discord', 'telegram')
             **kwargs: 額外參數
                 - conversation_limit: 對話歷史輪數，預設10（平衡效能和記憶）
                 - use_local_cache: 是否使用本地快取，預設 True
@@ -564,10 +599,13 @@ class OllamaModel(FullLLMInterface):
             # 5. 建立包含對話歷史的上下文
             messages = self._build_local_conversation_context(recent_conversations, message)
             
-            # 6. 使用本地向量 RAG 查詢
-            rag_kwargs = {**kwargs, 'context_messages': messages, 'local_only': True}
-            is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
-            
+            if self.enable_mcp and self.mcp_service:
+                import asyncio
+                is_successful, rag_response, error = await self.chat_completion_with_mcp(messages, **kwargs)
+            else:
+                rag_kwargs = {**kwargs, 'context_messages': messages, 'local_only': True}
+                is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
+
             if not is_successful:
                 return False, None, error
             
@@ -595,7 +633,134 @@ class OllamaModel(FullLLMInterface):
         except Exception as e:
             logger.error(f"Error in chat_with_user for user {user_id}: {e}")
             return False, None, str(e)
-    
+
+    async def chat_completion_with_mcp(self, messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """
+        支援 MCP function calling 的對話完成 (基於提示工程)
+        """
+        if not self.enable_mcp or not self.mcp_service:
+            is_success, response, error = self.chat_completion(messages, **kwargs)
+            if not is_success:
+                return False, None, error
+            return True, RAGResponse(answer=response.content, sources=[], metadata=response.metadata), None
+
+        try:
+            # 1. 建立包含工具定義的系統提示
+            system_prompt = self._build_mcp_system_prompt()
+            
+            # 替換或插入系統提示
+            final_messages = [msg for msg in messages if msg.role != 'system']
+            final_messages.insert(0, ChatMessage(role="system", content=system_prompt))
+
+            # 2. 第一次呼叫模型，判斷是否需要工具
+            is_successful, response, error = self.chat_completion(final_messages, **kwargs)
+            if not is_successful:
+                return False, None, error
+
+            # 3. 解析回應，檢查是否有工具調用
+            tool_call_request = self._parse_for_tool_call(response.content)
+
+            if not tool_call_request:
+                # 沒有工具調用，直接返回結果
+                return True, RAGResponse(answer=response.content, sources=[], metadata=response.metadata), None
+
+            # 4. 執行工具調用
+            tool_name = tool_call_request['tool_name']
+            arguments = tool_call_request['arguments']
+            
+            logger.info(f"🔧 Ollama Model: Executing tool '{tool_name}' with args: {arguments}")
+            tool_result = await self.mcp_service.handle_function_call(tool_name, arguments)
+            
+            # 5. 將工具結果加到對話歷史中
+            final_messages.append(ChatMessage(role="assistant", content=response.content)) # 加入模型的工具請求
+            final_messages.append(ChatMessage(
+                role="function",
+                name=tool_name,
+                content=json.dumps(tool_result, ensure_ascii=False)
+            ))
+
+            # 6. 再次呼叫模型，生成最終回覆
+            logger.info("🔄 Ollama Model: Calling model again with tool result.")
+            is_successful, final_response, error = self.chat_completion(final_messages, **kwargs)
+            if not is_successful:
+                return False, None, error
+
+            # 7. 組合最終的 RAGResponse
+            sources = tool_result.get('metadata', {}).get('sources', [])
+            final_rag_response = RAGResponse(
+                answer=final_response.content,
+                sources=sources,
+                metadata={
+                    **final_response.metadata,
+                    'mcp_enabled': True,
+                    'tool_calls': [tool_call_request],
+                    'tool_results': [tool_result]
+                }
+            )
+            return True, final_rag_response, None
+
+        except Exception as e:
+            logger.error(f"Error in chat_completion_with_mcp for Ollama: {e}")
+            return False, None, str(e)
+
+    def _parse_for_tool_call(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """從模型回應中解析工具調用請求"""
+        try:
+            # 移除程式碼區塊標記
+            response_text = response_text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            
+            data = json.loads(response_text.strip())
+            if isinstance(data, dict) and 'tool_name' in data and 'arguments' in data:
+                logger.info(f"✅ Parsed tool call request: {data['tool_name']}")
+                return data
+            return None
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def _build_mcp_system_prompt(self) -> str:
+        """建立包含 MCP 工具定義和指令的系統提示"""
+        base_prompt = self._build_local_system_prompt()
+        
+        if not self.mcp_service:
+            return base_prompt
+
+        try:
+            tools_description = []
+            for func_str in self.mcp_service.get_function_schemas_for_anthropic().split('\n'):                tools_description.append(f"- {func_str}")
+
+            if not tools_description:
+                return base_prompt
+
+            mcp_prompt = f"""{base_prompt}
+
+## 外部工具調用 (MCP)
+
+除了你的內建能力，你還可以調用以下外部工具來獲取即時資訊或執行特定任務。
+
+### 可用工具列表:
+{chr(10).join(tools_description)}
+
+### 調用指令:
+當你判斷需要使用工具時，你的回覆**必須且只能**是一個 JSON 物件，格式如下，不包含任何其他文字或解釋:
+```json
+{{
+  "tool_name": "工具名稱",
+  "arguments": {{
+    "參數1": "值1",
+    "參數2": "值2"
+  }}
+}}
+```
+系統會執行此工具並將結果回傳給你，然後你再根據結果生成最終的自然語言回覆."""
+            return mcp_prompt
+        except Exception as e:
+            logger.error(f"Failed to build MCP system prompt for Ollama: {e}")
+            return base_prompt
+
     def clear_user_history(self, user_id: str, platform: str = 'line') -> Tuple[bool, Optional[str]]:
         """清除用戶對話歷史（本地快取 + 資料庫）"""
         try:

@@ -285,15 +285,15 @@ class MCPService:
         try:
             error_messages = self.config_manager.get_error_messages(self.config_name)
             error_lower = error.lower()
-            
-            if "connection" in error_lower or "network" in error_lower:
-                return error_messages.get("connection_error", "連線錯誤，請稍後再試")
-            elif "timeout" in error_lower:
+
+            if "timeout" in error_lower:
                 return error_messages.get("timeout_error", "請求超時，請稍後再試")
+            elif "connection" in error_lower or "network" in error_lower:
+                return error_messages.get("connection_error", "連線錯誤，請稍後再試")
             elif "no results" in error_lower or "empty" in error_lower:
                 return error_messages.get("no_results", "查無相關結果")
             else:
-                return "處理請求時發生錯誤，請稍後再試"
+                return error_messages.get("unknown_error", "處理請求時發生錯誤，請稍後再試")
         except Exception:
             return "處理請求時發生錯誤，請稍後再試"
     

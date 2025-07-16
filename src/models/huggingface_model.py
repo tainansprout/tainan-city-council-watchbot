@@ -53,6 +53,7 @@ class HuggingFaceModel(FullLLMInterface):
                  model_name: str = "mistralai/Mistral-7B-Instruct-v0.1",
                  api_type: str = "inference_api",
                  base_url: str = "https://api-inference.huggingface.co",
+                 enable_mcp: bool = False,
                  **kwargs):
         """
         初始化 Hugging Face 模型
@@ -104,12 +105,46 @@ class HuggingFaceModel(FullLLMInterface):
         self.local_threads = {}  # 本地線程管理
         self.knowledge_store = {}  # 本地知識庫
         self.embeddings_cache = {}  # 嵌入向量緩存
+
+        # MCP 支援
+        if enable_mcp:
+            self.enable_mcp = True
+        else:
+            try:
+                from ..core.config import get_value
+                feature_enabled = get_value('features.enable_mcp', False)
+                mcp_enabled = get_value('mcp.enabled', False)
+                self.enable_mcp = feature_enabled and mcp_enabled
+            except Exception as e:
+                logger.warning(f"Error reading MCP config: {e}")
+                self.enable_mcp = False
+        
+        self.mcp_service = None
+        if self.enable_mcp:
+            self._init_mcp_service()
         
         logger.info(f"HuggingFace model initialized: {self.model_name}")
 
     def get_provider(self) -> ModelProvider:
-        """返回 Hugging Face 提供商標識"""
+        """返回 Hugging Face 提供商標識""" 
         return ModelProvider.HUGGINGFACE
+
+    def _init_mcp_service(self) -> None:
+        """初始化 MCP 服務"""
+        try:
+            from ..services.mcp_service import get_mcp_service
+            
+            mcp_service = get_mcp_service()
+            if mcp_service.is_enabled:
+                self.mcp_service = mcp_service
+                logger.info("HuggingFace Model: MCP service initialized successfully")
+            else:
+                logger.warning("HuggingFace Model: MCP service is not enabled")
+                self.enable_mcp = False
+        except Exception as e:
+            logger.warning(f"HuggingFace Model: Failed to initialize MCP service: {e}")
+            self.enable_mcp = False
+            self.mcp_service = None
 
     def check_connection(self) -> Tuple[bool, Optional[str]]:
         """
@@ -178,7 +213,8 @@ class HuggingFaceModel(FullLLMInterface):
             }
             
             # 發送請求
-            response = self._make_request(self.model_name, payload)
+            import asyncio
+            response = await asyncio.to_thread(self._make_request, self.model_name, payload)
             
             if not response:
                 return False, None, "Failed to get response from Hugging Face API"
@@ -401,26 +437,29 @@ class HuggingFaceModel(FullLLMInterface):
             # 構建完整的對話上下文
             context_messages = self._build_conversation_context(conversation_history, message)
             
-            # 調用聊天完成
-            is_successful, chat_response, error = self.chat_completion(context_messages, **kwargs)
-            
+            if self.enable_mcp and self.mcp_service:
+                is_successful, rag_response, error = await self.chat_completion_with_mcp(context_messages, **kwargs)
+            else:
+                is_successful, chat_response, error = await self.chat_completion(context_messages, **kwargs)
+                if is_successful:
+                    rag_response = RAGResponse(
+                        answer=chat_response.content,
+                        sources=[],
+                        metadata=chat_response.metadata
+                    )
+
             if not is_successful:
                 return False, None, error
             
             # 轉換為 RAGResponse 格式
-            rag_response = RAGResponse(
-                answer=chat_response.content,
-                sources=[],  # 無 RAG 來源
-                metadata={
-                    "user_id": user_id,
-                    "platform": platform,
-                    "model_provider": "huggingface",
-                    "model_name": self.model_name,
-                    "rag_enabled": False,
-                    "conversation_enabled": True,
-                    **chat_response.metadata
-                }
-            )
+            rag_response.metadata.update({
+                "user_id": user_id,
+                "platform": platform,
+                "model_provider": "huggingface",
+                "model_name": self.model_name,
+                "rag_enabled": False,
+                "conversation_enabled": True
+            })
             
             # 保存對話歷史
             self._save_conversation(user_id, platform, message, rag_response.answer)
@@ -432,6 +471,133 @@ class HuggingFaceModel(FullLLMInterface):
             error_msg = f"HuggingFace chat_with_user failed: {str(e)}"
             logger.error(error_msg)
             return False, None, error_msg
+
+    async def chat_completion_with_mcp(self, messages: List[ChatMessage], **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
+        """
+        支援 MCP function calling 的對話完成 (基於提示工程)
+        """
+        if not self.enable_mcp or not self.mcp_service:
+            is_success, response, error = self.chat_completion(messages, **kwargs)
+            if not is_success:
+                return False, None, error
+            return True, RAGResponse(answer=response.content, sources=[], metadata=response.metadata), None
+
+        try:
+            # 1. 建立包含工具定義的系統提示
+            system_prompt = self._build_mcp_system_prompt()
+            
+            # 替換或插入系統提示
+            final_messages = [msg for msg in messages if msg.role != 'system']
+            final_messages.insert(0, ChatMessage(role="system", content=system_prompt))
+
+            # 2. 第一次呼叫模型，判斷是否需要工具
+            is_successful, response, error = await self.chat_completion(final_messages, **kwargs)
+            if not is_successful:
+                return False, None, error
+
+            # 3. 解析回應，檢查是否有工具調用
+            tool_call_request = self._parse_for_tool_call(response.content)
+
+            if not tool_call_request:
+                # 沒有工具調用，直接返回結果
+                return True, RAGResponse(answer=response.content, sources=[], metadata=response.metadata), None
+
+            # 4. 執行工具調用
+            tool_name = tool_call_request['tool_name']
+            arguments = tool_call_request['arguments']
+            
+            logger.info(f"🔧 HuggingFace Model: Executing tool '{tool_name}' with args: {arguments}")
+            tool_result = await self.mcp_service.handle_function_call(tool_name, arguments)
+            
+            # 5. 將工具結果加到對話歷史中
+            final_messages.append(ChatMessage(role="assistant", content=response.content)) # 加入模型的工具請求
+            final_messages.append(ChatMessage(
+                role="function",
+                name=tool_name,
+                content=json.dumps(tool_result, ensure_ascii=False)
+            ))
+
+            # 6. 再次呼叫模型，生成最終回覆
+            logger.info("🔄 HuggingFace Model: Calling model again with tool result.")
+            is_successful, final_response, error = await self.chat_completion(final_messages, **kwargs)
+            if not is_successful:
+                return False, None, error
+
+            # 7. 組合最終的 RAGResponse
+            sources = tool_result.get('metadata', {}).get('sources', [])
+            final_rag_response = RAGResponse(
+                answer=final_response.content,
+                sources=sources,
+                metadata={
+                    **final_response.metadata,
+                    'mcp_enabled': True,
+                    'tool_calls': [tool_call_request],
+                    'tool_results': [tool_result]
+                }
+            )
+            return True, final_rag_response, None
+
+        except Exception as e:
+            logger.error(f"Error in chat_completion_with_mcp for HuggingFace: {e}")
+            return False, None, str(e)
+
+    def _parse_for_tool_call(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """從模型回應中解析工具調用請求"""
+        try:
+            # 移除程式碼區塊標記
+            response_text = response_text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            
+            data = json.loads(response_text.strip())
+            if isinstance(data, dict) and 'tool_name' in data and 'arguments' in data:
+                logger.info(f"✅ Parsed tool call request: {data['tool_name']}")
+                return data
+            return None
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def _build_mcp_system_prompt(self) -> str:
+        """建立包含 MCP 工具定義和指令的系統提示"""
+        base_prompt = self._build_system_prompt()
+        
+        if not self.mcp_service:
+            return base_prompt
+
+        try:
+            tools_description = []
+            for func_str in self.mcp_service.get_function_schemas_for_anthropic().split('\n'):                tools_description.append(f"- {func_str}")
+
+            if not tools_description:
+                return base_prompt
+
+            mcp_prompt = f"""{base_prompt}
+
+## 外部工具調用 (MCP)
+
+除了你的內建能力，你還可以調用以下外部工具來獲取即時資訊或執行特定任務。
+
+### 可用工具列表:
+{chr(10).join(tools_description)}
+
+### 調用指令:
+當你判斷需要使用工具時，你的回覆**必須且只能**是一個 JSON 物件，格式如下，不包含任何其他文字或解釋:
+```json
+{{
+  "tool_name": "工具名稱",
+  "arguments": {{
+    "參數1": "值1",
+    "參數2": "值2"
+  }}
+}}
+```
+系統會執行此工具並將結果回傳給你，然後你再根據結果生成最終的自然語言回覆."""
+            return mcp_prompt
+        except Exception as e:
+            logger.error(f"Failed to build MCP system prompt for HuggingFace: {e}")
+            return base_prompt
 
     def clear_user_history(self, user_id: str, platform: str = 'line') -> Tuple[bool, Optional[str]]:
         """
@@ -513,7 +679,9 @@ class HuggingFaceModel(FullLLMInterface):
         return messages
 
     def _build_system_prompt(self) -> str:
-        """構建系統提示詞"""
+        """
+        構建系統提示詞
+        """
         return """你是一個專業的 AI 助理，基於 Hugging Face 開源模型技術。請遵循以下準則：
 
 1. 提供準確、有用的回應
@@ -702,7 +870,9 @@ class HuggingFaceModel(FullLLMInterface):
     # ==================== 輔助方法 ====================
     
     def _read_file_content(self, file_path: str) -> Optional[str]:
-        """讀取文件內容"""
+        """
+        讀取文件內容
+        """
         try:
             import os
             from pathlib import Path
@@ -776,7 +946,9 @@ class HuggingFaceModel(FullLLMInterface):
         return chunks
 
     def _get_embedding(self, text: str) -> Optional[List[float]]:
-        """生成文本的嵌入向量"""
+        """
+        生成文本的嵌入向量
+        """
         try:
             # 檢查緩存
             text_hash = str(hash(text))
@@ -829,7 +1001,9 @@ class HuggingFaceModel(FullLLMInterface):
             return []
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """計算餘弦相似度"""
+        """
+        計算餘弦相似度
+        """
         try:
             import math
             
@@ -867,7 +1041,9 @@ class HuggingFaceModel(FullLLMInterface):
         return messages
 
     def _build_rag_system_prompt(self, relevant_chunks: List[Dict[str, Any]]) -> str:
-        """構建 RAG 系統提示"""
+        """
+        構建 RAG 系統提示
+        """
         context_parts = []
         for i, chunk in enumerate(relevant_chunks, 1):
             filename = chunk['filename']
@@ -921,10 +1097,12 @@ class HuggingFaceModel(FullLLMInterface):
         return text, sources
 
     def _fallback_chat_completion(self, query: str, context_messages: List[Dict[str, Any]]) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
-        """備用聊天完成（無 RAG）"""
+        """
+        備用聊天完成（無 RAG）
+        """
         try:
             messages = self._build_conversation_context(context_messages, query)
-            is_successful, chat_response, error = self.chat_completion(messages)
+            is_successful, chat_response, error = await self.chat_completion(messages)
             
             if not is_successful:
                 return False, None, error
@@ -993,7 +1171,9 @@ class HuggingFaceModel(FullLLMInterface):
             return False, str(e)
 
     def run_assistant(self, thread_id: str, **kwargs) -> Tuple[bool, Optional[RAGResponse], Optional[str]]:
-        """執行助理"""
+        """
+        執行助理
+        """
         try:
             if thread_id not in self.local_threads:
                 return False, None, f"Thread {thread_id} not found"
@@ -1016,7 +1196,9 @@ class HuggingFaceModel(FullLLMInterface):
     # ==================== AudioInterface ====================
     
     def transcribe_audio(self, audio_file_path: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
-        """語音轉文字"""
+        """
+        語音轉文字
+        """
         try:
             import os
             
@@ -1063,7 +1245,9 @@ class HuggingFaceModel(FullLLMInterface):
     # ==================== ImageInterface ====================
     
     def generate_image(self, prompt: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
-        """圖片生成"""
+        """
+        圖片生成
+        """
         try:
             # 準備請求參數
             payload = {

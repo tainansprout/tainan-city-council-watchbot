@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, mock_open
 import time
 import base64
 
@@ -48,6 +48,233 @@ class TestGeminiModel:
     
     def test_check_connection_failure(self, gemini_model):
         """測試連線檢查失敗"""
+        with patch.object(gemini_model, 'chat_completion', return_value=(False, None, "Connection failed")):
+            is_successful, error = gemini_model.check_connection()
+            assert is_successful == False
+            assert error == "Connection failed"
+    
+    def test_build_system_instruction(self, gemini_model):
+        """測試系統指令建立"""
+        instruction = gemini_model._build_system_instruction()
+        
+        assert isinstance(instruction, str)
+        assert len(instruction) > 0
+        assert "AI" in instruction or "assistant" in instruction
+    
+    def test_conversation_context_building(self, gemini_model):
+        """測試對話上下文建立"""
+        recent_conversations = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there!"}
+        ]
+        
+        context = gemini_model._build_long_conversation_context(recent_conversations, "How are you?")
+        
+        assert len(context) == 4  # 1 system + 2 from history + 1 current
+        assert context[0].role == "system"
+        assert context[1].role == "user"
+        assert context[1].content == "Hello"
+        assert context[3].content == "How are you?"
+    
+    def test_upload_multimodal_file(self, gemini_model):
+        """測試上傳多模態文件"""
+        success, file_info, error = gemini_model._upload_multimodal_file("test.jpg", "test-corpus")
+        
+        # 根據實際實作，這個功能還未完全實作
+        assert success is False
+        assert file_info is None
+        assert "多模態檔案上傳功能尚未完整實作" in error
+    
+    def test_chunk_text_basic(self, gemini_model):
+        """測試文本分塊功能"""
+        text = "This is a test text. " * 100  # 長文本
+        
+        chunks = gemini_model._chunk_text(text, chunk_size=100, overlap=10)
+        
+        assert len(chunks) > 1
+        assert all(isinstance(chunk, dict) for chunk in chunks)
+        assert all('text' in chunk for chunk in chunks)
+    
+    def test_chat_completion_success(self, gemini_model):
+        """測試成功的聊天完成"""
+        messages = [ChatMessage(role="user", content="Hello")]
+        
+        with patch.object(gemini_model, '_request', return_value=(True, {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "Hello, this is a test response."}]
+                    },
+                    "finishReason": "STOP",
+                    "safetyRatings": []
+                }
+            ]
+        }, None)):
+            success, response, error = gemini_model.chat_completion(messages)
+            
+            assert success is True
+            assert response is not None
+            assert response.content == "Hello, this is a test response."
+            assert error is None
+    
+    def test_chat_completion_safety_blocked(self, gemini_model):
+        """測試安全檢查被阻擋的回應"""
+        messages = [ChatMessage(role="user", content="Dangerous content")]
+        
+        with patch.object(gemini_model, '_request', return_value=(True, {
+            "candidates": [
+                {
+                    "content": {"parts": [{"text": "Blocked content"}]},
+                    "finishReason": "SAFETY",
+                    "safetyRatings": [
+                        {"category": "HARM_CATEGORY_HARASSMENT", "probability": "HIGH"}
+                    ]
+                }
+            ]
+        }, None)):
+            success, response, error = gemini_model.chat_completion(messages)
+            
+            assert success is True
+            assert response is not None
+            assert response.content == "Blocked content"
+    
+    def test_chat_completion_no_candidates(self, gemini_model):
+        """測試無候選回應"""
+        messages = [ChatMessage(role="user", content="Test")]
+        
+        with patch.object(gemini_model, '_request', return_value=(True, {"candidates": []}, None)):
+            success, response, error = gemini_model.chat_completion(messages)
+            
+            assert success is False
+            assert response is None
+            assert "No response generated" in error
+    
+    def test_request_success(self, gemini_model):
+        """測試成功的 API 請求"""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True}
+        
+        with patch('requests.post', return_value=mock_response):
+            success, result, error = gemini_model._request(
+                "POST",
+                "generateContent",
+                {"contents": [{"parts": [{"text": "Hello"}]}]}
+            )
+            
+            assert success is True
+            assert result == {"success": True}
+            assert error is None
+    
+    def test_request_error(self, gemini_model):
+        """測試失敗的 API 請求"""
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.json.return_value = {"error": {"message": "Bad request"}}
+        
+        with patch('requests.post', return_value=mock_response):
+            success, result, error = gemini_model._request(
+                "POST",
+                "generateContent",
+                {"contents": [{"parts": [{"text": "Hello"}]}]}
+            )
+            
+            assert success is False
+            assert result is None
+            assert "Bad request" in error
+    
+    def test_build_system_prompt_with_context(self, gemini_model):
+        """測試建立帶上下文的系統提示"""
+        system_prompt = gemini_model._build_system_prompt_with_context()
+        
+        assert isinstance(system_prompt, str)
+        assert len(system_prompt) > 0
+        assert "AI" in system_prompt or "assistant" in system_prompt
+    
+    def test_get_provider(self, gemini_model):
+        """測試取得模型提供商"""
+        provider = gemini_model.get_provider()
+        
+        assert provider == ModelProvider.GEMINI
+        assert provider.value == "gemini"
+    
+    def test_get_file_references(self, gemini_model):
+        """測試取得文件參考"""
+        file_refs = gemini_model.get_file_references()
+        
+        assert isinstance(file_refs, dict)
+        # 測試返回的字典結構
+    
+    def test_transcribe_audio(self, gemini_model):
+        """測試音訊轉錄失敗情況"""
+        # Test file not found error
+        success, transcription, error = gemini_model.transcribe_audio("nonexistent.wav")
+        
+        assert success is False
+        assert transcription is None
+        assert "Audio file not found" in error
+    
+    def test_generate_image(self, gemini_model):
+        """測試圖片生成"""
+        success, image_url, error = gemini_model.generate_image("A beautiful sunset")
+        
+        # Gemini 不支援圖片生成
+        assert success is False
+        assert image_url is None
+        assert "不支援圖片生成" in error
+    
+    def test_create_corpus(self, gemini_model):
+        """測試語料庫創建"""
+        with patch.object(gemini_model, '_request', return_value=(True, {
+            "name": "corpora/test-corpus",
+            "displayName": "Test Corpus",
+            "createTime": "2023-01-01T00:00:00Z",
+            "updateTime": "2023-01-01T00:00:00Z"
+        }, None)):
+            success, corpus_info, error = gemini_model._create_corpus("test-corpus")
+            
+            assert success is True
+            assert corpus_info is not None
+            assert corpus_info["name"] == "corpora/test-corpus"
+            assert error is None
+    
+    def test_supported_media_types_attribute(self, gemini_model):
+        """測試支持的媒體類型屬性"""
+        supported_types = gemini_model.supported_media_types
+        
+        assert "image" in supported_types
+        assert "video" in supported_types
+        assert "audio" in supported_types
+        assert "text" in supported_types
+    
+    def test_error_handling_network_error(self, gemini_model):
+        """測試網路錯誤處理"""
+        import requests
+        
+        # Test chat_completion with network error - this will go through retry logic
+        with patch('requests.post', side_effect=requests.exceptions.RequestException("Network error")):
+            messages = [ChatMessage(role="user", content="Hello")]
+            success, response, error = gemini_model.chat_completion(messages)
+            
+            assert success is False
+            assert response is None
+            assert "Network error" in error
+    
+    def test_cache_functionality(self, gemini_model):
+        """測試緩存功能"""
+        # 測試語料庫快取
+        assert isinstance(gemini_model.corpora, BoundedCache)
+        assert gemini_model.corpora.max_size > 0
+        
+        # 測試新增和檢索
+        test_corpus = {"name": "test", "data": "test_data"}
+        gemini_model.corpora.set("test-key", test_corpus)  # 使用 set 方法
+        
+        retrieved = gemini_model.corpora.get("test-key")
+        assert retrieved == test_corpus
+        
+        # 測試不存在的鍵
+        assert gemini_model.corpora.get("non-existent") is None
         with patch.object(gemini_model, 'chat_completion', return_value=(False, None, 'API Error')):
             is_successful, error = gemini_model.check_connection()
             assert is_successful == False

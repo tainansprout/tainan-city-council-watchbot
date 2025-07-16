@@ -212,6 +212,13 @@ class MCPClient:
             # 提取結果內容
             if 'result' in response:
                 result_data = response['result']
+                if result_data is None:
+                    return {
+                        "success": True,
+                        "data": None,
+                        "content_type": "raw",
+                        "metadata": {}
+                    }
                 logger.debug(f"[{request_id}] 🔍 Processing result data: {json.dumps(result_data, ensure_ascii=False, indent=2)}")
                 
                 # 檢查結果格式

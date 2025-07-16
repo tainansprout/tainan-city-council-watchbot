@@ -211,6 +211,8 @@ python -m pytest tests/integration/
 - `POST /webhooks/line`: LINE 平台 webhook
 - `POST /webhooks/discord`: Discord 平台 webhook
 - `POST /webhooks/telegram`: Telegram 平台 webhook
+- `POST /webhooks/instagram`: Instagram 平台 webhook
+- `POST /webhooks/slack`: Slack 平台 webhook
 
 ### Web 介面
 - `GET /login`: 登入頁面

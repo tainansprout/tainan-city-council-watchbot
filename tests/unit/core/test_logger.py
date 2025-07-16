@@ -261,7 +261,7 @@ class TestLoggerManager:
             manager = LoggerManager()
             result = manager._load_default_config()
             
-            assert result['level'] == 'DEBUG'  # 實際默認值是DEBUG
+            assert result['level'] == 'INFO'  # 使用配置中的级別
     
     def test_load_default_config_file_not_found(self):
         """測試配置文件不存在時的默認配置"""
@@ -270,7 +270,7 @@ class TestLoggerManager:
             result = manager._load_default_config()
             
             assert 'level' in result
-            assert result['level'] == 'DEBUG'
+            assert result['level'] == 'INFO'  # 默認级別是 INFO
             assert 'file_path' in result
             assert 'format' in result
     

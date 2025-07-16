@@ -24,7 +24,7 @@ class TestSmartPollingStrategy:
         """測試初始化"""
         assert polling_strategy.wait_sequence == [5, 3, 2, 1]
         assert polling_strategy.final_interval == 1
-        assert polling_strategy.max_wait_time == 90
+        assert polling_strategy.max_wait_time == 120
     
     def test_get_base_wait_time_sequence(self, polling_strategy):
         """測試基礎等待時間序列"""
@@ -58,13 +58,13 @@ class TestSmartPollingStrategy:
     
     def test_get_max_wait_time(self, polling_strategy):
         """測試最大等待時間"""
-        assert polling_strategy.get_max_wait_time() == 90
+        assert polling_strategy.get_max_wait_time() == 120
     
     def test_should_continue_polling(self, polling_strategy):
         """測試是否應該繼續輪詢"""
         assert polling_strategy.should_continue_polling(50) is True
-        assert polling_strategy.should_continue_polling(90) is False
-        assert polling_strategy.should_continue_polling(100) is False
+        assert polling_strategy.should_continue_polling(120) is False
+        assert polling_strategy.should_continue_polling(150) is False
     
     def test_log_polling_attempt(self, polling_strategy):
         """測試記錄輪詢嘗試"""
@@ -408,7 +408,7 @@ class TestOpenAIPollingStrategy:
     
     def test_openai_strategy_initialization(self, openai_strategy):
         """測試 OpenAI 策略初始化"""
-        assert openai_strategy.max_wait_time == 90
+        assert openai_strategy.max_wait_time == 180
         assert openai_strategy.status_multipliers['queued'] == 1.5
         assert openai_strategy.status_multipliers['in_progress'] == 1.0
         assert openai_strategy.status_multipliers['requires_action'] == 0.3
@@ -443,7 +443,7 @@ class TestOpenAIPollingStrategy:
         """測試 OpenAI 策略繼承了基礎功能"""
         # 測試基礎方法仍然可用
         assert openai_strategy.should_continue_polling(50) is True
-        assert openai_strategy.should_continue_polling(100) is False
+        assert openai_strategy.should_continue_polling(180) is False
         
         # 測試基礎等待序列
         assert openai_strategy._get_base_wait_time(0) == 5
