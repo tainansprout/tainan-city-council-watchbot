@@ -1,7 +1,7 @@
 
 import pytest
 import json
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, Mock, patch
 
 from src.models.gemini_model import GeminiModel
 from src.models.ollama_model import OllamaModel
@@ -44,7 +44,7 @@ def mock_mcp_service():
     }]
     
     # Mock the actual tool call handling
-    async def mock_handle_call(tool_name, arguments):
+    def mock_handle_call(tool_name, arguments):
         if tool_name == 'search_data':
             return {
                 "success": True,
@@ -55,7 +55,18 @@ def mock_mcp_service():
             }
         return {"success": False, "error": "Tool not found"}
 
-    service.handle_function_call = AsyncMock(side_effect=mock_handle_call)
+    async def mock_handle_call_async(tool_name, arguments):
+        return mock_handle_call(tool_name, arguments)
+
+    # Create a simple mock service that directly returns the result
+    service.handle_function_call = AsyncMock(side_effect=mock_handle_call_async)
+    service.handle_function_call_sync = Mock(side_effect=mock_handle_call)
+    service.handle_function_call_async = AsyncMock(side_effect=mock_handle_call_async)
+    
+    # Make sure the service is properly configured
+    service.config_manager = MagicMock()
+    service.mcp_client = MagicMock()
+    
     return service
 
 # --- Gemini MCP Test ---
@@ -71,18 +82,30 @@ async def test_gemini_model_mcp_flow(mocker, mock_mcp_service):
     mock_request = mocker.patch.object(gemini, '_request')
 
     # First call: Model returns a tool call request
-    mock_request.return_value = (True, {
-        "candidates": [{
-            "content": {
-                "parts": [{
-                    "functionCall": {
-                        "name": "search_data",
-                        "args": {"query": "天氣"}
-                    }
-                }]
-            }
-        }]
-    }, None)
+    # Second call: Model returns the final response 
+    mock_request.side_effect = [
+        (True, {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "functionCall": {
+                            "name": "search_data",
+                            "args": {"query": "天氣"}
+                        }
+                    }]
+                }
+            }]
+        }, None),
+        (True, {
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "text": "這是關於天氣的搜尋結果。"
+                    }]
+                }
+            }]
+        }, None)
+    ]
 
     # 2. Execute
     messages = [ChatMessage(role="user", content="今天天氣如何？")]
@@ -92,23 +115,28 @@ async def test_gemini_model_mcp_flow(mocker, mock_mcp_service):
     assert is_success
     assert response is not None
     assert "搜尋結果" in response.content
-    assert "test_source.txt" in [src['filename'] for src in response.sources]
+    assert "test_source.txt" in [src['filename'] for src in response.metadata.get('sources', [])]
     
-    # Verify that mcp_service.handle_function_call was called
-    mock_mcp_service.handle_function_call.assert_awaited_once_with("search_data", {"query": "天氣"})
+    # Verify that mcp_service.handle_function_call_sync was called
+    mock_mcp_service.handle_function_call_sync.assert_called_once_with("search_data", {"query": "天氣"})
 
 # --- Ollama MCP Test ---
 
 @pytest.mark.asyncio
 async def test_ollama_model_mcp_flow(mocker, mock_mcp_service):
     """Test the full prompt-based MCP tool-calling flow for OllamaModel."""
-    # 1. Setup
+    # 1. Setup - Create the model first, then replace the mcp_service with our mock
     ollama = OllamaModel(enable_mcp=True)
+    # Force the service to be our mock
     ollama.mcp_service = mock_mcp_service
+    
+    # Ensure the service is set to the mock
+    assert ollama.mcp_service is mock_mcp_service
 
-    # Mock the internal chat_completion method
-    mock_chat = mocker.patch.object(ollama, 'chat_completion', new_callable=AsyncMock)
-
+    # IMPORTANT: chat_completion is synchronous, not async!
+    # So we need to use regular Mock, not AsyncMock
+    mock_chat = mocker.patch.object(ollama, 'chat_completion')
+    
     # First call: Model returns a JSON for tool call
     mock_chat.side_effect = [
         (True, ChatResponse(content=json.dumps({
@@ -116,7 +144,7 @@ async def test_ollama_model_mcp_flow(mocker, mock_mcp_service):
             "arguments": {"query": "今日新聞"}
         })), None),
         # Second call: Model returns the final answer
-        (True, ChatResponse(content="根據搜尋結果，今日的頭條新聞是..."), None)
+        (True, ChatResponse(content="根據搜尋結果，今日的頭條新聞是...", metadata={}), None)
     ]
 
     # 2. Execute
@@ -124,13 +152,21 @@ async def test_ollama_model_mcp_flow(mocker, mock_mcp_service):
     is_success, rag_response, error = await ollama.chat_completion_with_mcp(messages)
 
     # 3. Assert
-    assert is_success
+    if not is_success:
+        print(f"DEBUG: Test failed with error: {error}")
+        # If it failed, let's check if the mock was called
+        if mock_mcp_service.handle_function_call_sync.called:
+            print("DEBUG: Mock was called, but test still failed")
+        else:
+            print("DEBUG: Mock was NOT called")
+        
+    assert is_success, f"Test failed with error: {error}"
     assert rag_response is not None
     assert "頭條新聞" in rag_response.answer
     assert "test_source.txt" in [src['filename'] for src in rag_response.sources]
     
-    # Verify that mcp_service.handle_function_call was called
-    mock_mcp_service.handle_function_call.assert_awaited_once_with("search_data", {"query": "今日新聞"})
+    # Verify that mcp_service.handle_function_call_sync was called (not async version)
+    mock_mcp_service.handle_function_call_sync.assert_called_once_with("search_data", {"query": "今日新聞"})
     assert mock_chat.call_count == 2
 
 # --- HuggingFace MCP Test ---
@@ -138,12 +174,14 @@ async def test_ollama_model_mcp_flow(mocker, mock_mcp_service):
 @pytest.mark.asyncio
 async def test_huggingface_model_mcp_flow(mocker, mock_mcp_service):
     """Test the full prompt-based MCP tool-calling flow for HuggingFaceModel."""
-    # 1. Setup
+    # 1. Setup - Create the model first, then replace the mcp_service with our mock
     huggingface = HuggingFaceModel(api_key="fake_key", enable_mcp=True)
+    # Force the service to be our mock
     huggingface.mcp_service = mock_mcp_service
 
-    # Mock the internal chat_completion method
-    mock_chat = mocker.patch.object(huggingface, 'chat_completion', new_callable=AsyncMock)
+    # IMPORTANT: chat_completion is synchronous, not async!
+    # So we need to use regular Mock, not AsyncMock
+    mock_chat = mocker.patch.object(huggingface, 'chat_completion')
 
     # First call: Model returns a JSON for tool call
     mock_chat.side_effect = [
@@ -152,7 +190,7 @@ async def test_huggingface_model_mcp_flow(mocker, mock_mcp_service):
             "arguments": {"query": "推薦餐廳"}
         })), None),
         # Second call: Model returns the final answer
-        (True, ChatResponse(content="為您推薦以下餐廳..."), None)
+        (True, ChatResponse(content="為您推薦以下餐廳...", metadata={}), None)
     ]
 
     # 2. Execute
@@ -165,6 +203,6 @@ async def test_huggingface_model_mcp_flow(mocker, mock_mcp_service):
     assert "為您推薦" in rag_response.answer
     assert "test_source.txt" in [src['filename'] for src in rag_response.sources]
     
-    # Verify that mcp_service.handle_function_call was called
-    mock_mcp_service.handle_function_call.assert_awaited_once_with("search_data", {"query": "推薦餐廳"})
+    # Verify that mcp_service.handle_function_call_sync was called (not async version)
+    mock_mcp_service.handle_function_call_sync.assert_called_once_with("search_data", {"query": "推薦餐廳"})
     assert mock_chat.call_count == 2

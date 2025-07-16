@@ -707,6 +707,36 @@ class OpenAIModel(FullLLMInterface):
                 replacement_text = f"[{ref_num}]"
                 text = text.replace(original_text, replacement_text)
             
+            # 檢查是否有 "Unknown" 來源，如果有則重新撈取檔案清單並重新處理
+            unknown_sources = [s for s in sources if s['filename'] == 'Unknown']
+            if unknown_sources:
+                logger.info(f"發現 {len(unknown_sources)} 個 Unknown 來源，重新撈取檔案清單")
+                
+                # 重新撈取最新的檔案清單
+                updated_file_dict = self.get_file_references()
+                
+                # 重新處理 Unknown 來源
+                for source in unknown_sources:
+                    file_id = source['file_id']
+                    updated_filename = updated_file_dict.get(file_id, "Unknown")
+                    
+                    if updated_filename != "Unknown":
+                        # 找到了新的檔案名稱，更新 source
+                        old_filename = source['filename']
+                        source['filename'] = updated_filename
+                        
+                        # 更新 citation_map 和文本中的引用
+                        if old_filename in citation_map:
+                            ref_num = citation_map[old_filename]
+                            # 移除舊的 citation_map 項目
+                            del citation_map[old_filename]
+                            # 添加新的 citation_map 項目
+                            citation_map[updated_filename] = ref_num
+                            
+                        logger.info(f"更新 file_id {file_id} 的檔案名稱: Unknown -> {updated_filename}")
+                    else:
+                        logger.warning(f"重新撈取後仍無法找到 file_id {file_id} 的檔案名稱")
+            
             # 直接返回處理後的文本，讓 ResponseFormatter 統一處理 sources
             final_text = dedup_citation_blocks(text.strip())
             

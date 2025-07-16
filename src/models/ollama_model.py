@@ -676,8 +676,8 @@ class OllamaModel(FullLLMInterface):
             final_messages.append(ChatMessage(role="assistant", content=response.content)) # 加入模型的工具請求
             final_messages.append(ChatMessage(
                 role="function",
-                name=tool_name,
-                content=json.dumps(tool_result, ensure_ascii=False)
+                content=json.dumps(tool_result, ensure_ascii=False),
+                metadata={"function_name": tool_name}
             ))
 
             # 6. 再次呼叫模型，生成最終回覆
@@ -731,7 +731,8 @@ class OllamaModel(FullLLMInterface):
 
         try:
             tools_description = []
-            for func_str in self.mcp_service.get_function_schemas_for_anthropic().split('\n'):                tools_description.append(f"- {func_str}")
+            for func_str in self.mcp_service.get_function_schemas_for_anthropic().split('\n'):
+                tools_description.append(f"- {func_str}")
 
             if not tools_description:
                 return base_prompt

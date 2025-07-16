@@ -256,7 +256,7 @@ class TestAssistantExecution:
         mock_final_response = {"status": "completed"}
         
         with patch.object(model, '_request', return_value=(True, mock_run_response, None)), \
-             patch.object(model, '_wait_for_run_completion', return_value=(True, mock_final_response, None)), \
+             patch.object(model, '_wait_for_run_completion_async', return_value=(True, mock_final_response, None)), \
              patch.object(model, '_get_thread_messages', return_value=(True, ChatResponse(content="Assistant response"), None)):
             
             success, chat_response, error = model.run_assistant(thread_id)
@@ -286,7 +286,7 @@ class TestAssistantExecution:
         mock_final_response = {"status": "failed"}
         
         with patch.object(model, '_request', return_value=(True, mock_run_response, None)), \
-             patch.object(model, '_wait_for_run_completion', return_value=(False, mock_final_response, "Run failed")):
+             patch.object(model, '_wait_for_run_completion_async', return_value=(False, mock_final_response, "Run failed")):
             
             success, chat_response, error = model.run_assistant(thread_id)
             
@@ -1484,6 +1484,516 @@ class TestOpenAIAsyncWaitMethods:
         source = inspect.getsource(model._wait_for_run_completion_async)
         assert "await asyncio.sleep" in source, "標準版本應該使用 await asyncio.sleep"
         assert "asyncio.to_thread" in source, "標準版本應該使用 asyncio.to_thread"
+
+
+class TestOpenAIModelMCP:
+    """測試 OpenAI Model MCP 相關功能"""
+    
+    @pytest.fixture
+    def mcp_enabled_model(self):
+        """創建啟用 MCP 的模型"""
+        with patch('src.core.config.get_value') as mock_config:
+            mock_config.side_effect = lambda key, default=None: {
+                'features.enable_mcp': True,
+                'mcp.enabled': True
+            }.get(key, default)
+            
+            with patch('src.services.mcp_service.get_mcp_service') as mock_mcp:
+                mock_service = Mock()
+                mock_service.is_enabled = True
+                mock_service.get_function_schemas_for_openai.return_value = [
+                    {"name": "search_data", "description": "Search for data", "parameters": {"type": "object"}}
+                ]
+                mock_service.get_openai_function_definitions.return_value = [
+                    {"name": "search_data", "description": "Search for data"}
+                ]
+                mock_mcp.return_value = mock_service
+                
+                model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                yield model
+    
+    def test_mcp_config_read_error(self):
+        """測試 MCP 配置讀取錯誤 (line 82-84)"""
+        with patch('src.core.config.get_value', side_effect=Exception("Config error")):
+            with patch('src.models.openai_model.logger') as mock_logger:
+                model = OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+                
+                assert model.enable_mcp == False
+                mock_logger.warning.assert_called_with("Error reading MCP config: Config error")
+    
+    def test_mcp_service_not_enabled(self):
+        """測試 MCP 服務未啟用 (line 106-107)"""
+        with patch('src.core.config.get_value', return_value=True):
+            with patch('src.services.mcp_service.get_mcp_service') as mock_mcp:
+                mock_service = Mock()
+                mock_service.is_enabled = False
+                mock_mcp.return_value = mock_service
+                
+                with patch('src.models.openai_model.logger') as mock_logger:
+                    model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                    
+                    assert model.enable_mcp == False
+                    mock_logger.warning.assert_called_with("OpenAI Model: MCP service is not enabled")
+    
+    def test_mcp_service_init_exception(self):
+        """測試 MCP 服務初始化異常 (line 108-111)"""
+        with patch('src.core.config.get_value', return_value=True):
+            with patch('src.services.mcp_service.get_mcp_service', side_effect=Exception("Init error")):
+                with patch('src.models.openai_model.logger') as mock_logger:
+                    model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                    
+                    assert model.enable_mcp == False
+                    assert model.mcp_service is None
+                    mock_logger.warning.assert_called_with("OpenAI Model: Failed to initialize MCP service: Init error")
+    
+    def test_create_assistant_with_mcp_functions_disabled(self, mcp_enabled_model):
+        """測試 MCP 禁用時創建助手 (line 115-118)"""
+        mcp_enabled_model.enable_mcp = False
+        mcp_enabled_model.mcp_service = None
+        
+        with patch.object(mcp_enabled_model, '_create_regular_assistant', return_value=(True, "assistant_id", None)) as mock_create:
+            with patch('src.models.openai_model.logger') as mock_logger:
+                success, assistant_id, error = mcp_enabled_model.create_assistant_with_mcp_functions()
+                
+                assert success == True
+                assert assistant_id == "assistant_id"
+                mock_logger.info.assert_called_with("Creating regular assistant (MCP disabled)")
+                mock_create.assert_called_once()
+    
+    def test_create_assistant_with_mcp_functions_enabled(self, mcp_enabled_model):
+        """測試 MCP 啟用時創建助手 (line 119-155)"""
+        with patch.object(mcp_enabled_model, '_request') as mock_request:
+            mock_request.return_value = (True, {"id": "mcp_assistant_id"}, None)
+            
+            success, assistant_id, error = mcp_enabled_model.create_assistant_with_mcp_functions(
+                name="Test Assistant",
+                instructions="Test instructions"
+            )
+            
+            assert success == True
+            assert assistant_id == "mcp_assistant_id"
+            mock_request.assert_called_once()
+    
+    def test_create_assistant_with_mcp_functions_request_failure(self, mcp_enabled_model):
+        """測試 MCP 助手創建請求失敗 (line 150-155)"""
+        with patch.object(mcp_enabled_model, '_request') as mock_request:
+            mock_request.return_value = (False, None, "Request failed")
+            
+            success, assistant_id, error = mcp_enabled_model.create_assistant_with_mcp_functions()
+            
+            assert success == False
+            assert assistant_id is None
+            assert error == "Request failed"
+    
+    def test_create_assistant_with_mcp_functions_exception(self, mcp_enabled_model):
+        """測試 MCP 助手創建異常 (line 156-159)"""
+        with patch.object(mcp_enabled_model, '_request', side_effect=Exception("Test exception")):
+            with patch('src.models.openai_model.logger') as mock_logger:
+                success, assistant_id, error = mcp_enabled_model.create_assistant_with_mcp_functions()
+                
+                assert success == False
+                assert assistant_id is None
+                assert "Test exception" in error
+                mock_logger.error.assert_called()
+    
+    def test_create_regular_assistant_success(self, mcp_enabled_model):
+        """測試創建常規助手成功 (line 161-178)"""
+        with patch.object(mcp_enabled_model, '_request') as mock_request:
+            mock_request.return_value = (True, {"id": "regular_assistant_id"}, None)
+            
+            success, assistant_id, error = mcp_enabled_model._create_regular_assistant(
+                name="Regular Assistant",
+                instructions="Regular instructions"
+            )
+            
+            assert success == True
+            assert assistant_id == "regular_assistant_id"
+    
+    def test_create_regular_assistant_failure(self, mcp_enabled_model):
+        """測試創建常規助手失敗 (line 175-178)"""
+        with patch.object(mcp_enabled_model, '_request') as mock_request:
+            mock_request.return_value = (False, None, "Assistant creation failed")
+            
+            success, assistant_id, error = mcp_enabled_model._create_regular_assistant()
+            
+            assert success == False
+            assert assistant_id is None
+            assert error == "Assistant creation failed"
+
+
+class TestOpenAIModelAdvancedFeatures:
+    """測試 OpenAI Model 高級功能"""
+    
+    @pytest.fixture
+    def model(self):
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+    
+    def test_generate_image_with_model_parameter(self, model):
+        """測試使用模型參數生成圖片 (line 241-242)"""
+        with patch.object(model, '_request') as mock_request:
+            mock_request.return_value = (True, {
+                "data": [{"url": "https://example.com/image.jpg"}]
+            }, None)
+            
+            success, image_url, error = model.generate_image(
+                "A test image", 
+                model="dall-e-3",
+                size="1024x1024"
+            )
+            
+            assert success == True
+            assert image_url == "https://example.com/image.jpg"
+    
+    def test_generate_image_no_data(self, model):
+        """測試生成圖片無數據返回 (line 250-251)"""
+        with patch.object(model, '_request') as mock_request:
+            mock_request.return_value = (True, {"data": []}, None)
+            
+            success, image_url, error = model.generate_image("A test image")
+            
+            assert success == False
+            assert image_url is None
+            assert "list index out of range" in error
+    
+    def test_generate_image_no_url(self, model):
+        """測試生成圖片無 URL 返回 (line 263-264)"""
+        with patch.object(model, '_request') as mock_request:
+            mock_request.return_value = (True, {
+                "data": [{"revised_prompt": "A revised prompt"}]
+            }, None)
+            
+            success, image_url, error = model.generate_image("A test image")
+            
+            assert success == False
+            assert image_url is None
+            assert "'url'" in error
+    
+    def test_upload_knowledge_file_large_file(self, model):
+        """測試上傳大文件 (line 298-299)"""
+        large_file_content = "x" * (101 * 1024 * 1024)  # 101MB
+        
+        with patch('builtins.open', mock_open(read_data=large_file_content)):
+            with patch('os.path.getsize', return_value=101 * 1024 * 1024):
+                success, file_info, error = model.upload_knowledge_file("large_file.txt")
+                
+                assert success == False
+                assert file_info is None
+                assert ("檔案過大" in error or "API key" in error or "file too large" in error)
+    
+    def test_upload_knowledge_file_file_not_found(self, model):
+        """測試上傳文件不存在 (line 305)"""
+        with patch('builtins.open', side_effect=FileNotFoundError("File not found")):
+            success, file_info, error = model.upload_knowledge_file("nonexistent.txt")
+            
+            assert success == False
+            assert file_info is None
+            assert "File not found" in error
+
+
+class TestOpenAIModelPollingStrategy:
+    """測試 OpenAI Model 輪詢策略"""
+    
+    @pytest.fixture
+    def model(self):
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+    
+    def test_wait_for_run_completion_cancelled_status(self, model):
+        """測試等待運行完成 - 取消狀態 (line 471-478)"""
+        responses = [
+            {"status": "in_progress", "id": "run_123"},
+            {"status": "cancelling", "id": "run_123"},
+            {"status": "cancelled", "id": "run_123"}
+        ]
+        
+        with patch.object(model, 'retrieve_thread_run') as mock_retrieve:
+            mock_retrieve.side_effect = [(True, resp, None) for resp in responses]
+            
+            success, response, error = model._wait_for_run_completion("thread_123", "run_123")
+            
+            assert success == False
+            assert "cancelled" in error
+    
+    def test_wait_for_run_completion_expired_status(self, model):
+        """測試等待運行完成 - 過期狀態 (line 471-478)"""
+        with patch.object(model, 'retrieve_thread_run') as mock_retrieve:
+            mock_retrieve.return_value = (True, {"status": "expired", "id": "run_123"}, None)
+            
+            success, response, error = model._wait_for_run_completion("thread_123", "run_123")
+            
+            assert success == False
+            assert "expired" in error
+    
+    def test_wait_for_run_completion_requires_action(self, model):
+        """測試等待運行完成 - 需要操作狀態 (line 491-492)"""
+        with patch.object(model, 'retrieve_thread_run') as mock_retrieve:
+            mock_retrieve.return_value = (True, {
+                "status": "requires_action", 
+                "id": "run_123",
+                "required_action": {"type": "submit_tool_outputs"}
+            }, None)
+            
+            success, response, error = model._wait_for_run_completion("thread_123", "run_123")
+            
+            assert success == False
+            assert "requires_action" in error
+
+
+class TestOpenAIModelThreadOperations:
+    """測試 OpenAI Model 線程操作"""
+    
+    @pytest.fixture
+    def model(self):
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+    
+    def test_get_thread_messages_empty_data(self, model):
+        """測試獲取線程消息 - 空數據 (line 527-528)"""
+        with patch.object(model, '_request') as mock_request:
+            mock_request.return_value = (True, {"data": []}, None)
+            
+            success, messages, error = model._get_thread_messages("thread_123")
+            
+            assert success == False
+            assert messages is None
+            assert "No assistant response found" in error
+    
+    def test_chat_completion_missing_choices(self, model):
+        """測試聊天完成 - 缺少選擇 (line 599-600)"""
+        with patch.object(model, '_request') as mock_request:
+            mock_request.return_value = (True, {"usage": {"total_tokens": 10}}, None)
+            
+            success, response, error = model.chat_completion([ChatMessage(role="user", content="Hi")])
+            
+            assert success == False
+            assert response is None
+            assert "'choices'" in error
+    
+    def test_chat_completion_empty_choices(self, model):
+        """測試聊天完成 - 空選擇數組 (line 628-629)"""
+        with patch.object(model, '_request') as mock_request:
+            mock_request.return_value = (True, {"choices": []}, None)
+            
+            success, response, error = model.chat_completion([ChatMessage(role="user", content="Hi")])
+            
+            assert success == False
+            assert response is None
+            assert "list index out of range" in error
+
+
+class TestOpenAIModelMCPIntegration:
+    """測試 OpenAI Model MCP 集成"""
+    
+    @pytest.fixture
+    def mcp_model(self):
+        with patch('src.core.config.get_value', return_value=True):
+            with patch('src.services.mcp_service.get_mcp_service') as mock_mcp:
+                mock_service = Mock()
+                mock_service.is_enabled = True
+                mock_service.get_openai_function_definitions.return_value = []
+                mock_mcp.return_value = mock_service
+                
+                model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                yield model
+    
+    def test_wait_for_run_completion_with_mcp_timeout(self, mcp_model):
+        """測試 MCP 運行完成等待超時 (line 768-769)"""
+        with patch.object(mcp_model, 'retrieve_thread_run') as mock_retrieve:
+            mock_retrieve.return_value = (True, {"status": "in_progress", "id": "run_123"}, None)
+            
+            import asyncio
+            async def run_test():
+                success, response, error = await mcp_model._wait_for_run_completion_with_mcp("thread_123", "run_123", max_wait_time=1)
+                return success, response, error
+            
+            success, response, error = asyncio.run(run_test())
+            
+            assert success == False
+            assert "did not complete within" in error or "timeout" in error
+    
+    def test_wait_for_run_completion_with_mcp_failed_status(self, mcp_model):
+        """測試 MCP 運行完成失敗狀態 (line 782-783)"""
+        with patch.object(mcp_model, 'retrieve_thread_run') as mock_retrieve:
+            mock_retrieve.return_value = (True, {
+                "status": "failed", 
+                "id": "run_123",
+                "last_error": {"message": "Run failed", "code": "server_error"}
+            }, None)
+            
+            import asyncio
+            async def run_test():
+                success, response, error = await mcp_model._wait_for_run_completion_with_mcp("thread_123", "run_123")
+                return success, response, error
+            
+            success, response, error = asyncio.run(run_test())
+            
+            assert success == False
+            assert "Run failed" in error
+    
+    def test_wait_for_run_completion_with_mcp_requires_action(self, mcp_model):
+        """測試 MCP 運行完成需要操作 (line 800-801)"""
+        with patch.object(mcp_model, 'retrieve_thread_run') as mock_retrieve:
+            mock_retrieve.return_value = (True, {
+                "status": "requires_action",
+                "id": "run_123",
+                "required_action": {
+                    "type": "submit_tool_outputs",
+                    "submit_tool_outputs": {
+                        "tool_calls": [{"id": "call_123", "function": {"name": "test_func"}}]
+                    }
+                }
+            }, None)
+            
+            import asyncio
+            async def run_test():
+                success, response, error = await mcp_model._wait_for_run_completion_with_mcp("thread_123", "run_123")
+                return success, response, error
+            
+            success, response, error = asyncio.run(run_test())
+            
+            assert success == False
+            assert "Failed to handle MCP function calls" in error
+    
+    def test_mcp_service_integration(self, mcp_model):
+        """測試 MCP 服務集成 (line 808-809)"""
+        # Test that the model has MCP service configured
+        assert hasattr(mcp_model, 'mcp_service')
+        assert mcp_model.mcp_service is not None
+        
+        # Test MCP service enabled check
+        assert mcp_model.mcp_service.is_enabled == True
+
+
+class TestOpenAIModelUnknownSourcesHandling:
+    """測試 OpenAI Model 處理 Unknown 來源的功能"""
+    
+    @pytest.fixture
+    def model(self):
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel("test_key", "test_assistant")
+    
+    def test_process_openai_response_with_unknown_sources_retry(self, model):
+        """測試當發現 Unknown 來源時重新撈取檔案清單"""
+        # 模擬 thread_messages 包含 citations
+        thread_messages = {
+            'data': [{
+                'role': 'assistant',
+                'content': [{
+                    'type': 'text',
+                    'text': {
+                        'value': '這是一個測試回應【†source】',
+                        'annotations': [{
+                            'text': '【†source】',
+                            'file_citation': {
+                                'file_id': 'file_123',
+                                'quote': '測試引用'
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        # 第一次 get_file_references 返回空字典（模擬找不到檔案）
+        # 第二次 get_file_references 返回包含檔案的字典（模擬重新撈取成功）
+        with patch.object(model, 'get_file_references') as mock_get_file_refs:
+            mock_get_file_refs.side_effect = [
+                {},  # 第一次呼叫：空字典，會產生 Unknown 來源
+                {'file_123': '測試檔案'}  # 第二次呼叫：找到檔案
+            ]
+            
+            # 執行測試
+            final_text, sources = model._process_openai_response(thread_messages)
+            
+            # 驗證結果
+            assert final_text == '這是一個測試回應[1]'
+            assert len(sources) == 1
+            assert sources[0]['filename'] == '測試檔案'  # 應該不是 Unknown
+            assert sources[0]['file_id'] == 'file_123'
+            assert sources[0]['quote'] == '測試引用'
+            
+            # 驗證 get_file_references 被呼叫兩次
+            assert mock_get_file_refs.call_count == 2
+    
+    def test_process_openai_response_with_unknown_sources_still_unknown(self, model):
+        """測試當重新撈取後仍然是 Unknown 來源的情況"""
+        # 模擬 thread_messages 包含 citations
+        thread_messages = {
+            'data': [{
+                'role': 'assistant',
+                'content': [{
+                    'type': 'text',
+                    'text': {
+                        'value': '這是一個測試回應【†source】',
+                        'annotations': [{
+                            'text': '【†source】',
+                            'file_citation': {
+                                'file_id': 'file_unknown',
+                                'quote': '測試引用'
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        # 兩次 get_file_references 都返回空字典（模擬檔案始終找不到）
+        with patch.object(model, 'get_file_references') as mock_get_file_refs:
+            mock_get_file_refs.side_effect = [
+                {},  # 第一次呼叫：空字典
+                {}   # 第二次呼叫：仍然是空字典
+            ]
+            
+            # 執行測試
+            final_text, sources = model._process_openai_response(thread_messages)
+            
+            # 驗證結果
+            assert final_text == '這是一個測試回應[1]'
+            assert len(sources) == 1
+            assert sources[0]['filename'] == 'Unknown'  # 仍然是 Unknown
+            assert sources[0]['file_id'] == 'file_unknown'
+            
+            # 驗證 get_file_references 被呼叫兩次
+            assert mock_get_file_refs.call_count == 2
+    
+    def test_process_openai_response_no_unknown_sources(self, model):
+        """測試當沒有 Unknown 來源時不會重新撈取"""
+        # 模擬 thread_messages 包含 citations
+        thread_messages = {
+            'data': [{
+                'role': 'assistant',
+                'content': [{
+                    'type': 'text',
+                    'text': {
+                        'value': '這是一個測試回應【†source】',
+                        'annotations': [{
+                            'text': '【†source】',
+                            'file_citation': {
+                                'file_id': 'file_123',
+                                'quote': '測試引用'
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        # 第一次 get_file_references 就返回正確的檔案清單
+        with patch.object(model, 'get_file_references') as mock_get_file_refs:
+            mock_get_file_refs.return_value = {'file_123': '測試檔案'}
+            
+            # 執行測試
+            final_text, sources = model._process_openai_response(thread_messages)
+            
+            # 驗證結果
+            assert final_text == '這是一個測試回應[1]'
+            assert len(sources) == 1
+            assert sources[0]['filename'] == '測試檔案'
+            assert sources[0]['file_id'] == 'file_123'
+            
+            # 驗證 get_file_references 只被呼叫一次（沒有重新撈取）
+            assert mock_get_file_refs.call_count == 1
 
 
 if __name__ == "__main__":

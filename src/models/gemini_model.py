@@ -1222,14 +1222,14 @@ class GeminiModel(FullLLMInterface):
             extended_messages.append(ChatMessage(
                 role='model',
                 content="[Function Call]",
-                parts=function_calls
+                metadata={"parts": function_calls}
             ))
             
             # 添加 function results
             extended_messages.append(ChatMessage(
                 role='function',
                 content="[Function Results]",
-                parts=function_results
+                metadata={"parts": function_results}
             ))
             
             logger.info(f"📤 Gemini Model: Sending final request with {len(extended_messages)} messages")

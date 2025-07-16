@@ -805,7 +805,6 @@ class TestMCPServiceAsyncIntegration:
             assert inspect.iscoroutinefunction(service.handle_function_call)
             
             # 檢查程式碼中的實作
-            import inspect
             source = inspect.getsource(service.handle_function_call)
             assert "handle_function_call_async" in source
 
