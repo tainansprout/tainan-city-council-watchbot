@@ -447,7 +447,7 @@ class AnthropicModel(FullLLMInterface):
                 logger.info(f"🎯 Anthropic Model: Executing function {i}/{len(function_calls)}: {function_name}")
                 logger.debug(f"📊 Function arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
                 
-                result = await self.mcp_service.handle_function_call(function_name, arguments)
+                result = self.mcp_service.handle_function_call_sync(function_name, arguments)
                 
                 if result.get('success', False):
                     logger.info(f"✅ Function {function_name} executed successfully")

@@ -411,7 +411,7 @@ class OpenAIModel(FullLLMInterface):
                 
                 # 執行 MCP function call
                 logger.info(f"[{call_id}] 🚀 Executing MCP function: {function_name}")
-                result = await self.mcp_service.handle_function_call(function_name, arguments)
+                result = self.mcp_service.handle_function_call_sync(function_name, arguments)
                 
                 if result.get('success', False):
                     logger.info(f"[{call_id}] ✅ Function {function_name} executed successfully")

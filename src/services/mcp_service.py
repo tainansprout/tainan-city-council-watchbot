@@ -51,7 +51,37 @@ class MCPService:
             self.is_enabled = False
     
     
+    def handle_function_call_sync(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        同步版本的 function call 處理器（為了與 sync 模型兼容）
+        內部使用 asyncio.run() 執行異步操作
+        """
+        import asyncio
+        
+        try:
+            # 檢查是否已經在事件循環中
+            try:
+                loop = asyncio.get_running_loop()
+                # 如果已經在事件循環中，使用 create_task
+                logger.warning("Already in event loop, using asyncio.create_task")
+                task = asyncio.create_task(self.handle_function_call_async(function_name, arguments))
+                return asyncio.run_coroutine_threadsafe(task, loop).result()
+            except RuntimeError:
+                # 沒有運行中的事件循環，安全使用 asyncio.run
+                return asyncio.run(self.handle_function_call_async(function_name, arguments))
+        except Exception as e:
+            logger.error(f"Error in sync MCP call: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "content": f"MCP 調用失敗: {e}"
+            }
+
     async def handle_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """異步版本的 function call 處理器（向後兼容）"""
+        return await self.handle_function_call_async(function_name, arguments)
+
+    async def handle_function_call_async(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
         處理 function call 並回傳結果
         

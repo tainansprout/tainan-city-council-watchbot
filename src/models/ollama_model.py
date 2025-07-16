@@ -670,7 +670,7 @@ class OllamaModel(FullLLMInterface):
             arguments = tool_call_request['arguments']
             
             logger.info(f"🔧 Ollama Model: Executing tool '{tool_name}' with args: {arguments}")
-            tool_result = await self.mcp_service.handle_function_call(tool_name, arguments)
+            tool_result = self.mcp_service.handle_function_call_sync(tool_name, arguments)
             
             # 5. 將工具結果加到對話歷史中
             final_messages.append(ChatMessage(role="assistant", content=response.content)) # 加入模型的工具請求

@@ -827,8 +827,7 @@ class GeminiModel(FullLLMInterface):
             
             # 4. 使用 MCP function calling 或一般 RAG 查詢
             if self.enable_mcp and self.mcp_service:
-                # MCP 需要 async，但目前在 sync 模式下禁用
-                logger.warning("MCP is disabled in sync mode. Falling back to regular RAG.")
+                # 使用 sync MCP 包裝器
                 rag_kwargs = {**kwargs, 'context_messages': messages}
                 is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
             else:
@@ -1200,7 +1199,7 @@ class GeminiModel(FullLLMInterface):
                     logger.info(f"🎯 Gemini Model: Executing function {valid_calls}: {function_name}")
                     logger.debug(f"📊 Function arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
                     
-                    result = await self.mcp_service.handle_function_call(function_name, arguments)
+                    result = self.mcp_service.handle_function_call_sync(function_name, arguments)
                     
                     if result.get('success', False):
                         logger.info(f"✅ Gemini function {function_name} executed successfully")
