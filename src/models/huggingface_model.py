@@ -213,8 +213,7 @@ class HuggingFaceModel(FullLLMInterface):
             }
             
             # 發送請求
-            import asyncio
-            response = await asyncio.to_thread(self._make_request, self.model_name, payload)
+            response = self._make_request(self.model_name, payload)
             
             if not response:
                 return False, None, "Failed to get response from Hugging Face API"
@@ -438,9 +437,17 @@ class HuggingFaceModel(FullLLMInterface):
             context_messages = self._build_conversation_context(conversation_history, message)
             
             if self.enable_mcp and self.mcp_service:
-                is_successful, rag_response, error = await self.chat_completion_with_mcp(context_messages, **kwargs)
+                # MCP 需要 async，但目前在 sync 模式下禁用
+                logger.warning("MCP is disabled in sync mode. Falling back to regular chat.")
+                is_successful, chat_response, error = self.chat_completion(context_messages, **kwargs)
+                if is_successful:
+                    rag_response = RAGResponse(
+                        answer=chat_response.content,
+                        sources=[],
+                        metadata=chat_response.metadata
+                    )
             else:
-                is_successful, chat_response, error = await self.chat_completion(context_messages, **kwargs)
+                is_successful, chat_response, error = self.chat_completion(context_messages, **kwargs)
                 if is_successful:
                     rag_response = RAGResponse(
                         answer=chat_response.content,
@@ -1102,7 +1109,7 @@ class HuggingFaceModel(FullLLMInterface):
         """
         try:
             messages = self._build_conversation_context(context_messages, query)
-            is_successful, chat_response, error = await self.chat_completion(messages)
+            is_successful, chat_response, error = self.chat_completion(messages)
             
             if not is_successful:
                 return False, None, error

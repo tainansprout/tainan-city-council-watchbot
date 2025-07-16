@@ -827,10 +827,10 @@ class GeminiModel(FullLLMInterface):
             
             # 4. 使用 MCP function calling 或一般 RAG 查詢
             if self.enable_mcp and self.mcp_service:
-                import asyncio
-                is_successful, rag_response, error = asyncio.run(
-                    self.query_with_rag_and_mcp(message, context_messages=messages, **kwargs)
-                )
+                # MCP 需要 async，但目前在 sync 模式下禁用
+                logger.warning("MCP is disabled in sync mode. Falling back to regular RAG.")
+                rag_kwargs = {**kwargs, 'context_messages': messages}
+                is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
             else:
                 # 一般 Semantic Retrieval API 進行 RAG 查詢（包含長上下文）
                 rag_kwargs = {**kwargs, 'context_messages': messages}

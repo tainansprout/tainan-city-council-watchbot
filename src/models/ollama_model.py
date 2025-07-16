@@ -144,8 +144,7 @@ class OllamaModel(FullLLMInterface):
                 }
             }
             
-            import asyncio
-            is_successful, response, error_message = await asyncio.to_thread(self._request, 'POST', '/api/chat', body=json_body)
+            is_successful, response, error_message = self._request('POST', '/api/chat', body=json_body)
             
             if not is_successful:
                 return False, None, error_message
@@ -600,8 +599,10 @@ class OllamaModel(FullLLMInterface):
             messages = self._build_local_conversation_context(recent_conversations, message)
             
             if self.enable_mcp and self.mcp_service:
-                import asyncio
-                is_successful, rag_response, error = await self.chat_completion_with_mcp(messages, **kwargs)
+                # MCP 需要 async，但目前在 sync 模式下禁用
+                logger.warning("MCP is disabled in sync mode. Falling back to local RAG.")
+                rag_kwargs = {**kwargs, 'context_messages': messages, 'local_only': True}
+                is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
             else:
                 rag_kwargs = {**kwargs, 'context_messages': messages, 'local_only': True}
                 is_successful, rag_response, error = self.query_with_rag(message, **rag_kwargs)
