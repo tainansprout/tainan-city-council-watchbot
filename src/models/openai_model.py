@@ -277,15 +277,17 @@ class OpenAIModel(FullLLMInterface):
             if not is_successful:
                 return False, None, error_message
             
-            # 等待完成（包含 MCP function calling 處理）
+            # 等待完成（使用異步等待提升性能）
             run_id = run_response['id']
+            import asyncio
             if self.enable_mcp and self.mcp_service:
-                import asyncio
                 is_successful, final_response, error_message = asyncio.run(
                     self._wait_for_run_completion_with_mcp(thread_id, run_id)
                 )
             else:
-                is_successful, final_response, error_message = self._wait_for_run_completion(thread_id, run_id)
+                is_successful, final_response, error_message = asyncio.run(
+                    self._wait_for_run_completion_async(thread_id, run_id)
+                )
 
             if not is_successful:
                 return False, None, f"Assistant run failed: {error_message}"
@@ -344,7 +346,7 @@ class OpenAIModel(FullLLMInterface):
                 pass
             
             # 等待一段時間再檢查 - 用戶建議的等待策略：5秒→3秒→2秒→1秒→之後都1秒
-            import time
+            import asyncio
             if iteration == 1:
                 sleep_time = 5  # 第一次等5秒
             elif iteration == 2:
@@ -357,7 +359,7 @@ class OpenAIModel(FullLLMInterface):
                 sleep_time = 1  # 之後每秒檢查
             
             logger.debug(f"Waiting {sleep_time}s before next check (iteration {iteration}/{max_iterations})")
-            time.sleep(sleep_time)
+            await asyncio.sleep(sleep_time)
         
         total_wait_time = 5 + 3 + 2 + 1 + (max_iterations - 4) * 1  # 5s + 3s + 2s + 1s + 56*1s = 67秒
         return False, None, f"Run did not complete within {max_iterations} iterations (~{total_wait_time}s total wait time)"
@@ -898,6 +900,55 @@ class OpenAIModel(FullLLMInterface):
                 completion_statuses=['completed'],
                 failure_statuses=['failed', 'expired', 'cancelled', 'requires_action']
             )
+
+    async def _wait_for_run_completion_async(self, thread_id: str, run_id: str, max_wait_time: int = None) -> Tuple[bool, Optional[Dict], Optional[str]]:
+        """異步智慧等待執行完成 - 使用 5s→3s→2s→1s→1s 策略"""
+        import asyncio
+        import time
+        
+        # 智慧輪詢間隔：5s→3s→2s→1s→之後都1s
+        intervals = [5, 3, 2, 1]
+        max_iterations = 60  # 最大檢查次數
+        start_time = time.time()
+        
+        for iteration in range(max_iterations):
+            # 使用 asyncio.to_thread 包裝同步 API 調用
+            is_successful, response, error_message = await asyncio.to_thread(
+                self.retrieve_thread_run, thread_id, run_id
+            )
+            
+            if not is_successful:
+                return False, None, error_message
+            
+            status = response['status']
+            logger.debug(f"Run {run_id} status: {status} (iteration {iteration + 1})")
+            
+            # 檢查完成狀態
+            if status == 'completed':
+                return True, response, None
+            elif status in ['failed', 'expired', 'cancelled']:
+                error_info = response.get('last_error', {})
+                error_message = error_info.get('message', 'Unknown error')
+                return False, None, f"Run {status}: {error_message}"
+            elif status == 'requires_action':
+                # 標準版本不處理 function calling，直接返回錯誤
+                return False, None, f"Run requires action but MCP is not enabled"
+            
+            # 檢查超時
+            if max_wait_time and (time.time() - start_time) > max_wait_time:
+                return False, None, f"Timeout waiting for run completion ({max_wait_time}s)"
+            
+            # 計算等待時間：5s→3s→2s→1s→之後都1s
+            if iteration < len(intervals):
+                sleep_time = intervals[iteration]
+            else:
+                sleep_time = 1
+            
+            logger.debug(f"Waiting {sleep_time}s before next check (iteration {iteration + 1}/{max_iterations})")
+            await asyncio.sleep(sleep_time)
+        
+        total_wait_time = sum(intervals) + (max_iterations - len(intervals)) * 1
+        return False, None, f"Run did not complete within {max_iterations} iterations (~{total_wait_time}s total wait time)"
     
     def _get_thread_messages(self, thread_id: str) -> Tuple[bool, Optional[ChatResponse], Optional[str]]:
         """取得對話串訊息"""

@@ -4,6 +4,7 @@
 
 import pytest
 import json
+import inspect
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from src.services.mcp_service import MCPService, get_mcp_service, reload_mcp_service
 from src.core.mcp_client import MCPClientError, MCPServerError
@@ -724,4 +725,107 @@ class TestMCPService:
             service = MCPService()
             
             message = service._get_fallback_message("Unknown error")
-            assert message == "處理請求時發生錯誤，請稍後再試"
+
+
+class TestMCPServiceAsyncIntegration:
+    """測試 MCP 服務的 async 集成功能"""
+
+    def setup_method(self):
+        """設定測試環境"""
+        # 重置全域實例
+        import src.services.mcp_service as mcp_service_module
+        mcp_service_module._mcp_service_instance = None
+
+    def test_sync_wrapper_methods_exist(self):
+        """測試 sync 包裝器方法是否存在"""
+        mock_config_manager = Mock()
+        mock_config_manager.is_mcp_enabled.return_value = False
+        
+        with patch('src.services.mcp_service.MCPConfigManager', return_value=mock_config_manager):
+            service = MCPService()
+            
+            # 檢查方法存在
+            assert hasattr(service, 'handle_function_call_sync')
+            assert hasattr(service, 'handle_function_call_async')
+            assert hasattr(service, 'handle_function_call')
+            
+            # 檢查方法類型
+            assert not inspect.iscoroutinefunction(service.handle_function_call_sync)
+            assert inspect.iscoroutinefunction(service.handle_function_call_async)
+            assert inspect.iscoroutinefunction(service.handle_function_call)
+
+    def test_sync_wrapper_disabled_service(self):
+        """測試 sync 包裝器在服務未啟用時的行為"""
+        mock_config_manager = Mock()
+        mock_config_manager.is_mcp_enabled.return_value = False
+        
+        with patch('src.services.mcp_service.MCPConfigManager', return_value=mock_config_manager):
+            service = MCPService()
+            service.is_enabled = False
+            
+            result = service.handle_function_call_sync("test_function", {"arg1": "value1"})
+            
+            # 應該返回錯誤結果而不是拋出異常
+            assert isinstance(result, dict)
+            assert "success" in result
+            assert result["success"] is False
+
+    def test_sync_wrapper_with_async_mock(self):
+        """測試 sync 包裝器調用 async 方法"""
+        mock_config_manager = Mock()
+        mock_config_manager.is_mcp_enabled.return_value = True
+        
+        with patch('src.services.mcp_service.MCPConfigManager', return_value=mock_config_manager):
+            service = MCPService()
+            
+            # 模擬成功的 async 結果
+            mock_result = {
+                "success": True,
+                "data": "測試結果",
+                "content": "MCP sync wrapper 成功"
+            }
+            
+            async def mock_async_call(function_name, arguments):
+                return mock_result
+            
+            # 修補 async 方法
+            with patch.object(service, 'handle_function_call_async', side_effect=mock_async_call):
+                result = service.handle_function_call_sync("test_function", {"arg1": "value1"})
+                assert result["success"] is True
+
+    def test_backward_compatibility(self):
+        """測試向後兼容性 - handle_function_call 仍然是 async"""
+        mock_config_manager = Mock()
+        mock_config_manager.is_mcp_enabled.return_value = False
+        
+        with patch('src.services.mcp_service.MCPConfigManager', return_value=mock_config_manager):
+            service = MCPService()
+            
+            # handle_function_call 應該指向 async 版本
+            assert inspect.iscoroutinefunction(service.handle_function_call)
+            
+            # 檢查程式碼中的實作
+            import inspect
+            source = inspect.getsource(service.handle_function_call)
+            assert "handle_function_call_async" in source
+
+    def test_error_handling_in_sync_wrapper(self):
+        """測試 sync 包裝器的錯誤處理"""
+        mock_config_manager = Mock()
+        mock_config_manager.is_mcp_enabled.return_value = True
+        
+        with patch('src.services.mcp_service.MCPConfigManager', return_value=mock_config_manager):
+            service = MCPService()
+            
+            # 模擬 async 方法拋出異常
+            async def mock_async_call_with_error(function_name, arguments):
+                raise Exception("測試錯誤")
+            
+            with patch.object(service, 'handle_function_call_async', side_effect=mock_async_call_with_error):
+                result = service.handle_function_call_sync("test_function", {"arg1": "value1"})
+                
+                # 應該返回錯誤結果而不是拋出異常
+                assert isinstance(result, dict)
+                assert result["success"] is False
+                assert "error" in result
+                assert "測試錯誤" in result["error"]

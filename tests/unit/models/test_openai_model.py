@@ -4,7 +4,9 @@
 import pytest
 import json
 import time
-from unittest.mock import Mock, patch, MagicMock, mock_open
+import asyncio
+import inspect
+from unittest.mock import Mock, patch, MagicMock, mock_open, AsyncMock
 from requests.exceptions import RequestException
 from src.models.openai_model import OpenAIModel
 from src.models.base import (
@@ -1380,6 +1382,108 @@ class TestEdgeCases:
             assert success is False
             assert file_info is None
             assert "File not found" in error
+
+
+class TestOpenAIAsyncWaitMethods:
+    """測試 OpenAI async 等待方法"""
+
+    @pytest.fixture
+    def model(self):
+        """創建 OpenAI 模型實例"""
+        with patch('src.core.config.get_value', return_value=False):
+            return OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+
+    def test_async_methods_exist(self, model):
+        """測試 async 方法是否存在且類型正確"""
+        # 檢查方法存在
+        assert hasattr(model, '_wait_for_run_completion_async')
+        assert hasattr(model, '_wait_for_run_completion_with_mcp')
+        
+        # 檢查是否為 async 方法
+        assert inspect.iscoroutinefunction(model._wait_for_run_completion_async)
+        assert inspect.iscoroutinefunction(model._wait_for_run_completion_with_mcp)
+
+    @pytest.mark.asyncio
+    async def test_async_wait_success(self, model):
+        """測試 async 等待成功情況"""
+        def mock_retrieve_thread_run(thread_id, run_id):
+            return True, {'status': 'completed', 'id': run_id}, None
+            
+        with patch.object(model, 'retrieve_thread_run', side_effect=mock_retrieve_thread_run):
+            success, response, error = await model._wait_for_run_completion_async("test_thread", "test_run")
+            assert success is True
+            assert response['status'] == 'completed'
+            assert error is None
+
+    @pytest.mark.asyncio
+    async def test_mcp_async_wait_success(self, model):
+        """測試 MCP async 等待成功情況"""
+        def mock_retrieve_thread_run(thread_id, run_id):
+            return True, {'status': 'completed', 'id': run_id}, None
+            
+        with patch.object(model, 'retrieve_thread_run', side_effect=mock_retrieve_thread_run):
+            success, response, error = await model._wait_for_run_completion_with_mcp("test_thread", "test_run")
+            assert success is True
+            assert response['status'] == 'completed'
+            assert error is None
+
+    @pytest.mark.asyncio
+    async def test_async_sleep_usage(self, model):
+        """測試是否正確使用 asyncio.sleep"""
+        call_count = 0
+        def mock_retrieve_thread_run(thread_id, run_id):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return True, {'status': 'queued', 'id': run_id}, None
+            else:
+                return True, {'status': 'completed', 'id': run_id}, None
+        
+        sleep_calls = []
+        async def mock_sleep(delay):
+            sleep_calls.append(delay)
+            # 不實際等待
+        
+        with patch.object(model, 'retrieve_thread_run', side_effect=mock_retrieve_thread_run):
+            with patch('asyncio.sleep', side_effect=mock_sleep):
+                success, response, error = await model._wait_for_run_completion_async("test_thread", "test_run")
+                assert success is True
+                assert len(sleep_calls) > 0
+                assert sleep_calls[0] == 5  # 第一次等待 5 秒
+
+    @pytest.mark.asyncio
+    async def test_async_error_handling(self, model):
+        """測試 async 錯誤處理"""
+        def mock_retrieve_thread_run(thread_id, run_id):
+            return True, {
+                'status': 'failed', 
+                'id': run_id,
+                'last_error': {'message': 'Test error', 'code': 'test_error'}
+            }, None
+        
+        with patch.object(model, 'retrieve_thread_run', side_effect=mock_retrieve_thread_run):
+            success, response, error = await model._wait_for_run_completion_async("test_thread", "test_run")
+            assert success is False
+            assert "failed" in error
+            assert "Test error" in error
+
+    def test_run_assistant_uses_async(self, model):
+        """測試 run_assistant 是否使用 async 等待"""
+        source = inspect.getsource(model.run_assistant)
+        assert "asyncio.run" in source, "run_assistant 應該使用 asyncio.run"
+        assert "_wait_for_run_completion_async" in source, "應該調用 async 版本"
+
+    def test_code_uses_asyncio_sleep(self, model):
+        """測試程式碼中是否使用 asyncio.sleep"""
+        # 檢查 MCP 版本
+        source = inspect.getsource(model._wait_for_run_completion_with_mcp)
+        assert "await asyncio.sleep" in source, "MCP 版本應該使用 await asyncio.sleep"
+        assert "time.sleep" not in source, "MCP 版本不應該使用 time.sleep"
+        
+        # 檢查標準版本
+        source = inspect.getsource(model._wait_for_run_completion_async)
+        assert "await asyncio.sleep" in source, "標準版本應該使用 await asyncio.sleep"
+        assert "asyncio.to_thread" in source, "標準版本應該使用 asyncio.to_thread"
 
 
 if __name__ == "__main__":
