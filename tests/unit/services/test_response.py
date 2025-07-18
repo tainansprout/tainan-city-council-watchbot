@@ -196,6 +196,248 @@ class TestResponseFormatter:
         assert '這是簡體中文回應' in result
 
 
+class TestResponseFormatterDisclaimer:
+    """ResponseFormatter 免責聲明整合測試"""
+    
+    def test_format_rag_response_with_disclaimer(self):
+        """測試 RAG 回應包含免責聲明"""
+        config = {
+            'text_processing': {
+                'disclaimer': '本回應僅供參考，請以官方資訊為準。'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='這是測試回應內容',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證回應內容和免責聲明都存在
+        assert '這是測試回應內容' in result
+        assert '本回應僅供參考，請以官方資訊為準。' in result
+        # 驗證格式正確（有兩個換行分隔）
+        assert '這是測試回應內容\n\n本回應僅供參考，請以官方資訊為準。' in result
+    
+    def test_format_rag_response_with_disclaimer_and_sources(self):
+        """測試包含免責聲明和來源的 RAG 回應"""
+        config = {
+            'text_processing': {
+                'disclaimer': '測試免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='回應內容',
+            sources=[
+                {'filename': 'document1.txt', 'type': 'file_citation'},
+                {'filename': 'document2.pdf', 'type': 'file_citation'}
+            ],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證順序：內容 + 免責聲明 + 來源
+        assert '回應內容' in result
+        assert '測試免責聲明' in result
+        assert '[1]: document1' in result
+        assert '[2]: document2' in result
+        
+        # 驗證結構：回應內容 -> 免責聲明 -> 來源
+        lines = result.split('\n')
+        content_line = None
+        disclaimer_line = None
+        source_lines = []
+        
+        for i, line in enumerate(lines):
+            if '回應內容' in line:
+                content_line = i
+            elif '測試免責聲明' in line:
+                disclaimer_line = i
+            elif '[1]:' in line or '[2]:' in line:
+                source_lines.append(i)
+        
+        assert content_line is not None
+        assert disclaimer_line is not None
+        assert len(source_lines) == 2
+        # 免責聲明應該在內容後、來源前
+        assert content_line < disclaimer_line < source_lines[0]
+    
+    def test_format_rag_response_without_disclaimer_config(self):
+        """測試沒有免責聲明配置的情況"""
+        config = {'text_processing': {}}
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='測試回應內容',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 應該只有回應內容，沒有免責聲明
+        assert result == '測試回應內容'
+    
+    def test_format_rag_response_empty_disclaimer(self):
+        """測試空免責聲明配置"""
+        config = {
+            'text_processing': {
+                'disclaimer': ''
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='測試回應內容',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 空免責聲明應該不添加任何內容
+        assert result == '測試回應內容'
+    
+    def test_format_rag_response_disclaimer_in_text_processing_only(self):
+        """測試只支援 text_processing 中的免責聲明配置"""
+        config = {
+            'disclaimer': '根層級免責聲明',  # 這個不會被使用
+            'text_processing': {
+                'disclaimer': '正確的免責聲明配置'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='測試回應',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        assert '測試回應' in result
+        assert '正確的免責聲明配置' in result
+        assert '根層級免責聲明' not in result  # 根層級的不應該被使用
+    
+    @patch('src.services.response.add_disclaimer')
+    def test_format_rag_response_disclaimer_function_called(self, mock_add_disclaimer):
+        """測試 add_disclaimer 函數被正確調用"""
+        config = {
+            'text_processing': {
+                'disclaimer': '測試免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        # 模擬 add_disclaimer 返回值
+        mock_add_disclaimer.return_value = '處理後的內容與免責聲明'
+        
+        rag_response = RAGResponse(
+            answer='原始回應',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證 add_disclaimer 被調用且傳入正確參數
+        mock_add_disclaimer.assert_called_once()
+        call_args = mock_add_disclaimer.call_args
+        assert '原始回應' in call_args[0][0]  # 第一個參數是轉換後的文本
+        assert call_args[0][1] == config  # 第二個參數是配置
+        
+        # 驗證返回值來自 add_disclaimer
+        assert '處理後的內容與免責聲明' in result
+    
+    def test_format_rag_response_disclaimer_with_chinese_conversion(self):
+        """測試免責聲明與中文轉換的整合"""
+        config = {
+            'text_processing': {
+                'disclaimer': '本回答僅供參考'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        # 使用簡體中文作為輸入（會被轉換為繁體）
+        rag_response = RAGResponse(
+            answer='这是简体中文回应',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證中文轉換和免責聲明都正確處理
+        assert '這是簡體中文回應' in result  # 轉換為繁體
+        assert '本回答僅供參考' in result
+        # 驗證順序正確
+        assert '這是簡體中文回應\n\n本回答僅供參考' in result
+    
+    def test_format_rag_response_disclaimer_error_handling(self):
+        """測試免責聲明處理的錯誤處理"""
+        config = {
+            'text_processing': {
+                'disclaimer': '測試免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        # 測試 None 回應
+        rag_response = RAGResponse(answer=None, sources=[], metadata={})
+        result = formatter.format_rag_response(rag_response)
+        
+        # 即使回應內容為 None，也應該能正確處理（返回錯誤訊息）
+        assert '回應處理失敗' in result
+    
+    def test_format_rag_response_disclaimer_multiline(self):
+        """測試多行免責聲明"""
+        config = {
+            'text_processing': {
+                'disclaimer': '第一行免責聲明\n第二行免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='測試回應',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證多行免責聲明正確添加
+        assert '測試回應' in result
+        assert '第一行免責聲明' in result
+        assert '第二行免責聲明' in result
+        # 驗證格式：回應 + 兩個換行 + 多行免責聲明
+        expected = '測試回應\n\n第一行免責聲明\n第二行免責聲明'
+        assert expected in result
+    
+    def test_format_simple_response_no_disclaimer(self):
+        """測試簡單回應不包含免責聲明"""
+        config = {
+            'text_processing': {
+                'disclaimer': '測試免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        # format_simple_response 不應該添加免責聲明
+        result = formatter.format_simple_response('簡單回應內容')
+        
+        # 應該只有原始內容，沒有免責聲明
+        assert result == '簡單回應內容'
+        assert '測試免責聲明' not in result
+
+
 class TestJSONResponse:
     """測試 JSON 回應處理"""
     

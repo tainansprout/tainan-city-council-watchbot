@@ -115,3 +115,25 @@ def postprocess_text(text, config):
     text_processing_config = load_text_processing_config(config)
     text = replace_text(text, text_processing_config.get('post-replacements', []))
     return text
+
+def add_disclaimer(text, config):
+    """
+    在文字後面加上免責聲明
+    
+    Args:
+        text: 原始文字
+        config: 配置字典，包含 disclaimer 內容
+        
+    Returns:
+        加上免責聲明的文字
+    """
+    # 使用既有的 text_processing 配置載入方式
+    text_processing_config = load_text_processing_config(config)
+    disclaimer = text_processing_config.get('disclaimer', '')
+    
+    # 如果有免責聲明且不為空，則添加
+    if disclaimer and disclaimer.strip():
+        return text + "\n\n" + disclaimer.strip()
+    
+    # 沒有免責聲明就直接返回原文
+    return text

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from src.utils.main import (
     get_response_data, get_role_and_content, dedup_citation_blocks,
     check_token_valid, get_date_string, load_text_processing_config,
-    preprocess_text, replace_text, postprocess_text
+    preprocess_text, replace_text, postprocess_text, add_disclaimer
 )
 
 
@@ -438,3 +438,128 @@ class TestUtilsIntegration:
         # 測試空字串的引用處理
         empty_result = dedup_citation_blocks("")
         assert empty_result == ""
+
+
+class TestDisclaimer:
+    """免責聲明功能測試"""
+    
+    def test_add_disclaimer_with_config(self):
+        """測試帶有配置的免責聲明添加"""
+        config = {
+            'text_processing': {
+                'disclaimer': '本回應僅供參考，請以官方資訊為準。'
+            }
+        }
+        
+        text = '這是一個測試回應。'
+        result = add_disclaimer(text, config)
+        
+        expected = '這是一個測試回應。\n\n本回應僅供參考，請以官方資訊為準。'
+        assert result == expected
+    
+    def test_add_disclaimer_with_empty_disclaimer(self):
+        """測試空免責聲明配置"""
+        config = {
+            'text_processing': {
+                'disclaimer': ''
+            }
+        }
+        
+        text = '這是一個測試回應。'
+        result = add_disclaimer(text, config)
+        
+        # 空免責聲明應該不添加任何內容
+        assert result == text
+    
+    def test_add_disclaimer_with_whitespace_only_disclaimer(self):
+        """測試只有空白字符的免責聲明"""
+        config = {
+            'text_processing': {
+                'disclaimer': '   \n\t   '
+            }
+        }
+        
+        text = '這是一個測試回應。'
+        result = add_disclaimer(text, config)
+        
+        # 只有空白字符的免責聲明應該不添加任何內容
+        assert result == text
+    
+    def test_add_disclaimer_missing_text_processing(self):
+        """測試缺少 text_processing 配置"""
+        config = {}  # 完全空的配置
+        
+        text = '測試回應'
+        result = add_disclaimer(text, config)
+        
+        # 沒有 text_processing 配置應該返回原文
+        assert result == text
+    
+    def test_add_disclaimer_no_disclaimer_config(self):
+        """測試沒有免責聲明配置"""
+        config = {
+            'text_processing': {},
+            'other_config': 'some_value'
+        }
+        
+        text = '測試回應'
+        result = add_disclaimer(text, config)
+        
+        # text_processing 存在但沒有 disclaimer 配置應該返回原文
+        assert result == text
+    
+    def test_add_disclaimer_empty_text(self):
+        """測試空字串文本"""
+        config = {
+            'text_processing': {
+                'disclaimer': '免責聲明'
+            }
+        }
+        
+        text = ''
+        result = add_disclaimer(text, config)
+        
+        expected = '\n\n免責聲明'
+        assert result == expected
+    
+    def test_add_disclaimer_multiline_text(self):
+        """測試多行文本"""
+        config = {
+            'text_processing': {
+                'disclaimer': '免責聲明'
+            }
+        }
+        
+        text = '第一行\n第二行\n第三行'
+        result = add_disclaimer(text, config)
+        
+        expected = '第一行\n第二行\n第三行\n\n免責聲明'
+        assert result == expected
+    
+    def test_add_disclaimer_with_disclaimer_containing_newlines(self):
+        """測試包含換行的免責聲明"""
+        config = {
+            'text_processing': {
+                'disclaimer': '免責聲明第一行\n免責聲明第二行'
+            }
+        }
+        
+        text = '原始內容'
+        result = add_disclaimer(text, config)
+        
+        expected = '原始內容\n\n免責聲明第一行\n免責聲明第二行'
+        assert result == expected
+    
+    def test_add_disclaimer_strips_disclaimer(self):
+        """測試免責聲明會被去除前後空白"""
+        config = {
+            'text_processing': {
+                'disclaimer': '   免責聲明內容   '
+            }
+        }
+        
+        text = '測試內容'
+        result = add_disclaimer(text, config)
+        
+        expected = '測試內容\n\n免責聲明內容'
+        assert result == expected

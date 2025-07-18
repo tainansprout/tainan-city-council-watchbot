@@ -3,7 +3,7 @@ import json
 from typing import Dict, List, Any
 from flask import Response
 from ..models.base import RAGResponse
-from ..utils import s2t_converter
+from ..utils import s2t_converter, add_disclaimer
 
 logger = get_logger(__name__)
 
@@ -27,6 +27,8 @@ class ResponseFormatter:
         try:
             # 基本內容處理 - 轉換為繁體中文
             content = s2t_converter.convert(rag_response.answer)
+
+            content = add_disclaimer(content, self.config)
             
             # 如果有來源引用，添加來源資訊
             if rag_response.sources:

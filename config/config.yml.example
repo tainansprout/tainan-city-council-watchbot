@@ -168,6 +168,7 @@ text_processing:
       replacement: ""
   preprocessors:
     - type: "replace_date_string"
+  disclaimer: "註：本回答是由 AI 自動生成，請以官方最新資訊為準。"
 
 # 日誌配置
 log_level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
