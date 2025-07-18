@@ -3,7 +3,7 @@ import json
 from typing import Dict, List, Any
 from flask import Response
 from ..models.base import RAGResponse
-from ..utils import s2t_converter, add_disclaimer
+from ..utils import s2t_converter, add_disclaimer, remove_reference_markers
 
 logger = get_logger(__name__)
 
@@ -27,6 +27,9 @@ class ResponseFormatter:
         try:
             # 基本內容處理 - 轉換為繁體中文
             content = s2t_converter.convert(rag_response.answer)
+            
+            # 移除引用標記
+            content = remove_reference_markers(content)
 
             content = add_disclaimer(content, self.config)
             
@@ -185,6 +188,13 @@ class ResponseFormatter:
         try:
             # 轉換為繁體中文
             formatted_content = s2t_converter.convert(content) if content else ""
+            
+            # 移除引用標記
+            formatted_content = remove_reference_markers(formatted_content)
+            
+            # 添加免責聲明
+            formatted_content = add_disclaimer(formatted_content, self.config)
+            
             return formatted_content.strip()
         except Exception as e:
             logger.error(f"Error formatting simple response: {e}")

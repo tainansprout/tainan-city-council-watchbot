@@ -421,8 +421,8 @@ class TestResponseFormatterDisclaimer:
         expected = '測試回應\n\n第一行免責聲明\n第二行免責聲明'
         assert expected in result
     
-    def test_format_simple_response_no_disclaimer(self):
-        """測試簡單回應不包含免責聲明"""
+    def test_format_simple_response_with_disclaimer(self):
+        """測試簡單回應包含免責聲明"""
         config = {
             'text_processing': {
                 'disclaimer': '測試免責聲明'
@@ -430,12 +430,167 @@ class TestResponseFormatterDisclaimer:
         }
         formatter = ResponseFormatter(config)
         
-        # format_simple_response 不應該添加免責聲明
+        # format_simple_response 現在也應該添加免責聲明
         result = formatter.format_simple_response('簡單回應內容')
         
-        # 應該只有原始內容，沒有免責聲明
-        assert result == '簡單回應內容'
-        assert '測試免責聲明' not in result
+        # 應該包含原始內容和免責聲明
+        assert '簡單回應內容' in result
+        assert '測試免責聲明' in result
+        assert '簡單回應內容\n\n測試免責聲明' in result
+
+
+class TestResponseFormatterReferenceMarkers:
+    """ResponseFormatter 引用標記過濾測試"""
+    
+    def test_format_rag_response_with_reference_markers(self):
+        """測試 RAG 回應中引用標記的過濾"""
+        config = {'text_processing': {}}
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='這是測試回應【4:0】【5:5】【6:6】，後面還有更多內容。',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證引用標記被移除
+        assert '這是測試回應，後面還有更多內容。' in result
+        assert '【4:0】' not in result
+        assert '【5:5】' not in result
+        assert '【6:6】' not in result
+    
+    def test_format_rag_response_with_markers_and_disclaimer(self):
+        """測試同時有引用標記和免責聲明的 RAG 回應"""
+        config = {
+            'text_processing': {
+                'disclaimer': '測試免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='測試內容【1:2】【3:4】更多內容【5:6】。',
+            sources=[],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證引用標記被移除且免責聲明被添加
+        assert '測試內容更多內容。' in result
+        assert '測試免責聲明' in result
+        assert '【1:2】' not in result
+        assert '【3:4】' not in result
+        assert '【5:6】' not in result
+    
+    def test_format_rag_response_markers_and_sources(self):
+        """測試引用標記過濾與來源顯示的整合"""
+        config = {
+            'text_processing': {
+                'disclaimer': '免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        rag_response = RAGResponse(
+            answer='回應內容【1:2】【3:4】結尾。',
+            sources=[
+                {'filename': 'test.txt', 'type': 'file_citation'}
+            ],
+            metadata={}
+        )
+        
+        result = formatter.format_rag_response(rag_response)
+        
+        # 驗證順序：過濾後的內容 + 免責聲明 + 來源
+        assert '回應內容結尾。' in result
+        assert '免責聲明' in result
+        assert '[1]: test' in result
+        assert '【1:2】' not in result
+        assert '【3:4】' not in result
+    
+    def test_format_simple_response_with_reference_markers(self):
+        """測試簡單回應中引用標記的過濾"""
+        config = {'text_processing': {}}
+        formatter = ResponseFormatter(config)
+        
+        content = '簡單回應【7:8】【9:10】內容。'
+        result = formatter.format_simple_response(content)
+        
+        # 驗證引用標記被移除
+        assert result == '簡單回應內容。'
+        assert '【7:8】' not in result
+        assert '【9:10】' not in result
+    
+    def test_format_simple_response_with_markers_and_disclaimer(self):
+        """測試簡單回應中引用標記過濾和免責聲明"""
+        config = {
+            'text_processing': {
+                'disclaimer': '簡單回應免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        content = '測試內容【11:12】【13:14】結尾。'
+        result = formatter.format_simple_response(content)
+        
+        # 驗證引用標記被移除且免責聲明被添加
+        assert '測試內容結尾。' in result
+        assert '簡單回應免責聲明' in result
+        assert '【11:12】' not in result
+        assert '【13:14】' not in result
+    
+    def test_format_responses_no_markers(self):
+        """測試沒有引用標記的回應"""
+        config = {
+            'text_processing': {
+                'disclaimer': '免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        # 測試 RAG 回應
+        rag_response = RAGResponse(
+            answer='沒有引用標記的內容。',
+            sources=[],
+            metadata={}
+        )
+        
+        rag_result = formatter.format_rag_response(rag_response)
+        assert '沒有引用標記的內容。' in rag_result
+        assert '免責聲明' in rag_result
+        
+        # 測試簡單回應
+        simple_result = formatter.format_simple_response('沒有引用標記的簡單內容。')
+        assert '沒有引用標記的簡單內容。' in simple_result
+        assert '免責聲明' in simple_result
+    
+    def test_format_responses_only_markers(self):
+        """測試只有引用標記的回應"""
+        config = {
+            'text_processing': {
+                'disclaimer': '免責聲明'
+            }
+        }
+        formatter = ResponseFormatter(config)
+        
+        # 測試 RAG 回應
+        rag_response = RAGResponse(
+            answer='【1:2】【3:4】【5:6】',
+            sources=[],
+            metadata={}
+        )
+        
+        rag_result = formatter.format_rag_response(rag_response)
+        assert '免責聲明' in rag_result
+        assert '【1:2】' not in rag_result
+        
+        # 測試簡單回應
+        simple_result = formatter.format_simple_response('【7:8】【9:10】')
+        assert '免責聲明' in simple_result
+        assert '【7:8】' not in simple_result
 
 
 class TestJSONResponse:

@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from src.utils.main import (
     get_response_data, get_role_and_content, dedup_citation_blocks,
     check_token_valid, get_date_string, load_text_processing_config,
-    preprocess_text, replace_text, postprocess_text, add_disclaimer
+    preprocess_text, replace_text, postprocess_text, add_disclaimer,
+    remove_reference_markers
 )
 
 
@@ -562,4 +563,79 @@ class TestDisclaimer:
         result = add_disclaimer(text, config)
         
         expected = '測試內容\n\n免責聲明內容'
+        assert result == expected
+
+
+class TestReferenceMarkerRemoval:
+    """引用標記移除功能測試"""
+    
+    def test_remove_reference_markers_basic(self):
+        """測試基本的引用標記移除"""
+        text = '這是一個測試回應【4:0】【5:5】【6:6】，後面還有更多內容。'
+        result = remove_reference_markers(text)
+        expected = '這是一個測試回應，後面還有更多內容。'
+        assert result == expected
+    
+    def test_remove_reference_markers_complex(self):
+        """測試複雜的引用標記移除"""
+        text = '前面的文字【1:2】中間的文字【100:200】【3:4】後面的文字【5:6】最後的文字。'
+        result = remove_reference_markers(text)
+        expected = '前面的文字中間的文字後面的文字最後的文字。'
+        assert result == expected
+    
+    def test_remove_reference_markers_large_numbers(self):
+        """測試大數字的引用標記移除"""
+        text = '測試【128:237】【999:1000】【1:999999】內容。'
+        result = remove_reference_markers(text)
+        expected = '測試內容。'
+        assert result == expected
+    
+    def test_remove_reference_markers_no_markers(self):
+        """測試沒有引用標記的文字"""
+        text = '這是一個沒有引用標記的普通文字。'
+        result = remove_reference_markers(text)
+        assert result == text
+    
+    def test_remove_reference_markers_empty_text(self):
+        """測試空文字"""
+        text = ''
+        result = remove_reference_markers(text)
+        assert result == ''
+    
+    def test_remove_reference_markers_only_markers(self):
+        """測試只有引用標記的文字"""
+        text = '【1:2】【3:4】【5:6】'
+        result = remove_reference_markers(text)
+        assert result == ''
+    
+    def test_remove_reference_markers_mixed_with_brackets(self):
+        """測試混合其他括號格式"""
+        text = '這是測試[1]【2:3】內容（注釋）【4:5】更多內容{test}【6:7】。'
+        result = remove_reference_markers(text)
+        expected = '這是測試[1]內容（注釋）更多內容{test}。'
+        assert result == expected
+    
+    def test_remove_reference_markers_multiline(self):
+        """測試多行文字"""
+        text = '''第一行【1:2】內容
+第二行【3:4】【5:6】內容
+第三行【7:8】內容'''
+        result = remove_reference_markers(text)
+        expected = '''第一行內容
+第二行內容
+第三行內容'''
+        assert result == expected
+    
+    def test_remove_reference_markers_invalid_format(self):
+        """測試無效格式不被移除"""
+        text = '測試【1:】【:2】【1】【a:b】【1:2:3】【1-2】正常【3:4】內容。'
+        result = remove_reference_markers(text)
+        expected = '測試【1:】【:2】【1】【a:b】【1:2:3】【1-2】正常內容。'
+        assert result == expected
+    
+    def test_remove_reference_markers_with_spaces(self):
+        """測試引用標記之間有空格的情況"""
+        text = '測試【1:2】 【3:4】 內容 【5:6】結尾。'
+        result = remove_reference_markers(text)
+        expected = '測試  內容 結尾。'
         assert result == expected

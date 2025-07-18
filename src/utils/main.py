@@ -116,6 +116,20 @@ def postprocess_text(text, config):
     text = replace_text(text, text_processing_config.get('post-replacements', []))
     return text
 
+def remove_reference_markers(text):
+    """
+    移除文字中的引用標記，格式為【數字:數字】
+    
+    Args:
+        text: 原始文字
+        
+    Returns:
+        移除引用標記後的文字
+    """
+    # 使用正則表達式匹配【數字:數字】格式
+    pattern = r'【\d+:\d+】'
+    return re.sub(pattern, '', text)
+
 def add_disclaimer(text, config):
     """
     在文字後面加上免責聲明
