@@ -3,7 +3,7 @@ import json
 from typing import Dict, List, Any
 from flask import Response
 from ..models.base import RAGResponse
-from ..utils import s2t_converter, add_disclaimer, remove_reference_markers
+from ..utils import s2t_converter, add_disclaimer, remove_reference_markers, strip_extensions
 
 logger = get_logger(__name__)
 
@@ -31,6 +31,10 @@ class ResponseFormatter:
             # 移除引用標記
             content = remove_reference_markers(content)
 
+            # 移除 .json 或 .txt
+            content = strip_extensions(content)
+
+            # 加上聲明
             content = add_disclaimer(content, self.config)
             
             # 如果有來源引用，添加來源資訊

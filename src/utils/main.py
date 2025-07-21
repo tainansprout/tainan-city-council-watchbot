@@ -130,6 +130,14 @@ def remove_reference_markers(text):
     pattern = r'【\d+:\d+】'
     return re.sub(pattern, '', text)
 
+def strip_extensions(text: str) -> str:
+    """
+    移除每一行結尾的 .txt 或 .json 副檔名。
+    """
+    ext_pattern = re.compile(r'\.(txt|json)(?=\[\d+\])|\.(txt|json)$', re.IGNORECASE)
+
+    return ext_pattern.sub(lambda m: ' ' if m.group(1) else '', text)
+
 def add_disclaimer(text, config):
     """
     在文字後面加上免責聲明
