@@ -5,7 +5,7 @@ Werkzeug>=2.3.0,<3.0.0
 
 # AI model integrations
 # Note: Direct API integration via requests for better control
-openai>=1.0.0,<2.0.0
+openai>=2.17.0
 anthropic>=0.25.0,<1.0.0
 google-generativeai>=0.4.0,<1.0.0
 # ollama>=0.2.0,<1.0.0  # Local model, no SDK needed

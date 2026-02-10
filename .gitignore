@@ -178,6 +178,7 @@ deploy/.env
 
 # config yml file
 config/config.yml
+config/prompts.yml
 
 # ssl setting files
 config/ssl/*
