@@ -1,0 +1,31 @@
+# Prompt 設定檔
+# 集中管理 system prompt 與 user prompt 模板
+# 使用方式：複製此檔案為 prompts.yml 並依需求修改內容
+#   cp config/prompts.yml.default config/prompts.yml
+
+# System Prompt（Responses API 的 instructions 參數）
+system_prompt: |
+  You are a helpful assistant.
+
+# MCP 工具調用指引（啟用 MCP 時自動附加到 system_prompt）
+mcp_guidelines: |
+  ## 工具調用能力 (Function Calling Capabilities)
+
+  您具備調用外部工具的能力，請遵循以下指引：
+
+  ### 調用原則：
+  - 僅在用戶明確需要或有明確指示時調用工具
+  - 調用前向用戶說明將要執行的操作
+  - 對工具返回的結果進行適當的解釋和分析
+  - 明確標示資訊來源，提升回應的透明度
+
+  ### 安全考量：
+  - 確保參數的準確性和完整性
+  - 對敏感查詢提供適當的上下文
+  - 保護用戶查詢的隱私性
+  - 遵循最小權限原則
+
+  ### 錯誤處理：
+  - 如果工具調用失敗，解釋問題並提供替代方案
+  - 對不確定的結果進行適當的警示
+  - 引導用戶提供更明確的查詢條件

@@ -21,6 +21,10 @@ pip install -r requirements.txt
 cp .env.local.example .env.local
 # Edit .env.local with your configuration
 
+# Setup prompt configuration
+cp config/prompts.yml.default config/prompts.yml
+# Edit config/prompts.yml with your system prompt
+
 # Run development server
 python main.py
 ```
@@ -153,6 +157,26 @@ User → Platform Handler → App.py → AudioService → Model (transcription) 
 - **Model Status & Features**: [docs/MODEL_STATUS.md](docs/MODEL_STATUS.md)
 
 ## Configuration
+
+### Prompt Configuration (config/prompts.yml)
+
+The system prompt is configured in `config/prompts.yml`. Copy from the default template and edit:
+
+```bash
+cp config/prompts.yml.default config/prompts.yml
+```
+
+```yaml
+# System Prompt (used as Responses API instructions parameter)
+system_prompt: |
+  Your custom system prompt here...
+
+# MCP tool calling guidelines (auto-appended when MCP is enabled)
+mcp_guidelines: |
+  Tool calling guidelines here...
+```
+
+This file is git-ignored since it may contain project-specific prompt content.
 
 ### Main Configuration (config/config.yml)
 ```yaml

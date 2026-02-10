@@ -44,7 +44,11 @@ pip install -r requirements.txt
 cp config/config.yml.example config/config.yml
 # 編輯 config.yml，填入您的 API 金鑰
 
-# 3. 本地開發
+# 3. 設定 Prompt
+cp config/prompts.yml.default config/prompts.yml
+# 編輯 prompts.yml，自訂 system prompt 內容
+
+# 4. 本地開發
 python main.py
 ```
 

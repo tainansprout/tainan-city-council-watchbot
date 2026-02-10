@@ -43,7 +43,11 @@ pip install -r requirements.txt
 cp config/config.yml.example config/config.yml
 # Edit config.yml with your API keys
 
-# 3. Local development
+# 3. Setup prompts
+cp config/prompts.yml.default config/prompts.yml
+# Edit prompts.yml to customize the system prompt
+
+# 4. Local development
 python main.py
 ```
 
