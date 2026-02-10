@@ -56,14 +56,12 @@ def dedup_citation_blocks(text: str) -> str:
     """
     
     def _dedup(match: Match[str]) -> str:
-        # 取出該連續區塊，例如 '[1][2][1]'
-        block = match.group(0)
         # 抓出所有數字去重後轉 int
         nums = {int(n) for n in re.findall(r'\d+', match.group(0))}
-        return ' ' + ''.join(f'[{n}]' for n in sorted(nums)) + ' '
+        return ' ' + ''.join(f'[{n}]' for n in sorted(nums))
 
-    # 至少兩個連在一起的 [數字] 才視為一個「去重區塊」
-    citation_block_pattern = r'(?:\[\d+\]){2,}'
+    # 至少兩個 [數字]（中間可能有空格）才視為一個「去重區塊」
+    citation_block_pattern = r'\s*\[\d+\](?:\s*\[\d+\])+'
     
     # 取代後回傳
     return re.sub(citation_block_pattern, _dedup, text)
