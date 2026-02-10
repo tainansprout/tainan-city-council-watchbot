@@ -1225,6 +1225,29 @@ class TestUserLevelConversationManagement:
             assert rag_response.metadata['thread_id'] == existing_thread_id
             assert error is None
 
+    def test_chat_with_user_legacy_thread_id(self, model):
+        """測試遇到舊 Assistant API 的 thread_id 時自動建立新 conversation"""
+        user_id = "user_legacy"
+        message = "Hello"
+        platform = "line"
+        legacy_thread_id = "thread_crroAEndEyg27B3yip97N7vq"
+
+        mock_thread_info = ThreadInfo(thread_id="conv_new123")
+        mock_response = make_mock_response(output_text="Hello!")
+
+        with patch('src.database.connection.get_thread_id_by_user_id', return_value=legacy_thread_id), \
+             patch.object(model, 'create_thread', return_value=(True, mock_thread_info, None)), \
+             patch('src.database.connection.save_thread_id') as mock_save, \
+             patch.object(model, '_create_response', return_value=mock_response), \
+             patch.object(model, '_process_openai_response', return_value=("Hello!", [])):
+
+            success, rag_response, error = model.chat_with_user(user_id, message, platform)
+
+            assert success is True
+            assert rag_response.metadata['thread_id'] == "conv_new123"
+            # 應該用新的 conv_ ID 覆寫舊的 thread_ ID
+            mock_save.assert_called_once_with(user_id, "conv_new123", platform)
+
     def test_chat_with_user_create_new_thread(self, model):
         """測試創建新 conversation 的用戶對話"""
         user_id = "new_user_789"

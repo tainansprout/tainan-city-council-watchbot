@@ -498,6 +498,11 @@ class OpenAIModel(FullLLMInterface):
             # 1. 取得或建立 conversation
             thread_id = get_thread_id_by_user_id(user_id, platform)
 
+            # 舊 Assistant API 的 thread_id 格式為 thread_xxx，Responses API 需要 conv_ 開頭
+            if thread_id and not thread_id.startswith('conv_'):
+                logger.info(f"Migrating legacy thread_id {thread_id} for user {user_id} on {platform}")
+                thread_id = None
+
             if not thread_id:
                 is_successful, thread_info, error = self.create_thread()
                 if not is_successful:
