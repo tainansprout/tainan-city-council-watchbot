@@ -664,7 +664,7 @@ class OpenAIModel(FullLLMInterface):
     def transcribe_audio(self, audio_file_path: str, **kwargs) -> Tuple[bool, Optional[str], Optional[str]]:
         """音訊轉文字"""
         try:
-            model = kwargs.get('model', 'whisper-1')
+            model = kwargs.get('model', 'gpt-4o-mini-transcribe')
 
             files = {
                 'file': open(audio_file_path, 'rb'),
