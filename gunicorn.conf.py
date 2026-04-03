@@ -64,6 +64,14 @@ def worker_int(worker):
 # 監控設置
 def post_fork(server, worker):
     server.log.info("Worker spawned (pid: %s)", worker.pid)
+    # Fork 後重建連線池，避免 parent/child 共享 socket
+    try:
+        from sqlalchemy import event
+        from src.database.connection import reset_global_database
+        reset_global_database()
+        server.log.info("Database connection pool reset for worker (pid: %s)", worker.pid)
+    except Exception as e:
+        server.log.warning("Failed to reset database pool: %s", e)
 
 def pre_fork(server, worker):
     server.log.info("Worker about to fork (pid: %s)", worker.pid)

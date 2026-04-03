@@ -123,16 +123,16 @@ class TestMultiPlatformChatBot:
         mock_load_config.return_value = mock_config
         
         with patch.object(MultiPlatformChatBot, '_initialize_app'), \
-             patch('src.app.Database') as mock_database_class, \
+             patch('src.app.get_global_database') as mock_get_global_db, \
              patch('src.app.logger') as mock_logger:
-            
+
             mock_database = Mock()
-            mock_database_class.return_value = mock_database
-            
+            mock_get_global_db.return_value = mock_database
+
             bot = MultiPlatformChatBot()
             bot._initialize_database()
-            
-            mock_database_class.assert_called_once_with(mock_config['db'])
+
+            mock_get_global_db.assert_called_once()
             assert bot.database == mock_database
             mock_logger.info.assert_any_call("Initializing database...")
             mock_logger.info.assert_any_call("Database initialized successfully")

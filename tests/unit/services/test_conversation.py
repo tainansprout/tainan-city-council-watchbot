@@ -50,7 +50,6 @@ class TestORMConversationManager:
         
         assert result is True
         mock_session.add.assert_called_once()
-        mock_session.commit.assert_called_once()
     
     def test_add_message_clears_cache(self, conversation_manager, mock_session):
         """測試添加訊息會清除快取"""
@@ -169,7 +168,6 @@ class TestORMConversationManager:
         )
         
         assert result is True
-        mock_session.commit.assert_called_once()
         # 快取應該被清除
         assert cache_key not in conversation_manager.memory_cache
     
@@ -207,7 +205,6 @@ class TestORMConversationManager:
         result = conversation_manager.cleanup_old_conversations(days_to_keep=30)
         
         assert result == 3
-        mock_session.commit.assert_called_once()
         # 所有快取應該被清除
         assert len(conversation_manager.memory_cache) == 0
     

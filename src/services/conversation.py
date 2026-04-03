@@ -7,7 +7,8 @@ from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime, timedelta
-from ..database.models import get_db_session, SimpleConversationHistory
+from ..database.connection import get_db_session
+from ..database.models import SimpleConversationHistory
 from ..core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -36,8 +37,7 @@ class ORMConversationManager:
                     content=content
                 )
                 session.add(conversation)
-                session.commit()
-                
+
                 # 清除快取，強制下次重新載入
                 cache_key = f"{user_id}:{platform}:{model_provider}"
                 # 使用 BoundedCache 的刪除方法
@@ -105,9 +105,7 @@ class ORMConversationManager:
                     SimpleConversationHistory.platform == platform,
                     SimpleConversationHistory.model_provider == model_provider
                 ).delete()
-                
-                session.commit()
-                
+
                 # 清除快取
                 cache_key = f"{user_id}:{platform}:{model_provider}"
                 # 使用 BoundedCache 的刪除方法
@@ -151,9 +149,7 @@ class ORMConversationManager:
                 deleted_count = session.query(SimpleConversationHistory).filter(
                     SimpleConversationHistory.created_at < cutoff_date
                 ).delete()
-                
-                session.commit()
-                
+
                 logger.info(f"Cleaned up {deleted_count} old conversation records (older than {days_to_keep} days)")
                 
                 # 清除所有快取

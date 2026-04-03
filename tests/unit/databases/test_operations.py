@@ -118,8 +118,7 @@ class TestDatabaseOperations:
             assert result["deleted_conversations"] == 3
             assert result["deleted_threads"] == 2
             
-            # 驗證 commit 被調用
-            mock_session.commit.assert_called_once()
+            # commit 由 context manager 自動處理
     
     def test_get_user_summary_success(self, db_ops):
         """測試成功的用戶摘要獲取"""

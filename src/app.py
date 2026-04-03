@@ -16,7 +16,7 @@ from .core.error_handler import ErrorHandler
 
 # 模型和服務
 from .models.factory import ModelFactory
-from .database.connection import Database
+from .database.connection import Database, get_global_database
 from .services.chat import ChatService
 from .services.audio import AudioService
 
@@ -125,9 +125,9 @@ class MultiPlatformChatBot:
         logger.info("Configuration validation completed")
     
     def _initialize_database(self):
-        """初始化資料庫"""
+        """初始化資料庫（使用全局單例，避免多個連線池）"""
         logger.info("Initializing database...")
-        self.database = Database(self.config['db'])
+        self.database = get_global_database()
         logger.info("Database initialized successfully")
     
     def _initialize_model(self):
@@ -649,13 +649,14 @@ class MultiPlatformChatBot:
         try:
             # 檢查資料庫連線
             try:
-                from sqlalchemy import text
-                with self.database.get_session() as session:
-                    session.execute(text('SELECT 1'))
-                health_status['checks']['database'] = {'status': 'healthy'}
+                if self.database.check_connection():
+                    health_status['checks']['database'] = {'status': 'healthy'}
+                else:
+                    health_status['checks']['database'] = {'status': 'unhealthy'}
+                    health_status['status'] = 'unhealthy'
             except Exception as e:
                 health_status['checks']['database'] = {
-                    'status': 'unhealthy', 
+                    'status': 'unhealthy',
                     'error': str(e)
                 }
                 health_status['status'] = 'unhealthy'

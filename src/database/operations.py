@@ -6,8 +6,8 @@ from ..core.logger import get_logger
 from typing import Dict, List, Optional
 from sqlalchemy import text, func
 from datetime import datetime, timedelta
-from .connection import Database
-from .models import get_db_session, UserThreadTable, SimpleConversationHistory
+from .connection import get_db_session
+from .models import UserThreadTable, SimpleConversationHistory
 
 logger = get_logger(__name__)
 
@@ -121,9 +121,7 @@ class DatabaseOperations:
                 deleted_threads = session.query(UserThreadTable).filter(
                     UserThreadTable.created_at < cutoff_date
                 ).delete()
-                
-                session.commit()
-                
+
                 result = {
                     "deleted_conversations": deleted_conversations,
                     "deleted_threads": deleted_threads
