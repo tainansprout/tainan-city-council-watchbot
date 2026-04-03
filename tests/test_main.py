@@ -23,7 +23,7 @@ class TestMainApplication:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
+                'openai': {'api_key': 'test_key'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -45,7 +45,7 @@ class TestMainApplication:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
+                'openai': {'api_key': 'test_key'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -71,7 +71,7 @@ class TestMainApplication:
                 mock_config.return_value = {
                     'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                     'llm': {'provider': 'openai'},
-                    'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                    'openai': {'api_key': 'test'},
                     'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
                 }
                 
@@ -96,7 +96,7 @@ class TestMainApplication:
                 mock_config.return_value = {
                     'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                     'llm': {'provider': 'openai'},
-                    'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                    'openai': {'api_key': 'test'},
                     'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
                 }
                 
@@ -124,7 +124,7 @@ class TestWSGICompatibility:
             mock_config.return_value = {
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'openai': {'api_key': 'test'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -143,7 +143,7 @@ class TestWSGICompatibility:
             mock_config.return_value = {
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'openai': {'api_key': 'test'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -169,7 +169,7 @@ class TestProductionMode:
             mock_config.return_value = {
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'openai': {'api_key': 'test'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -186,7 +186,7 @@ class TestProductionMode:
             mock_config.return_value = {
                 'platforms': {'line': {'enabled': True, 'channel_access_token': 'test', 'channel_secret': 'test'}},
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'openai': {'api_key': 'test'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             

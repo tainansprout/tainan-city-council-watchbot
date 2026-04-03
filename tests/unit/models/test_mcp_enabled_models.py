@@ -76,7 +76,9 @@ async def test_gemini_model_mcp_flow(mocker, mock_mcp_service):
     """Test the full MCP tool-calling flow for GeminiModel."""
     # 1. Setup
     gemini = GeminiModel(api_key="fake_key", enable_mcp=True)
+    # Force the service to be our mock and ensure enable_mcp is True
     gemini.mcp_service = mock_mcp_service
+    gemini.enable_mcp = True
 
     # Mock the internal _request method to simulate Gemini API responses
     mock_request = mocker.patch.object(gemini, '_request')
@@ -127,9 +129,10 @@ async def test_ollama_model_mcp_flow(mocker, mock_mcp_service):
     """Test the full prompt-based MCP tool-calling flow for OllamaModel."""
     # 1. Setup - Create the model first, then replace the mcp_service with our mock
     ollama = OllamaModel(enable_mcp=True)
-    # Force the service to be our mock
+    # Force the service to be our mock and ensure enable_mcp is True
     ollama.mcp_service = mock_mcp_service
-    
+    ollama.enable_mcp = True
+
     # Ensure the service is set to the mock
     assert ollama.mcp_service is mock_mcp_service
 
@@ -176,8 +179,9 @@ async def test_huggingface_model_mcp_flow(mocker, mock_mcp_service):
     """Test the full prompt-based MCP tool-calling flow for HuggingFaceModel."""
     # 1. Setup - Create the model first, then replace the mcp_service with our mock
     huggingface = HuggingFaceModel(api_key="fake_key", enable_mcp=True)
-    # Force the service to be our mock
+    # Force the service to be our mock and ensure enable_mcp is True
     huggingface.mcp_service = mock_mcp_service
+    huggingface.enable_mcp = True
 
     # IMPORTANT: chat_completion is synchronous, not async!
     # So we need to use regular Mock, not AsyncMock

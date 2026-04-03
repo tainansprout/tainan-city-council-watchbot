@@ -25,6 +25,12 @@ class TestMCPErrorHandling:
             "timeout": 30,
             "retry_attempts": 3
         }
+
+        # 讓 MCPConfigManager.is_mcp_enabled 回傳 True，以便使用臨時目錄設定檔
+        self._mcp_enabled_patcher = patch(
+            'src.core.mcp_config.MCPConfigManager.is_mcp_enabled', return_value=True
+        )
+        self._mcp_enabled_patcher.start()
         
         # 無效配置範例
         self.invalid_configs = {
@@ -58,7 +64,8 @@ class TestMCPErrorHandling:
         """清理測試環境"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+        self._mcp_enabled_patcher.stop()
+
     def test_config_validation_errors(self):
         """測試配置驗證錯誤"""
         config_manager = MCPConfigManager(self.temp_dir)

@@ -308,14 +308,17 @@ class TestOllamaModel:
         mock_model = Mock()
         mock_model.transcribe.return_value = {"text": "This is a local transcription."}
         ollama_model.whisper_model = mock_model
-        
-        # 測試轉錄
-        is_successful, text, error = ollama_model.transcribe_audio("/fake/audio/file.wav")
-        
+
+        # 模擬 whisper 套件已安裝，以便通過 import 檢查
+        mock_whisper_module = Mock()
+        with patch.dict('sys.modules', {'whisper': mock_whisper_module}):
+            # 測試轉錄
+            is_successful, text, error = ollama_model.transcribe_audio("/fake/audio/file.wav")
+
         assert is_successful == True
         assert text == "This is a local transcription."
         assert error is None
-        
+
         # 驗證模型被調用
         mock_model.transcribe.assert_called_once_with("/fake/audio/file.wav")
     
@@ -364,7 +367,9 @@ class TestOllamaModel:
         # 模擬 whisper 已安裝且模型已設定
         ollama_model.whisper_model = Mock()
 
-        is_successful, text, error = ollama_model.transcribe_audio('/fake/path.mp3')
+        mock_whisper_module = Mock()
+        with patch.dict('sys.modules', {'whisper': mock_whisper_module}):
+            is_successful, text, error = ollama_model.transcribe_audio('/fake/path.mp3')
 
         assert is_successful is True
         assert text == "Transcription success"
@@ -385,7 +390,9 @@ class TestOllamaModel:
         """測試 whisper 轉錄過程中發生例外"""
         ollama_model.whisper_model = Mock()
 
-        is_successful, text, error = ollama_model.transcribe_audio('/fake/path.mp3')
+        mock_whisper_module = Mock()
+        with patch.dict('sys.modules', {'whisper': mock_whisper_module}):
+            is_successful, text, error = ollama_model.transcribe_audio('/fake/path.mp3')
 
         assert is_successful is False
         assert text is None

@@ -83,7 +83,7 @@ gcloud run deploy {service-name} \
 
 #### Model Layer (Factory Pattern)
 - **src/models/base.py**: Abstract model interfaces
-- **src/models/openai_model.py**: OpenAI Assistant API integration
+- **src/models/openai_model.py**: OpenAI Responses API integration
 - **src/models/anthropic_model.py**: Anthropic Claude API integration
 - **src/models/gemini_model.py**: Google Gemini API integration
 - **src/models/ollama_model.py**: Local Ollama model integration
@@ -334,10 +334,10 @@ User ← Model ← Function Results Integration ← Tool Response
 
 #### Model-Specific Function Calling
 
-**OpenAI Assistant API**:
+**OpenAI Responses API**:
 - Uses native function calling mechanism
-- Functions defined in Assistant configuration
-- Automatic tool execution through Assistant API
+- Functions defined via tools parameter
+- Automatic tool execution through Responses API
 
 **Anthropic Messages API**:
 - Manual function call detection via JSON parsing

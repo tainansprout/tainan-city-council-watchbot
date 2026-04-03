@@ -60,10 +60,11 @@ python main.py
 llm:
   provider: "openai"  # openai, anthropic, gemini, ollama
 
-# OpenAI configuration
+# OpenAI configuration (Responses API)
 openai:
   api_key: "${OPENAI_API_KEY}"
-  assistant_id: "${OPENAI_ASSISTANT_ID}"
+  model: "gpt-5.4-mini"
+  vector_store_id: "${OPENAI_VECTOR_STORE_ID}"  # For file_search tool
 
 # LINE platform configuration
 platforms:

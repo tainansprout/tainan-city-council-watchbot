@@ -42,7 +42,7 @@ class TestSmoke:
                 }
             },
             'llm': {'provider': 'openai'},
-            'openai': {'api_key': 'test', 'assistant_id': 'test'},
+            'openai': {'api_key': 'test'},
             'db': {
                 'host': 'localhost',
                 'port': 5432,
@@ -90,7 +90,7 @@ class TestHealthCheckMinimal:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'openai': {'api_key': 'test'},
                 'db': {
                     'host': 'localhost',
                     'port': 5432,
@@ -176,7 +176,7 @@ class TestPlatformWebhooks:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test', 'assistant_id': 'test'},
+                'openai': {'api_key': 'test'},
                 'db': {
                     'host': 'localhost',
                     'port': 5432,

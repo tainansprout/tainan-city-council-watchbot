@@ -16,8 +16,7 @@ class TestOpenAIModel:
     @pytest.fixture
     def openai_model(self):
         return OpenAIModel(
-            api_key="test_api_key",
-            assistant_id="test_assistant_id"
+            api_key="test_api_key"
         )
     
     def test_get_provider(self, openai_model):
@@ -70,21 +69,18 @@ class TestOpenAIModel:
         assert response.finish_reason == 'stop'
         assert error is None
     
-    @patch('requests.post')
-    def test_create_thread_success(self, mock_post, openai_model):
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'id': 'thread_123',
-            'object': 'thread',
-            'created_at': 1234567890
-        }
-        mock_post.return_value = mock_response
-        
-        is_successful, thread_info, error = openai_model.create_thread()
-        
+    def test_create_thread_success(self, openai_model):
+        """測試建立 Conversation（使用 Responses API + Conversations API）"""
+        mock_conversation = Mock()
+        mock_conversation.id = 'conv_123'
+        mock_conversation.created_at = 1234567890
+        mock_conversation.object = 'conversation'
+
+        with patch.object(openai_model.client.conversations, 'create', return_value=mock_conversation):
+            is_successful, thread_info, error = openai_model.create_thread()
+
         assert is_successful is True
-        assert thread_info.thread_id == 'thread_123'
+        assert thread_info.thread_id == 'conv_123'
         assert error is None
     
     @patch('builtins.open', create=True)
@@ -287,15 +283,13 @@ class TestModelFactory:
     def test_create_openai_model(self):
         config = {
             'provider': 'openai',
-            'api_key': 'test_key',
-            'assistant_id': 'test_id'
+            'api_key': 'test_key'
         }
-        
+
         model = ModelFactory.create_from_config(config)
-        
+
         assert isinstance(model, OpenAIModel)
         assert model.api_key == 'test_key'
-        assert model.assistant_id == 'test_id'
     
     def test_create_anthropic_model(self):
         config = {

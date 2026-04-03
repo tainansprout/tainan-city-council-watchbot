@@ -61,9 +61,8 @@ logger = get_logger(__name__)
 class OpenAIModel(FullLLMInterface):
     """OpenAI 模型實作 - 使用 Responses API + Conversations API"""
 
-    def __init__(self, api_key: str, assistant_id: str = None, base_url: str = None, enable_mcp: bool = False):
+    def __init__(self, api_key: str, base_url: str = None, enable_mcp: bool = False):
         self.api_key = api_key
-        self.assistant_id = assistant_id  # 保留向後相容
         self.base_url = base_url or 'https://api.openai.com/v1'
 
         # 初始化 OpenAI SDK client

@@ -14,7 +14,7 @@ class TestOpenAIMocks:
     
     @pytest.fixture
     def openai_model(self):
-        return OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+        return OpenAIModel(api_key="test_key")
     
     @patch('requests.post')
     def test_mock_chat_completion_success(self, mock_post, openai_model):
@@ -77,73 +77,44 @@ class TestOpenAIMocks:
         assert response is None
         assert 'Rate limit exceeded' in error
     
-    @patch('requests.post')
-    def test_mock_assistant_api_create_thread(self, mock_post, openai_model):
-        """測試模擬 Assistant API 建立對話串"""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'id': 'thread_abc123',
-            'object': 'thread',
-            'created_at': 1234567890,
-            'metadata': {}
-        }
-        mock_post.return_value = mock_response
-        
-        is_successful, thread_info, error = openai_model.create_thread()
-        
+    def test_mock_assistant_api_create_thread(self, openai_model):
+        """測試模擬 Conversations API 建立對話（取代 Assistant API Thread）"""
+        mock_conversation = Mock()
+        mock_conversation.id = 'conv_abc123'
+        mock_conversation.object = 'conversation'
+        mock_conversation.created_at = 1234567890
+
+        with patch.object(openai_model.client.conversations, 'create', return_value=mock_conversation):
+            is_successful, thread_info, error = openai_model.create_thread()
+
         assert is_successful is True
-        assert thread_info.thread_id == 'thread_abc123'
+        assert thread_info.thread_id == 'conv_abc123'
         assert error is None
-    
-    @patch('requests.post')
-    def test_mock_assistant_api_run_thread(self, mock_post, openai_model):
-        """測試模擬 Assistant API 執行對話串"""
-        # 模擬多個 API 調用的序列
-        responses = [
-            # 建立訊息回應
-            Mock(status_code=200, json=lambda: {
-                'id': 'msg_123',
-                'object': 'thread.message',
-                'thread_id': 'thread_abc123'
-            }),
-            # 執行助手回應
-            Mock(status_code=200, json=lambda: {
-                'id': 'run_456',
-                'object': 'thread.run',
-                'status': 'queued'
-            }),
-            # 檢查狀態回應
-            Mock(status_code=200, json=lambda: {
-                'id': 'run_456',
-                'status': 'completed'
-            }),
-            # 取得訊息回應
-            Mock(status_code=200, json=lambda: {
-                'object': 'list',
-                'data': [{
-                    'id': 'msg_789',
-                    'role': 'assistant',
-                    'content': [{
-                        'type': 'text',
-                        'text': {
-                            'value': 'Assistant response here',
-                            'annotations': []
-                        }
-                    }]
-                }]
-            })
-        ]
-        
-        mock_post.side_effect = responses
-        
-        is_successful, rag_response, error = openai_model.query_with_rag(
-            "Test query", 
-            thread_id="thread_abc123"
-        )
-        
-        # 由於這是複雜的多步驟流程，檢查基本成功條件
-        assert mock_post.call_count >= 2  # 至少調用了多次 API
+
+    def test_mock_assistant_api_run_thread(self, openai_model):
+        """測試模擬 Responses API 執行對話（取代 Assistant API Run）"""
+        # 模擬 Responses API 回應
+        mock_response = Mock()
+        mock_response.id = 'resp_456'
+        mock_response.output_text = 'Assistant response here'
+        mock_response.output = []  # 無 annotations
+
+        # Mock create_thread and _create_response
+        mock_conversation = Mock()
+        mock_conversation.id = 'conv_abc123'
+        mock_conversation.object = 'conversation'
+        mock_conversation.created_at = 1234567890
+
+        with patch.object(openai_model.client.conversations, 'create', return_value=mock_conversation), \
+             patch.object(openai_model, '_create_response', return_value=mock_response):
+            is_successful, rag_response, error = openai_model.query_with_rag(
+                "Test query",
+                thread_id="conv_abc123"
+            )
+
+        # 驗證成功執行
+        assert is_successful is True
+        assert rag_response is not None
 
 
 class TestAnthropicMocks:
@@ -450,43 +421,26 @@ class TestExternalServiceIntegration:
     """外部服務整合模擬測試"""
     
     def test_mock_full_service_chain(self):
-        """測試完整服務鏈的模擬"""
-        # 這個測試展示如何模擬完整的外部服務調用鏈
-        
-        with patch('requests.post') as mock_post, \
-             patch('requests.get') as mock_get, \
-             patch('src.database.connection.create_engine'), \
+        """測試完整服務鏈的模擬（使用 Responses API + Conversations API）"""
+        from src.models.openai_model import OpenAIModel
+        from src.services.chat import ChatService
+        from src.database import Database
+        from src.models.base import RAGResponse
+        from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
+
+        with patch('src.database.connection.create_engine'), \
              patch('src.database.connection.sessionmaker') as mock_sessionmaker:
-            
+
             # 設定資料庫模擬
             mock_session = Mock()
             mock_sessionmaker.return_value.return_value = mock_session
             mock_session.query.return_value.filter.return_value.first.return_value = None
-            
-            # 設定 OpenAI API 模擬
-            openai_responses = [
-                # 建立對話串
-                Mock(status_code=200, json=lambda: {'id': 'thread_123'}),
-                # 聊天完成
-                Mock(status_code=200, json=lambda: {
-                    'choices': [{'message': {'content': 'AI response'}}]
-                })
-            ]
-            mock_post.side_effect = openai_responses
-            
-            # 設定檢查連線模擬
-            mock_get.return_value = Mock(status_code=200, json=lambda: {'object': 'list'})
-            
-            # 執行完整流程測試
-            from src.models.openai_model import OpenAIModel
-            from src.services.chat import ChatService
-            from src.database import Database
-            
+
             db_config = {'host': 'localhost', 'port': 5432, 'db_name': 'test', 'user': 'test_user', 'password': 'test_password'}
             db = Database(db_config)
-            
-            model = OpenAIModel(api_key='test_key', assistant_id='test_id')
-            
+
+            model = OpenAIModel(api_key='test_key')
+
             chat_config = {
                 'line': {
                     'reply': {
@@ -495,15 +449,22 @@ class TestExternalServiceIntegration:
                     }
                 }
             }
-            
-            with patch.object(db, 'get_session') as mock_get_session:
+
+            # 模擬 model.chat_with_user 直接回傳結果（避免實際 API 呼叫）
+            mock_rag_response = RAGResponse(answer='AI response', sources=[])
+            model_chat_called = []
+
+            def mock_chat_with_user(user_id, message, platform='line', **kwargs):
+                model_chat_called.append((user_id, message))
+                return True, mock_rag_response, None
+
+            with patch.object(model, 'chat_with_user', side_effect=mock_chat_with_user), \
+                 patch.object(db, 'get_session') as mock_get_session:
                 mock_get_session.return_value.__enter__.return_value = mock_session
                 mock_get_session.return_value.__exit__.return_value = None
-                
+
                 chat_service = ChatService(model, db, chat_config)
-                
-                # 測試服務鏈 - use handle_message
-                from src.platforms.base import PlatformMessage, PlatformUser, PlatformType
+
                 platform_message = PlatformMessage(
                     message_id='test_msg_123',
                     content='Hello',
@@ -511,8 +472,8 @@ class TestExternalServiceIntegration:
                     message_type='text'
                 )
                 response = chat_service.handle_message(platform_message)
-                
+
                 # 驗證整合結果
                 assert response is not None
-                # 驗證各個模擬都被正確調用
-                assert mock_post.call_count >= 1  # OpenAI API 被調用
+                # 驗證模型 API 被呼叫
+                assert len(model_chat_called) >= 1  # model.chat_with_user 被調用

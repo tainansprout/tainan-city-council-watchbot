@@ -27,8 +27,7 @@ class TestMultiPlatformChatBot:
             },
             'openai': {
                 'api_key': 'test_key',
-                'assistant_id': 'test_assistant'
-            },
+                },
             'db': {
                 'host': 'localhost',
                 'port': 5432,

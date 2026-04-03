@@ -61,10 +61,11 @@ python main.py
 llm:
   provider: "openai"  # openai, anthropic, gemini, ollama
 
-# OpenAI 配置
+# OpenAI 配置（使用 Responses API）
 openai:
   api_key: "${OPENAI_API_KEY}"
-  assistant_id: "${OPENAI_ASSISTANT_ID}"
+  model: "gpt-5.4-mini"
+  vector_store_id: "${OPENAI_VECTOR_STORE_ID}"  # file_search 工具使用
 
 # LINE 平台配置
 platforms:
@@ -288,7 +289,7 @@ cp config/mcp/example.json.example config/mcp/my_tools.json
 
 ### 支援的 MCP 模式
 
-- **OpenAI Assistant API**: 透過 function calling 機制
+- **OpenAI Responses API**: 透過 function calling 機制
 - **Anthropic Messages API**: 透過 JSON 格式的 function call
 - **Gemini API**: 透過 function_declarations 和 functionCall
 

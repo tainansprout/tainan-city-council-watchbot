@@ -61,10 +61,6 @@ def _merge_env_config(config: Dict[str, Any]) -> Dict[str, Any]:
         'OPENAI_API_KEY', 
         config['openai'].get('api_key')
     )
-    config['openai']['assistant_id'] = _get_env_value(
-        'OPENAI_ASSISTANT_ID', 
-        config['openai'].get('assistant_id')
-    )
     config['openai']['base_url'] = _get_env_value(
         'OPENAI_BASE_URL', 
         config['openai'].get('base_url')

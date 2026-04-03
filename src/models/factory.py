@@ -48,7 +48,6 @@ class ModelFactory:
         
         return OpenAIModel(
             api_key=api_key,
-            assistant_id=config.get('assistant_id'),
             base_url=config.get('base_url')
         )
     

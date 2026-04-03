@@ -22,7 +22,7 @@ class TestWebhookEndpoints:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
+                'openai': {'api_key': 'test_key'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -232,7 +232,7 @@ class TestWebhookErrorHandling:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
+                'openai': {'api_key': 'test_key'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             
@@ -367,7 +367,7 @@ class TestWebhookConcurrency:
                     }
                 },
                 'llm': {'provider': 'openai'},
-                'openai': {'api_key': 'test_key', 'assistant_id': 'test_id'},
+                'openai': {'api_key': 'test_key'},
                 'db': {'host': 'localhost', 'port': 5432, 'user': 'test', 'password': 'test', 'db_name': 'test'}
             }
             

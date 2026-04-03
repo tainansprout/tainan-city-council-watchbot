@@ -244,14 +244,15 @@ class TestDiscordHandler:
         assert handler.bot is None or hasattr(handler, 'bot')
     
     @patch('src.platforms.discord_handler.DISCORD_AVAILABLE', True)
-    @patch('src.platforms.discord_handler.commands.Bot')
-    def test_setup_bot_failure(self, mock_bot):
+    def test_setup_bot_failure(self):
         """測試設置 bot 失敗"""
-        # 模擬 Bot 初始化失敗
-        mock_bot.side_effect = Exception("Failed to create bot")
-        
-        handler = DiscordHandler(self.valid_config)
-        
+        # Mock the commands module with a Bot that raises an exception
+        mock_commands = Mock()
+        mock_commands.Bot.side_effect = Exception("Failed to create bot")
+
+        with patch('src.platforms.discord_handler.commands', mock_commands):
+            handler = DiscordHandler(self.valid_config)
+
         # 測試在無法設置 bot 時的狀態
         assert handler.bot is None
     

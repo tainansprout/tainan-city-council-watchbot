@@ -143,13 +143,13 @@ class TestCitationDeduplication:
         """測試簡單重複引用"""
         text = "這是內容 [1][1][1] 繼續內容"
         result = dedup_citation_blocks(text)
-        assert result == "這是內容  [1]  繼續內容"
-    
+        assert result == "這是內容 [1] 繼續內容"
+
     def test_dedup_citation_blocks_multiple_citations(self):
         """測試多個引用去重"""
         text = "內容 [1][2][1][3][2] 更多內容"
         result = dedup_citation_blocks(text)
-        assert result == "內容  [1][2][3]  更多內容"
+        assert result == "內容 [1][2][3] 更多內容"
     
     def test_dedup_citation_blocks_no_duplicates(self):
         """測試沒有重複的引用"""
@@ -167,7 +167,7 @@ class TestCitationDeduplication:
         """測試多個引用區塊"""
         text = "第一個 [1][1] 區塊和第二個 [2][3][2] 區塊"
         result = dedup_citation_blocks(text)
-        assert result == "第一個  [1]  區塊和第二個  [2][3]  區塊"
+        assert result == "第一個 [1] 區塊和第二個 [2][3] 區塊"
     
     def test_dedup_citation_blocks_empty_text(self):
         """測試空文字"""
@@ -424,7 +424,7 @@ class TestUtilsIntegration:
         
         # 去重引用
         deduplicated = dedup_citation_blocks(content)
-        assert deduplicated == '根據資料  [1][2]  顯示結果'
+        assert deduplicated == '根據資料 [1][2] 顯示結果'
     
     def test_error_handling_in_pipeline(self):
         """測試處理流程中的錯誤處理"""

@@ -37,6 +37,12 @@ class TestMCPPerformance:
             "timeout": 30,
             "retry_attempts": 3
         }
+
+        # 讓 MCPConfigManager.is_mcp_enabled 回傳 True，以便使用臨時目錄設定檔
+        self._mcp_enabled_patcher = patch(
+            'src.core.mcp_config.MCPConfigManager.is_mcp_enabled', return_value=True
+        )
+        self._mcp_enabled_patcher.start()
         
         # 創建測試配置
         self.test_config = {
@@ -67,6 +73,7 @@ class TestMCPPerformance:
         """清理測試環境"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self._mcp_enabled_patcher.stop()
     
     def test_config_loading_performance(self):
         """測試配置載入效能"""

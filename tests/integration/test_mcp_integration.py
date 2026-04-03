@@ -20,6 +20,12 @@ class TestMCPIntegration:
         """設定測試環境"""
         # 創建臨時目錄
         self.temp_dir = tempfile.mkdtemp()
+
+        # 讓 MCPConfigManager.is_mcp_enabled 回傳 True，以便使用臨時目錄設定檔
+        self._mcp_enabled_patcher = patch(
+            'src.core.mcp_config.MCPConfigManager.is_mcp_enabled', return_value=True
+        )
+        self._mcp_enabled_patcher.start()
         
         # 測試配置
         self.test_config = {
@@ -89,6 +95,7 @@ class TestMCPIntegration:
         """清理測試環境"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        self._mcp_enabled_patcher.stop()
     
     def test_config_to_client_integration(self):
         """測試配置管理器到客戶端的集成"""

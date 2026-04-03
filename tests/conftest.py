@@ -67,7 +67,6 @@ def mock_config():
         },
         'openai': {
             'api_key': 'test_openai_key',
-            'assistant_id': 'test_assistant_id'
         },
         'db': {
             'host': 'localhost',
@@ -99,8 +98,7 @@ def client():
             },
             'openai': {
                 'api_key': 'test_openai_key',
-                'assistant_id': 'test_assistant_id'
-            },
+                },
             'db': {
                 'host': 'localhost',
                 'port': 5432,
@@ -249,7 +247,6 @@ def mock_config():
         'llm': {'provider': 'openai'},
         'openai': {
             'api_key': 'test_key',
-            'assistant_id': 'test_assistant'
         },
         'db': {
             'host': 'localhost',

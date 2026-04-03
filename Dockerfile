@@ -5,7 +5,8 @@ FROM python:3.12-slim as builder
 ENV PYTHONUNBUFFERED=True \
     PYTHONDONTWRITEBYTECODE=True \
     PIP_NO_CACHE_DIR=True \
-    PIP_DISABLE_PIP_VERSION_CHECK=True
+    PIP_DISABLE_PIP_VERSION_CHECK=True \
+    DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies required for building some Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \

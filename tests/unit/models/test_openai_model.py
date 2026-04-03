@@ -56,11 +56,10 @@ class TestOpenAIModelInitialization:
         with patch('src.core.config.get_value', return_value=False):
             model = OpenAIModel(
                 api_key="test_api_key",
-                assistant_id="test_assistant_id"
-            )
+                            )
 
         assert model.api_key == "test_api_key"
-        assert model.assistant_id == "test_assistant_id"
+
         assert model.base_url == "https://api.openai.com/v1"
 
     def test_openai_model_initialization_with_custom_base_url(self):
@@ -69,7 +68,6 @@ class TestOpenAIModelInitialization:
         with patch('src.core.config.get_value', return_value=False):
             model = OpenAIModel(
                 api_key="test_api_key",
-                assistant_id="test_assistant_id",
                 base_url=custom_url
             )
 
@@ -1373,20 +1371,14 @@ class TestEdgeCases:
         """測試空 API key"""
         with patch('src.models.openai_model.OpenAI'):
             with patch('src.core.config.get_value', return_value=False):
-                model = OpenAIModel("", "test_assistant")
+                model = OpenAIModel("")
         assert model.api_key == ""
 
-    def test_empty_assistant_id(self):
-        """測試空 assistant ID"""
+    def test_none_base_url(self):
+        """測試 None base_url 使用預設值"""
         with patch('src.core.config.get_value', return_value=False):
-            model = OpenAIModel("test_key", "")
-        assert model.assistant_id == ""
-
-    def test_none_parameters(self):
-        """測試 None 參數"""
-        with patch('src.core.config.get_value', return_value=False):
-            model = OpenAIModel("test_key", None)
-        assert model.assistant_id is None
+            model = OpenAIModel("test_key")
+        assert model.base_url == "https://api.openai.com/v1"
 
     def test_empty_message_content(self, model):
         """測試空訊息內容"""
@@ -1504,14 +1496,14 @@ class TestOpenAIModelMCP:
                 ]
                 mock_mcp.return_value = mock_service
 
-                model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                model = OpenAIModel(api_key="test_key", enable_mcp=True)
                 yield model
 
     def test_mcp_config_read_error(self):
         """測試 MCP 配置讀取錯誤"""
         with patch('src.core.config.get_value', side_effect=Exception("Config error")):
             with patch('src.models.openai_model.logger') as mock_logger:
-                model = OpenAIModel(api_key="test_key", assistant_id="test_assistant")
+                model = OpenAIModel(api_key="test_key")
 
                 assert model.enable_mcp is False
                 mock_logger.warning.assert_called_with("Error reading MCP config: Config error")
@@ -1525,7 +1517,7 @@ class TestOpenAIModelMCP:
                 mock_mcp.return_value = mock_service
 
                 with patch('src.models.openai_model.logger') as mock_logger:
-                    model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                    model = OpenAIModel(api_key="test_key", enable_mcp=True)
 
                     assert model.enable_mcp is False
                     mock_logger.warning.assert_called_with("OpenAI Model: MCP service is not enabled")
@@ -1535,7 +1527,7 @@ class TestOpenAIModelMCP:
         with patch('src.core.config.get_value', return_value=True):
             with patch('src.services.mcp_service.get_mcp_service', side_effect=Exception("Init error")):
                 with patch('src.models.openai_model.logger') as mock_logger:
-                    model = OpenAIModel(api_key="test_key", assistant_id="test_assistant", enable_mcp=True)
+                    model = OpenAIModel(api_key="test_key", enable_mcp=True)
 
                     assert model.enable_mcp is False
                     assert model.mcp_service is None
